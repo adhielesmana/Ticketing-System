@@ -21,7 +21,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Shield } from "lucide-react";
+import { Shield, Lock } from "lucide-react";
 import { UserRole } from "@shared/schema";
 import { useEffect } from "react";
 
@@ -59,25 +59,25 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
-      <div className="w-full max-w-md space-y-8">
-        <div className="flex flex-col items-center gap-4 text-center">
-          <div className="w-12 h-12 rounded-xl bg-primary flex items-center justify-center shadow-lg shadow-primary/30">
-            <Shield className="w-7 h-7 text-primary-foreground" />
+    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: "linear-gradient(135deg, hsl(221 83% 53% / 0.05) 0%, hsl(199 89% 48% / 0.05) 100%)" }}>
+      <div className="w-full max-w-sm space-y-8">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <div className="w-14 h-14 rounded-md bg-primary flex items-center justify-center">
+            <Shield className="w-8 h-8 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-3xl font-bold font-display tracking-tight text-foreground">
+            <h1 className="text-2xl font-bold font-display tracking-tight" data-testid="text-login-title">
               NetGuard ISP
             </h1>
-            <p className="text-muted-foreground mt-2">
+            <p className="text-muted-foreground text-sm mt-1">
               Ticketing & Maintenance System
             </p>
           </div>
         </div>
 
-        <Card className="border-border/50 shadow-xl shadow-black/5">
-          <CardHeader>
-            <CardTitle>Sign In</CardTitle>
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle className="text-lg">Sign In</CardTitle>
             <CardDescription>
               Enter your credentials to access the system
             </CardDescription>
@@ -92,7 +92,7 @@ export default function Login() {
                     <FormItem>
                       <FormLabel>Username</FormLabel>
                       <FormControl>
-                        <Input placeholder="jdoe" {...field} />
+                        <Input placeholder="Enter your username" {...field} data-testid="input-username" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -105,26 +105,28 @@ export default function Login() {
                     <FormItem>
                       <FormLabel>Password</FormLabel>
                       <FormControl>
-                        <Input type="password" placeholder="••••••••" {...field} />
+                        <Input type="password" placeholder="Enter your password" {...field} data-testid="input-password" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                <Button 
-                  type="submit" 
-                  className="w-full" 
+                <Button
+                  type="submit"
+                  className="w-full"
                   disabled={isLoggingIn}
+                  data-testid="button-login"
                 >
                   {isLoggingIn ? "Signing in..." : "Sign In"}
                 </Button>
               </form>
             </Form>
           </CardContent>
-          <CardFooter className="flex justify-center border-t p-4 bg-muted/20">
-            <p className="text-xs text-muted-foreground text-center">
-              Protected System. Authorized Access Only.
-            </p>
+          <CardFooter className="flex justify-center border-t pt-4">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Lock className="w-3 h-3" />
+              <span>Protected System. Authorized Access Only.</span>
+            </div>
           </CardFooter>
         </Card>
       </div>

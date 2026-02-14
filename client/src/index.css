@@ -8,59 +8,117 @@
   --font-sans: 'Inter', sans-serif;
   --font-display: 'Outfit', sans-serif;
 
-  /* ISP / Tech Theme - Deep Blues & Vibrant Accents */
-  --background: 220 30% 98%;
-  --foreground: 222 47% 11%;
-  
-  --primary: 217 91% 60%;
-  --primary-foreground: 210 40% 98%;
-  
-  --secondary: 210 40% 96%;
-  --secondary-foreground: 222 47% 11%;
-  
-  --muted: 210 40% 96%;
-  --muted-foreground: 215 16% 47%;
-  
-  --accent: 199 89% 48%;
-  --accent-foreground: 210 40% 98%;
-  
-  --destructive: 0 84% 60%;
-  --destructive-foreground: 210 40% 98%;
-  
-  --border: 214 32% 91%;
-  --input: 214 32% 91%;
+  --background: 220 20% 97%;
+  --foreground: 224 30% 14%;
+
+  --card: 0 0% 100%;
+  --card-foreground: 224 30% 14%;
+  --card-border: 220 16% 90%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 224 30% 14%;
+  --popover-border: 220 16% 90%;
+
+  --primary: 221 83% 53%;
+  --primary-foreground: 0 0% 100%;
+  --primary-border: 221 83% 46%;
+
+  --secondary: 220 14% 94%;
+  --secondary-foreground: 224 30% 20%;
+  --secondary-border: 220 14% 87%;
+
+  --muted: 220 14% 94%;
+  --muted-foreground: 220 10% 46%;
+  --muted-border: 220 14% 87%;
+
+  --accent: 220 14% 94%;
+  --accent-foreground: 224 30% 14%;
+  --accent-border: 220 14% 87%;
+
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --destructive-border: 0 72% 44%;
+
+  --border: 220 16% 90%;
+  --input: 220 16% 90%;
   --ring: 221 83% 53%;
-  
-  --radius: 0.75rem;
-  
-  /* SLA Status Colors */
+
+  --radius: 0.5rem;
+
+  --chart-1: 221 83% 53%;
+  --chart-2: 199 89% 48%;
+  --chart-3: 142 76% 36%;
+  --chart-4: 38 92% 50%;
+  --chart-5: 0 72% 51%;
+
+  --sidebar: 224 30% 14%;
+  --sidebar-foreground: 220 14% 94%;
+  --sidebar-border: 224 25% 20%;
+  --sidebar-ring: 221 83% 53%;
+  --sidebar-primary: 221 83% 53%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-primary-border: 221 83% 46%;
+  --sidebar-accent: 224 25% 20%;
+  --sidebar-accent-foreground: 220 14% 94%;
+  --sidebar-accent-border: 224 25% 26%;
+
   --sla-safe: 142 76% 36%;
   --sla-warning: 38 92% 50%;
-  --sla-danger: 0 84% 60%;
+  --sla-danger: 0 72% 51%;
 }
 
 .dark {
-  --background: 222 47% 11%;
-  --foreground: 210 40% 98%;
-  
-  --primary: 217 91% 60%;
-  --primary-foreground: 222 47% 11%;
-  
-  --secondary: 217 32% 17%;
-  --secondary-foreground: 210 40% 98%;
-  
-  --muted: 217 32% 17%;
-  --muted-foreground: 215 20% 65%;
-  
-  --accent: 199 89% 48%;
-  --accent-foreground: 210 40% 98%;
-  
-  --destructive: 0 62% 30%;
-  --destructive-foreground: 210 40% 98%;
-  
-  --border: 217 32% 17%;
-  --input: 217 32% 17%;
-  --ring: 212 96% 78%;
+  --background: 224 30% 8%;
+  --foreground: 220 14% 94%;
+
+  --card: 224 25% 12%;
+  --card-foreground: 220 14% 94%;
+  --card-border: 224 20% 18%;
+
+  --popover: 224 25% 12%;
+  --popover-foreground: 220 14% 94%;
+  --popover-border: 224 20% 18%;
+
+  --primary: 221 83% 58%;
+  --primary-foreground: 0 0% 100%;
+  --primary-border: 221 83% 50%;
+
+  --secondary: 224 20% 18%;
+  --secondary-foreground: 220 14% 90%;
+  --secondary-border: 224 20% 24%;
+
+  --muted: 224 20% 18%;
+  --muted-foreground: 220 10% 55%;
+  --muted-border: 224 20% 24%;
+
+  --accent: 224 20% 18%;
+  --accent-foreground: 220 14% 94%;
+  --accent-border: 224 20% 24%;
+
+  --destructive: 0 62% 40%;
+  --destructive-foreground: 0 0% 100%;
+  --destructive-border: 0 62% 34%;
+
+  --border: 224 20% 18%;
+  --input: 224 20% 18%;
+  --ring: 221 83% 58%;
+
+  --chart-1: 221 83% 58%;
+  --chart-2: 199 89% 48%;
+  --chart-3: 142 76% 42%;
+  --chart-4: 38 92% 50%;
+  --chart-5: 0 72% 55%;
+
+  --sidebar: 224 30% 6%;
+  --sidebar-foreground: 220 14% 94%;
+  --sidebar-border: 224 25% 14%;
+  --sidebar-ring: 221 83% 58%;
+  --sidebar-primary: 221 83% 58%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-primary-border: 221 83% 50%;
+  --sidebar-accent: 224 25% 14%;
+  --sidebar-accent-foreground: 220 14% 94%;
+  --sidebar-accent-border: 224 25% 20%;
 }
 
 @layer base {
@@ -75,10 +133,78 @@
   }
 }
 
-/* Custom Scrollbar for dashboards */
+@layer utilities {
+  .hover-elevate {
+    position: relative;
+    transition: background-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .hover-elevate::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: transparent;
+    pointer-events: none;
+    transition: background 0.15s ease;
+  }
+  .hover-elevate:hover::after {
+    background: rgba(0, 0, 0, 0.04);
+  }
+  .dark .hover-elevate:hover::after {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .active-elevate-2 {
+    position: relative;
+    transition: background-color 0.1s ease;
+  }
+  .active-elevate-2::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: transparent;
+    pointer-events: none;
+    transition: background 0.1s ease;
+  }
+  .active-elevate-2:active::after {
+    background: rgba(0, 0, 0, 0.08);
+  }
+  .dark .active-elevate-2:active::after {
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .no-default-hover-elevate:hover::after {
+    background: transparent !important;
+  }
+  .no-default-active-elevate:active::after {
+    background: transparent !important;
+  }
+
+  .toggle-elevate {
+    position: relative;
+    transition: background-color 0.15s ease;
+  }
+  .toggle-elevate::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: transparent;
+    pointer-events: none;
+    transition: background 0.15s ease;
+  }
+  .toggle-elevate.toggle-elevated::before {
+    background: rgba(0, 0, 0, 0.06);
+  }
+  .dark .toggle-elevate.toggle-elevated::before {
+    background: rgba(255, 255, 255, 0.08);
+  }
+}
+
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   @apply bg-transparent;

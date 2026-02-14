@@ -86,7 +86,7 @@ export function CreateTicketDialog() {
           New Ticket
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Support Ticket</DialogTitle>
           <DialogDescription>
@@ -148,9 +148,9 @@ export function CreateTicketDialog() {
               />
             </div>
 
-            <div className="space-y-4 border rounded-lg p-4 bg-muted/20">
-              <h4 className="font-medium text-sm text-muted-foreground mb-2">Customer Details</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-4 border rounded-md p-4 bg-muted/30">
+              <h4 className="font-medium text-xs text-muted-foreground uppercase tracking-wider">Customer Details</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <FormField
                   control={form.control}
                   name="customerName"
@@ -239,10 +239,10 @@ export function CreateTicketDialog() {
             />
 
             <div className="flex justify-end gap-2 pt-2">
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+              <Button type="button" variant="outline" onClick={() => setOpen(false)} data-testid="button-cancel-create">
                 Cancel
               </Button>
-              <Button type="submit" disabled={isPending}>
+              <Button type="submit" disabled={isPending} data-testid="button-submit-create-ticket">
                 {isPending ? "Creating..." : "Create Ticket"}
               </Button>
             </div>

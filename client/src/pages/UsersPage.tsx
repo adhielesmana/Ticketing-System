@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from "@/hooks/use-users";
 import { useAuth } from "@/hooks/use-auth";
-import { UserRole } from "@shared/schema";
+import { UserRole, UserRoleValues } from "@shared/schema";
 import { Redirect } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,11 +43,19 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { UserPlus, Pencil, Trash2, User as UserIcon } from "lucide-react";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { UserPlus, Pencil, Trash2, Users } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertUserSchema, UserRoleValues } from "@shared/schema";
+import { insertUserSchema } from "@shared/schema";
 import { Skeleton } from "@/components/ui/skeleton";
+
+const roleColors: Record<string, string> = {
+  superadmin: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300",
+  admin: "bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
+  helpdesk: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+  technician: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
+};
 
 export default function UsersPage() {
   const { user } = useAuth();
@@ -126,19 +134,12 @@ export default function UsersPage() {
     }
   }
 
-  const roleColors: Record<string, string> = {
-    superadmin: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
-    admin: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
-    helpdesk: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-    technician: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-  };
-
   return (
-    <div className="container mx-auto p-4 md:p-8 space-y-6">
+    <div className="container mx-auto p-4 lg:p-6 space-y-5">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold" data-testid="text-page-title">Staff Management</h1>
-          <p className="text-muted-foreground">Manage technicians, helpdesk, and admin users</p>
+          <h1 className="text-2xl font-bold font-display" data-testid="text-page-title">Staff Management</h1>
+          <p className="text-sm text-muted-foreground">Manage technicians, helpdesk, and admin users</p>
         </div>
 
         <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -148,7 +149,7 @@ export default function UsersPage() {
               Add User
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-md">
             <DialogHeader>
               <DialogTitle>Add New Staff Member</DialogTitle>
             </DialogHeader>
@@ -165,7 +166,7 @@ export default function UsersPage() {
                     </FormItem>
                   )}
                 />
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-3">
                   <FormField
                     control={createForm.control}
                     name="username"
@@ -239,10 +240,10 @@ export default function UsersPage() {
                   control={createForm.control}
                   name="isBackboneSpecialist"
                   render={({ field }) => (
-                    <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                    <FormItem className="flex items-center justify-between rounded-md border p-3">
                       <div>
-                        <FormLabel>Backbone Specialist</FormLabel>
-                        <p className="text-xs text-muted-foreground">Only for backbone maintenance tickets</p>
+                        <FormLabel className="mb-0">Backbone Specialist</FormLabel>
+                        <p className="text-xs text-muted-foreground">Backbone maintenance tickets only</p>
                       </div>
                       <FormControl>
                         <Switch checked={field.value} onCheckedChange={field.onChange} data-testid="switch-backbone" />
@@ -263,119 +264,125 @@ export default function UsersPage() {
 
       <Card>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Username</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Phone</TableHead>
-                <TableHead>Specialist</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                Array.from({ length: 4 }).map((_, i) => (
-                  <TableRow key={i}>
-                    {Array.from({ length: 8 }).map((_, j) => (
-                      <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              ) : users?.length === 0 ? (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                    No users found
-                  </TableCell>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Username</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead>Specialist</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right w-[100px]">Actions</TableHead>
                 </TableRow>
-              ) : (
-                users?.map((u: any) => (
-                  <TableRow key={u.id} data-testid={`row-user-${u.id}`}>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
-                          <UserIcon className="w-4 h-4 text-muted-foreground" />
-                        </div>
-                        {u.name}
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  Array.from({ length: 4 }).map((_, i) => (
+                    <TableRow key={i}>
+                      {Array.from({ length: 8 }).map((_, j) => (
+                        <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : users?.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-12">
+                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                        <Users className="w-8 h-8 opacity-30" />
+                        <p className="text-sm font-medium">No users found</p>
                       </div>
                     </TableCell>
-                    <TableCell className="font-mono text-sm">{u.username}</TableCell>
-                    <TableCell>
-                      <Badge className={`${roleColors[u.role] || ""} capitalize text-xs`}>
-                        {u.role}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm">{u.email}</TableCell>
-                    <TableCell className="text-sm">{u.phone || "-"}</TableCell>
-                    <TableCell>
-                      {u.isBackboneSpecialist ? (
-                        <Badge variant="outline" className="text-xs">Backbone</Badge>
-                      ) : (
-                        <span className="text-muted-foreground text-sm">-</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={u.isActive
-                        ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300 text-xs"
-                        : "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 text-xs"
-                      }>
-                        {u.isActive ? "Active" : "Inactive"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => openEdit(u)}
-                          data-testid={`button-edit-user-${u.id}`}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        {user?.role === UserRole.SUPERADMIN && u.id !== user.id && (
+                  </TableRow>
+                ) : (
+                  users?.map((u: any) => (
+                    <TableRow key={u.id} data-testid={`row-user-${u.id}`}>
+                      <TableCell>
+                        <div className="flex items-center gap-2.5">
+                          <Avatar className="h-7 w-7">
+                            <AvatarFallback className="text-xs bg-primary/10 text-primary font-semibold">
+                              {u.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="text-sm font-medium">{u.name}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">{u.username}</TableCell>
+                      <TableCell>
+                        <Badge className={`${roleColors[u.role] || ""} capitalize text-[10px]`}>
+                          {u.role}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm">{u.email}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{u.phone || "-"}</TableCell>
+                      <TableCell>
+                        {u.isBackboneSpecialist ? (
+                          <Badge variant="outline" className="text-[10px]">Backbone</Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={u.isActive
+                          ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 text-[10px]"
+                          : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400 text-[10px]"
+                        }>
+                          {u.isActive ? "Active" : "Inactive"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-0.5">
                           <Button
                             size="icon"
                             variant="ghost"
-                            className="text-destructive"
-                            onClick={() => setDeleteId(u.id)}
-                            data-testid={`button-delete-user-${u.id}`}
+                            onClick={() => openEdit(u)}
+                            data-testid={`button-edit-user-${u.id}`}
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Pencil className="w-3.5 h-3.5" />
                           </Button>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                          {user?.role === UserRole.SUPERADMIN && u.id !== user.id && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="text-destructive"
+                              onClick={() => setDeleteId(u.id)}
+                              data-testid={`button-delete-user-${u.id}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
-      {/* Edit User Dialog */}
       <Dialog open={!!editUser} onOpenChange={(open) => !open && setEditUser(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Edit User: {editUser?.name}</DialogTitle>
+            <DialogTitle>Edit User</DialogTitle>
           </DialogHeader>
           <form onSubmit={editForm.handleSubmit(onEditSubmit)} className="space-y-4">
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <label className="text-sm font-medium">Full Name</label>
               <Input {...editForm.register("name")} data-testid="input-edit-name" />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <label className="text-sm font-medium">Email</label>
               <Input type="email" {...editForm.register("email")} data-testid="input-edit-email" />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <label className="text-sm font-medium">Phone</label>
               <Input {...editForm.register("phone")} data-testid="input-edit-phone" />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <label className="text-sm font-medium">Role</label>
               <Select
                 value={editForm.watch("role")}
@@ -393,14 +400,15 @@ export default function UsersPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium">New Password (leave blank to keep current)</label>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">New Password</label>
               <Input type="password" {...editForm.register("password")} placeholder="Leave blank to keep current" data-testid="input-edit-password" />
+              <p className="text-xs text-muted-foreground">Leave blank to keep current password</p>
             </div>
-            <div className="flex items-center justify-between rounded-lg border p-3">
+            <div className="flex items-center justify-between rounded-md border p-3">
               <div>
                 <label className="text-sm font-medium">Backbone Specialist</label>
-                <p className="text-xs text-muted-foreground">Assign to backbone tickets only</p>
+                <p className="text-xs text-muted-foreground">Backbone tickets only</p>
               </div>
               <Switch
                 checked={editForm.watch("isBackboneSpecialist")}
@@ -408,7 +416,7 @@ export default function UsersPage() {
                 data-testid="switch-edit-backbone"
               />
             </div>
-            <div className="flex items-center justify-between rounded-lg border p-3">
+            <div className="flex items-center justify-between rounded-md border p-3">
               <div>
                 <label className="text-sm font-medium">Active</label>
                 <p className="text-xs text-muted-foreground">Inactive users cannot log in</p>
@@ -429,13 +437,12 @@ export default function UsersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation */}
       <AlertDialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete User</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this user? This action cannot be undone and will remove all their assignments.
+              Are you sure? This will remove the user and all their assignments.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useTickets, useDeleteTicket, useUpdateTicket } from "@/hooks/use-tickets";
+import { useTickets, useDeleteTicket, useUpdateTicket, useAssignTicket } from "@/hooks/use-tickets";
 import { useUsers } from "@/hooks/use-users";
 import { useAuth } from "@/hooks/use-auth";
 import { CreateTicketDialog } from "@/components/CreateTicketDialog";
@@ -51,29 +51,26 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { insertTicketSchema, TicketTypeValues, TicketPriorityValues, TicketStatusValues, UserRole } from "@shared/schema";
-import { z } from "zod";
 import { format } from "date-fns";
-import { Search, Eye, Pencil, Trash2, UserPlus } from "lucide-react";
-import { useAssignTicket } from "@/hooks/use-tickets";
+import { Search, Eye, Pencil, Trash2, UserPlus, Ticket } from "lucide-react";
 
 const priorityColors: Record<string, string> = {
-  low: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-  medium: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300",
-  high: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
-  critical: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+  low: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+  medium: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
+  high: "bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300",
+  critical: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300",
 };
 
 const statusColors: Record<string, string> = {
-  open: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-  waiting_assignment: "bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300",
-  assigned: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300",
-  in_progress: "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300",
-  closed: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-  overdue: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+  open: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+  waiting_assignment: "bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
+  assigned: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
+  in_progress: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
+  closed: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
+  overdue: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300",
 };
 
 export default function TicketsPage() {
@@ -103,8 +100,16 @@ export default function TicketsPage() {
   const canCreate = canManage || user?.role === UserRole.HELPDESK;
 
   const editForm = useForm({
-    resolver: zodResolver(insertTicketSchema.partial()),
-    defaultValues: {},
+    defaultValues: {
+      title: "",
+      description: "",
+      priority: "medium",
+      type: "home_maintenance",
+      customerName: "",
+      customerPhone: "",
+      customerEmail: "",
+      customerLocationUrl: "",
+    },
   });
 
   function openEdit(ticket: any) {
@@ -144,11 +149,11 @@ export default function TicketsPage() {
   }
 
   return (
-    <div className="container mx-auto p-4 md:p-8 space-y-6">
+    <div className="container mx-auto p-4 lg:p-6 space-y-5">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold" data-testid="text-page-title">All Tickets</h1>
-          <p className="text-muted-foreground">Manage and track all support tickets</p>
+          <h1 className="text-2xl font-bold font-display" data-testid="text-page-title">Tickets</h1>
+          <p className="text-sm text-muted-foreground">Manage and track all support tickets</p>
         </div>
         {canCreate && <CreateTicketDialog />}
       </div>
@@ -157,7 +162,7 @@ export default function TicketsPage() {
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Search tickets..."
+            placeholder="Search by title, customer, or ticket number..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-9"
@@ -165,7 +170,7 @@ export default function TicketsPage() {
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[160px]" data-testid="select-status-filter">
+          <SelectTrigger className="w-[150px]" data-testid="select-status-filter">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -178,7 +183,7 @@ export default function TicketsPage() {
           </SelectContent>
         </Select>
         <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-[180px]" data-testid="select-type-filter">
+          <SelectTrigger className="w-[170px]" data-testid="select-type-filter">
             <SelectValue placeholder="Type" />
           </SelectTrigger>
           <SelectContent>
@@ -194,237 +199,203 @@ export default function TicketsPage() {
 
       <Card>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Ticket #</TableHead>
-                <TableHead>Title</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Priority</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Assignee</TableHead>
-                <TableHead>SLA</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <TableRow key={i}>
-                    {Array.from({ length: 10 }).map((_, j) => (
-                      <TableCell key={j}><Skeleton className="h-5 w-full" /></TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              ) : tickets?.length === 0 ? (
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
-                    No tickets found
-                  </TableCell>
+                  <TableHead className="w-[90px]">Ticket</TableHead>
+                  <TableHead>Title</TableHead>
+                  <TableHead className="w-[110px]">Type</TableHead>
+                  <TableHead className="w-[90px]">Priority</TableHead>
+                  <TableHead className="w-[110px]">Status</TableHead>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Assignee</TableHead>
+                  <TableHead className="w-[140px]">SLA</TableHead>
+                  <TableHead className="w-[100px]">Created</TableHead>
+                  <TableHead className="text-right w-[120px]">Actions</TableHead>
                 </TableRow>
-              ) : (
-                tickets?.map((ticket: any) => (
-                  <TableRow key={ticket.id} data-testid={`row-ticket-${ticket.id}`}>
-                    <TableCell className="font-mono text-sm">{ticket.ticketNumber}</TableCell>
-                    <TableCell className="font-medium max-w-[200px] truncate">{ticket.title}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="capitalize text-xs">
-                        {ticket.type.replace(/_/g, " ")}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={`${priorityColors[ticket.priority] || ""} capitalize text-xs`}>
-                        {ticket.priority}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <Badge className={`${statusColors[ticket.status] || ""} capitalize text-xs`}>
-                        {ticket.status.replace(/_/g, " ")}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm">{ticket.customerName}</TableCell>
-                    <TableCell className="text-sm">
-                      {ticket.assignee ? (
-                        <span>{ticket.assignee.name}</span>
-                      ) : (
-                        <span className="text-muted-foreground italic">Unassigned</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {ticket.status !== "closed" && (
-                        <SLAIndicator
-                          deadline={ticket.slaDeadline}
-                          createdAt={ticket.createdAt}
-                          status={ticket.status}
-                        />
-                      )}
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {format(new Date(ticket.createdAt), "MMM d, HH:mm")}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-end gap-1">
-                        <Link href={`/tickets/${ticket.id}`}>
-                          <Button size="icon" variant="ghost" data-testid={`button-view-ticket-${ticket.id}`}>
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                        </Link>
-                        {canManage && !ticket.assignee && ticket.status === "open" && (
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => setAssignDialogTicket(ticket)}
-                            data-testid={`button-assign-ticket-${ticket.id}`}
-                          >
-                            <UserPlus className="w-4 h-4" />
-                          </Button>
-                        )}
-                        {canManage && (
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => openEdit(ticket)}
-                            data-testid={`button-edit-ticket-${ticket.id}`}
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                        )}
-                        {user?.role === UserRole.SUPERADMIN && (
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="text-destructive"
-                            onClick={() => setDeleteId(ticket.id)}
-                            data-testid={`button-delete-ticket-${ticket.id}`}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        )}
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      {Array.from({ length: 10 }).map((_, j) => (
+                        <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : tickets?.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center py-12">
+                      <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                        <Ticket className="w-8 h-8 opacity-30" />
+                        <p className="text-sm font-medium">No tickets found</p>
+                        <p className="text-xs">Try adjusting your filters</p>
                       </div>
                     </TableCell>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                ) : (
+                  tickets?.map((ticket: any) => (
+                    <TableRow key={ticket.id} data-testid={`row-ticket-${ticket.id}`} className="group">
+                      <TableCell className="font-mono text-xs text-muted-foreground">{ticket.ticketNumber}</TableCell>
+                      <TableCell>
+                        <Link href={`/tickets/${ticket.id}`}>
+                          <span className="text-sm font-medium cursor-pointer">{ticket.title}</span>
+                        </Link>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className="capitalize text-[10px] font-normal">
+                          {ticket.type.replace(/_/g, " ")}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={`${priorityColors[ticket.priority] || ""} capitalize text-[10px]`}>
+                          {ticket.priority}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={`${statusColors[ticket.status] || ""} capitalize text-[10px]`}>
+                          {ticket.status.replace(/_/g, " ")}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm">{ticket.customerName}</TableCell>
+                      <TableCell>
+                        {ticket.assignee ? (
+                          <div className="flex items-center gap-1.5">
+                            <Avatar className="h-5 w-5">
+                              <AvatarFallback className="text-[9px] bg-muted font-medium">
+                                {ticket.assignee.name.charAt(0)}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="text-sm">{ticket.assignee.name}</span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground italic">Unassigned</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {ticket.status !== "closed" && (
+                          <SLAIndicator
+                            deadline={ticket.slaDeadline}
+                            createdAt={ticket.createdAt}
+                            status={ticket.status}
+                          />
+                        )}
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {format(new Date(ticket.createdAt), "MMM d")}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-0.5">
+                          <Link href={`/tickets/${ticket.id}`}>
+                            <Button size="icon" variant="ghost" data-testid={`button-view-ticket-${ticket.id}`}>
+                              <Eye className="w-3.5 h-3.5" />
+                            </Button>
+                          </Link>
+                          {canManage && !ticket.assignee && ticket.status === "open" && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => setAssignDialogTicket(ticket)}
+                              data-testid={`button-assign-ticket-${ticket.id}`}
+                            >
+                              <UserPlus className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                          {canManage && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => openEdit(ticket)}
+                              data-testid={`button-edit-ticket-${ticket.id}`}
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                          {user?.role === UserRole.SUPERADMIN && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="text-destructive"
+                              onClick={() => setDeleteId(ticket.id)}
+                              data-testid={`button-delete-ticket-${ticket.id}`}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
-      {/* Edit Dialog */}
       <Dialog open={!!editTicket} onOpenChange={(open) => !open && setEditTicket(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Edit Ticket {editTicket?.ticketNumber}</DialogTitle>
           </DialogHeader>
-          <Form {...editForm}>
-            <form onSubmit={editForm.handleSubmit(handleEditSubmit)} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={editForm.control}
-                  name="type"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Type</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {TicketTypeValues.map((t) => (
-                            <SelectItem key={t} value={t} className="capitalize">{t.replace(/_/g, " ")}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={editForm.control}
-                  name="priority"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Priority</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {TicketPriorityValues.map((p) => (
-                            <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+          <form onSubmit={editForm.handleSubmit(handleEditSubmit)} className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Type</label>
+                <Select value={editForm.watch("type")} onValueChange={(v) => editForm.setValue("type", v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {TicketTypeValues.map((t) => (
+                      <SelectItem key={t} value={t} className="capitalize">{t.replace(/_/g, " ")}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <FormField
-                control={editForm.control}
-                name="title"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Title</FormLabel>
-                    <FormControl><Input {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={editForm.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description</FormLabel>
-                    <FormControl><Textarea className="min-h-[80px]" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={editForm.control}
-                  name="customerName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Customer Name</FormLabel>
-                      <FormControl><Input {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={editForm.control}
-                  name="customerPhone"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Customer Phone</FormLabel>
-                      <FormControl><Input {...field} /></FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Priority</label>
+                <Select value={editForm.watch("priority")} onValueChange={(v) => editForm.setValue("priority", v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {TicketPriorityValues.map((p) => (
+                      <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setEditTicket(null)}>Cancel</Button>
-                <Button type="submit">Save Changes</Button>
-              </DialogFooter>
-            </form>
-          </Form>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Title</label>
+              <Input {...editForm.register("title")} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Description</label>
+              <Textarea className="min-h-[80px]" {...editForm.register("description")} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Customer Name</label>
+                <Input {...editForm.register("customerName")} />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Customer Phone</label>
+                <Input {...editForm.register("customerPhone")} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditTicket(null)}>Cancel</Button>
+              <Button type="submit">Save Changes</Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
-      {/* Assign Dialog */}
       <Dialog open={!!assignDialogTicket} onOpenChange={(open) => !open && setAssignDialogTicket(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Assign Ticket {assignDialogTicket?.ticketNumber}</DialogTitle>
+            <DialogTitle>Assign Ticket</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 py-4">
-            <Label>Select Technician</Label>
+          <div className="space-y-2 py-2">
             {technicians?.map((tech: any) => (
               <Button
                 key={tech.id}
@@ -433,11 +404,13 @@ export default function TicketsPage() {
                 onClick={() => handleAssign(tech.id)}
                 data-testid={`button-assign-to-${tech.id}`}
               >
-                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-sm font-medium">
-                  {tech.name.charAt(0)}
-                </div>
+                <Avatar className="h-7 w-7">
+                  <AvatarFallback className="text-xs bg-muted font-medium">
+                    {tech.name.charAt(0)}
+                  </AvatarFallback>
+                </Avatar>
                 <div className="text-left">
-                  <p className="font-medium">{tech.name}</p>
+                  <p className="text-sm font-medium">{tech.name}</p>
                   <p className="text-xs text-muted-foreground">
                     {tech.isBackboneSpecialist ? "Backbone Specialist" : "General Technician"}
                   </p>
@@ -448,13 +421,12 @@ export default function TicketsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation */}
       <AlertDialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Ticket</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this ticket? This action cannot be undone.
+              Are you sure? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

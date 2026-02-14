@@ -1,14 +1,17 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
-import { 
-  LogOut, 
-  LayoutDashboard, 
-  Ticket, 
-  Users, 
-  Shield 
+import { Badge } from "@/components/ui/badge";
+import {
+  LogOut,
+  LayoutDashboard,
+  Ticket,
+  Users,
+  Shield,
+  Menu,
 } from "lucide-react";
 import { UserRole } from "@shared/schema";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 export function Navigation() {
   const { user, logout } = useAuth();
@@ -18,69 +21,65 @@ export function Navigation() {
 
   const isTechnician = user.role === UserRole.TECHNICIAN;
 
+  const navItems = [
+    { href: "/dashboard/admin", label: "Dashboard", icon: LayoutDashboard, show: !isTechnician },
+    { href: "/tickets", label: "Tickets", icon: Ticket, show: !isTechnician },
+    { href: "/users", label: "Staff", icon: Users, show: user.role === UserRole.ADMIN || user.role === UserRole.SUPERADMIN },
+  ].filter(item => item.show);
+
   return (
-    <header className="bg-background border-b border-border sticky top-0 z-50 shadow-sm">
-      <div className="container mx-auto px-4 h-16 flex items-center justify-between">
-        <div className="flex items-center gap-8">
-          <Link href="/" className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Shield className="w-5 h-5 text-primary-foreground" />
+    <header className="bg-card border-b border-border sticky top-0 z-50" data-testid="navigation-header">
+      <div className="container mx-auto px-4 lg:px-6 h-14 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-6">
+          <Link href="/" className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
+              <Shield className="w-4 h-4 text-primary-foreground" />
             </div>
-            <span className="font-display font-bold text-xl text-primary hidden md:block">
-              NetGuard ISP
+            <span className="font-display font-bold text-lg hidden sm:block" data-testid="text-brand-name">
+              NetGuard
             </span>
           </Link>
 
-          {!isTechnician && (
-            <nav className="hidden md:flex items-center gap-1">
-              <Link href="/dashboard/admin">
-                <Button 
-                  variant={location.startsWith("/dashboard") ? "secondary" : "ghost"}
-                  size="sm"
-                  className="gap-2"
-                >
-                  <LayoutDashboard className="w-4 h-4" />
-                  Dashboard
-                </Button>
-              </Link>
-              <Link href="/tickets">
-                <Button 
-                  variant={location.startsWith("/tickets") ? "secondary" : "ghost"}
-                  size="sm"
-                  className="gap-2"
-                >
-                  <Ticket className="w-4 h-4" />
-                  All Tickets
-                </Button>
-              </Link>
-              {(user.role === UserRole.ADMIN || user.role === UserRole.SUPERADMIN) && (
-                <Link href="/users">
-                  <Button 
-                    variant={location.startsWith("/users") ? "secondary" : "ghost"}
+          <nav className="hidden md:flex items-center gap-0.5">
+            {navItems.map((item) => {
+              const isActive = location.startsWith(item.href);
+              return (
+                <Link key={item.href} href={item.href}>
+                  <Button
+                    variant={isActive ? "secondary" : "ghost"}
                     size="sm"
-                    className="gap-2"
+                    className="gap-2 text-sm font-medium"
+                    data-testid={`nav-link-${item.label.toLowerCase()}`}
                   >
-                    <Users className="w-4 h-4" />
-                    Staff
+                    <item.icon className="w-4 h-4" />
+                    {item.label}
                   </Button>
                 </Link>
-              )}
-            </nav>
-          )}
+              );
+            })}
+          </nav>
         </div>
 
-        <div className="flex items-center gap-4">
-          <div className="text-right hidden sm:block">
-            <p className="text-sm font-semibold">{user.name}</p>
-            <p className="text-xs text-muted-foreground capitalize">{user.role.replace('_', ' ')}</p>
+        <div className="flex items-center gap-3">
+          <div className="hidden sm:flex items-center gap-2.5">
+            <Avatar className="h-8 w-8">
+              <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                {user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
+              </AvatarFallback>
+            </Avatar>
+            <div className="text-right">
+              <p className="text-sm font-medium leading-none" data-testid="text-user-name">{user.name}</p>
+              <p className="text-xs text-muted-foreground mt-0.5 capitalize">{user.role.replace('_', ' ')}</p>
+            </div>
           </div>
-          <Button 
-            variant="ghost" 
-            size="icon" 
+          <div className="w-px h-6 bg-border hidden sm:block" />
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => logout()}
-            className="text-muted-foreground"
+            data-testid="button-logout"
           >
-            <LogOut className="w-5 h-5" />
+            <LogOut className="w-4 h-4" />
           </Button>
         </div>
       </div>
