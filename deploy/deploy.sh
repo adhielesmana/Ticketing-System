@@ -3,12 +3,12 @@ set -e
 
 #====================================================================
 # NetGuard ISP Ticketing System - Debian/Ubuntu Deployment Script
-# Version: 5
+# Version: 6
 # Run as root on Debian/Ubuntu with Docker already installed
 # Both the app and PostgreSQL run inside Docker containers
 #====================================================================
 
-DEPLOY_VERSION="5"
+DEPLOY_VERSION="6"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -23,7 +23,7 @@ log_ok()    { echo -e "${GREEN}[OK]${NC} $1"; }
 log_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_err()   { echo -e "${RED}[ERROR]${NC} $1"; }
 
-TOTAL_STEPS=11
+TOTAL_STEPS=12
 CHECKLIST_RESULTS=()
 
 step_start() {
@@ -100,7 +100,54 @@ log_info "DB Port:       $DB_PORT"
 log_info "Install Dir:   $INSTALL_DIR"
 echo ""
 
-step_start 1 "Port scanning & auto-assignment"
+step_start 1 "Stop existing NetGuard containers"
+#====================================================================
+# 1. STOP EXISTING CONTAINERS (clean slate before rebuild)
+#====================================================================
+stop_existing_containers() {
+    local stopped=0
+
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qw "$APP_CONTAINER"; then
+        log_info "Stopping app container '${APP_CONTAINER}'..."
+        docker stop "$APP_CONTAINER" 2>/dev/null || true
+        docker rm -f "$APP_CONTAINER" 2>/dev/null || true
+        stopped=$((stopped + 1))
+        log_ok "App container stopped and removed"
+    elif docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qw "$APP_CONTAINER"; then
+        log_info "Removing stopped app container '${APP_CONTAINER}'..."
+        docker rm -f "$APP_CONTAINER" 2>/dev/null || true
+        stopped=$((stopped + 1))
+        log_ok "App container removed"
+    else
+        log_ok "No existing app container found"
+    fi
+
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qw "$POSTGRES_CONTAINER"; then
+        log_info "Stopping PostgreSQL container '${POSTGRES_CONTAINER}'..."
+        docker stop "$POSTGRES_CONTAINER" 2>/dev/null || true
+        docker rm -f "$POSTGRES_CONTAINER" 2>/dev/null || true
+        stopped=$((stopped + 1))
+        log_ok "PostgreSQL container stopped and removed"
+    elif docker ps -a --format '{{.Names}}' 2>/dev/null | grep -qw "$POSTGRES_CONTAINER"; then
+        log_info "Removing stopped PostgreSQL container '${POSTGRES_CONTAINER}'..."
+        docker rm -f "$POSTGRES_CONTAINER" 2>/dev/null || true
+        stopped=$((stopped + 1))
+        log_ok "PostgreSQL container removed"
+    else
+        log_ok "No existing PostgreSQL container found"
+    fi
+
+    if [ "$stopped" -gt 0 ]; then
+        log_ok "Stopped ${stopped} existing container(s) — clean slate ready"
+    else
+        log_ok "No existing containers to stop — fresh install"
+    fi
+}
+
+stop_existing_containers
+step_done 1 "Stop existing NetGuard containers"
+
+step_start 2 "Port scanning & auto-assignment"
 #====================================================================
 # 1. COLLECT ALL USED PORTS & AUTO-ASSIGN FREE PORTS
 #====================================================================
@@ -200,9 +247,9 @@ resolve_ports() {
 }
 
 resolve_ports
-step_done 1 "Port scanning & auto-assignment"
+step_done 2 "Port scanning & auto-assignment"
 
-step_start 2 "Install Nginx"
+step_start 3 "Install Nginx"
 #====================================================================
 # 2. INSTALL NGINX (if not present)
 #====================================================================
@@ -223,9 +270,9 @@ install_nginx() {
 }
 
 install_nginx
-step_done 2 "Install Nginx"
+step_done 3 "Install Nginx"
 
-step_start 3 "Install Certbot"
+step_start 4 "Install Certbot"
 #====================================================================
 # 3. INSTALL CERTBOT FOR SSL (if not present)
 #====================================================================
@@ -244,9 +291,9 @@ install_certbot() {
 }
 
 install_certbot
-step_done 3 "Install Certbot"
+step_done 4 "Install Certbot"
 
-step_start 4 "Docker network"
+step_start 5 "Docker network"
 #====================================================================
 # 4. DOCKER NETWORK
 #====================================================================
@@ -261,9 +308,9 @@ setup_docker_network() {
 }
 
 setup_docker_network
-step_done 4 "Docker network"
+step_done 5 "Docker network"
 
-step_start 5 "PostgreSQL setup & auth verification"
+step_start 6 "PostgreSQL setup & auth verification"
 #====================================================================
 # 5. POSTGRESQL IN DOCKER
 #====================================================================
@@ -463,9 +510,9 @@ setup_postgres() {
 }
 
 setup_postgres
-step_done 5 "PostgreSQL setup & auth verification"
+step_done 6 "PostgreSQL setup & auth verification"
 
-step_start 6 "Build app Docker image"
+step_start 7 "Build app Docker image"
 #====================================================================
 # 6. COPY SOURCE & BUILD APP DOCKER IMAGE
 #====================================================================
@@ -497,9 +544,9 @@ DOCKERIGNORE
 }
 
 build_app
-step_done 6 "Build app Docker image"
+step_done 7 "Build app Docker image"
 
-step_start 7 "Pre-flight auth check & start app container"
+step_start 8 "Pre-flight auth check & start app container"
 #====================================================================
 # 7. RUN APP CONTAINER
 #====================================================================
@@ -559,9 +606,9 @@ ENVFILE
 }
 
 run_app_container
-step_done 7 "Pre-flight auth check & start app container"
+step_done 8 "Pre-flight auth check & start app container"
 
-step_start 8 "Create database tables & seed data"
+step_start 9 "Create database tables & seed data"
 #====================================================================
 # 8. DATABASE SCHEMA & SEED
 #====================================================================
@@ -646,9 +693,9 @@ setup_database_schema() {
 }
 
 setup_database_schema
-step_done 8 "Create database tables & seed data"
+step_done 9 "Create database tables & seed data"
 
-step_start 9 "Nginx configuration"
+step_start 10 "Nginx configuration"
 #====================================================================
 # 9. NGINX CONFIGURATION
 #====================================================================
@@ -745,9 +792,9 @@ NGINX_CONF
 }
 
 configure_nginx
-step_done 9 "Nginx configuration"
+step_done 10 "Nginx configuration"
 
-step_start 10 "SSL certificate"
+step_start 11 "SSL certificate"
 #====================================================================
 # 10. SSL CERTIFICATE (Let's Encrypt)
 #====================================================================
@@ -792,9 +839,9 @@ setup_ssl() {
 }
 
 setup_ssl
-step_done 10 "SSL certificate"
+step_done 11 "SSL certificate"
 
-step_start 11 "Firewall configuration"
+step_start 12 "Firewall configuration"
 #====================================================================
 # 11. FIREWALL
 #====================================================================
@@ -820,7 +867,7 @@ configure_firewall() {
 }
 
 configure_firewall
-step_done 11 "Firewall configuration"
+step_done 12 "Firewall configuration"
 
 #====================================================================
 # DONE
