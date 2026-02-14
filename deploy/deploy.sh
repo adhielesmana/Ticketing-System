@@ -3,20 +3,63 @@ set -e
 
 #====================================================================
 # NetGuard ISP Ticketing System - Debian/Ubuntu Deployment Script
+# Version: 4
 # Run as root on Debian/Ubuntu with Docker already installed
 # Both the app and PostgreSQL run inside Docker containers
 #====================================================================
+
+DEPLOY_VERSION="4"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+WHITE_BOLD='\033[1;37m'
 NC='\033[0m'
 
 log_info()  { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_ok()    { echo -e "${GREEN}[OK]${NC} $1"; }
 log_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_err()   { echo -e "${RED}[ERROR]${NC} $1"; }
+
+TOTAL_STEPS=10
+CHECKLIST_RESULTS=()
+
+step_start() {
+    local step_num=$1
+    local step_name=$2
+    echo ""
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo -e "${WHITE_BOLD}  STEP ${step_num}/${TOTAL_STEPS}: ${step_name}${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+}
+
+step_done() {
+    local step_num=$1
+    local step_name=$2
+    CHECKLIST_RESULTS+=("${GREEN}[PASS]${NC} Step ${step_num}: ${step_name}")
+    echo -e "${GREEN}>>> STEP ${step_num} COMPLETE: ${step_name}${NC}"
+}
+
+step_fail() {
+    local step_num=$1
+    local step_name=$2
+    CHECKLIST_RESULTS+=("${RED}[FAIL]${NC} Step ${step_num}: ${step_name}")
+    echo -e "${RED}>>> STEP ${step_num} FAILED: ${step_name}${NC}"
+}
+
+print_checklist() {
+    echo ""
+    echo -e "${WHITE_BOLD}=============================================="
+    echo -e "  DEPLOYMENT CHECKLIST SUMMARY (v${DEPLOY_VERSION})"
+    echo -e "==============================================${NC}"
+    for result in "${CHECKLIST_RESULTS[@]}"; do
+        echo -e "  $result"
+    done
+    echo -e "${WHITE_BOLD}==============================================${NC}"
+    echo ""
+}
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
@@ -48,6 +91,7 @@ UPLOADS_VOLUME="${UPLOADS_VOLUME:-netguard_uploads}"
 echo ""
 echo "=============================================="
 echo "  NetGuard ISP - Deployment Script"
+echo "  Version: ${DEPLOY_VERSION}"
 echo "=============================================="
 echo ""
 log_info "Domain:        $DOMAIN"
@@ -56,6 +100,7 @@ log_info "DB Port:       $DB_PORT"
 log_info "Install Dir:   $INSTALL_DIR"
 echo ""
 
+step_start 1 "Port scanning & auto-assignment"
 #====================================================================
 # 1. COLLECT ALL USED PORTS & AUTO-ASSIGN FREE PORTS
 #====================================================================
@@ -155,7 +200,9 @@ resolve_ports() {
 }
 
 resolve_ports
+step_done 1 "Port scanning & auto-assignment"
 
+step_start 2 "Install Nginx"
 #====================================================================
 # 2. INSTALL NGINX (if not present)
 #====================================================================
@@ -176,7 +223,9 @@ install_nginx() {
 }
 
 install_nginx
+step_done 2 "Install Nginx"
 
+step_start 3 "Install Certbot"
 #====================================================================
 # 3. INSTALL CERTBOT FOR SSL (if not present)
 #====================================================================
@@ -195,7 +244,9 @@ install_certbot() {
 }
 
 install_certbot
+step_done 3 "Install Certbot"
 
+step_start 4 "Docker network"
 #====================================================================
 # 4. DOCKER NETWORK
 #====================================================================
@@ -210,7 +261,9 @@ setup_docker_network() {
 }
 
 setup_docker_network
+step_done 4 "Docker network"
 
+step_start 5 "PostgreSQL setup & auth verification"
 #====================================================================
 # 5. POSTGRESQL IN DOCKER
 #====================================================================
@@ -407,7 +460,9 @@ setup_postgres() {
 }
 
 setup_postgres
+step_done 5 "PostgreSQL setup & auth verification"
 
+step_start 6 "Build app Docker image"
 #====================================================================
 # 6. COPY SOURCE & BUILD APP DOCKER IMAGE
 #====================================================================
@@ -439,7 +494,9 @@ DOCKERIGNORE
 }
 
 build_app
+step_done 6 "Build app Docker image"
 
+step_start 7 "Pre-flight auth check & start app container"
 #====================================================================
 # 7. RUN APP CONTAINER
 #====================================================================
@@ -501,7 +558,9 @@ ENVFILE
 }
 
 run_app_container
+step_done 7 "Pre-flight auth check & start app container"
 
+step_start 8 "Nginx configuration"
 #====================================================================
 # 8. NGINX CONFIGURATION
 #====================================================================
@@ -598,7 +657,9 @@ NGINX_CONF
 }
 
 configure_nginx
+step_done 8 "Nginx configuration"
 
+step_start 9 "SSL certificate"
 #====================================================================
 # 9. SSL CERTIFICATE (Let's Encrypt)
 #====================================================================
@@ -643,7 +704,9 @@ setup_ssl() {
 }
 
 setup_ssl
+step_done 9 "SSL certificate"
 
+step_start 10 "Firewall configuration"
 #====================================================================
 # 10. FIREWALL
 #====================================================================
@@ -669,13 +732,16 @@ configure_firewall() {
 }
 
 configure_firewall
+step_done 10 "Firewall configuration"
 
 #====================================================================
 # DONE
 #====================================================================
-echo ""
+
+print_checklist
+
 echo "=============================================="
-echo -e "  ${GREEN}Deployment Complete!${NC}"
+echo -e "  ${GREEN}Deployment Complete! (v${DEPLOY_VERSION})${NC}"
 echo "=============================================="
 echo ""
 echo "  App URL:      https://${DOMAIN}"
@@ -714,6 +780,7 @@ INFO2
 chmod 600 /etc/netguard-deploy-info
 
 cat > "${INSTALL_DIR}/.deploy-info" <<INFO
+DEPLOY_VERSION=${DEPLOY_VERSION}
 DOMAIN=${DOMAIN}
 APP_NAME=${APP_NAME}
 APP_PORT=${APP_PORT}
