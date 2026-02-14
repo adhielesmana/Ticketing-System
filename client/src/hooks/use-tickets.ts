@@ -138,9 +138,11 @@ export function useAutoAssignTicket() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async (partnerId: number) => {
       const res = await fetch(api.tickets.autoAssign.path, {
         method: api.tickets.autoAssign.method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ partnerId }),
         credentials: "include",
       });
       if (!res.ok) {
@@ -152,11 +154,26 @@ export function useAutoAssignTicket() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.tickets.list.path] });
       queryClient.invalidateQueries({ queryKey: [api.performance.me.path] });
-      toast({ title: "Ticket Assigned", description: "A new ticket has been assigned to you" });
+      toast({ title: "Ticket Assigned", description: "A new ticket has been assigned to you and your partner" });
     },
     onError: (error) => {
-      toast({ title: "No Tickets", description: error.message, variant: "destructive" });
+      toast({ title: "Cannot Get Ticket", description: error.message, variant: "destructive" });
     },
+  });
+}
+
+export function useFreeTechnicians(excludeUserId?: number) {
+  return useQuery({
+    queryKey: ["/api/technicians/free", excludeUserId],
+    queryFn: async () => {
+      const url = excludeUserId
+        ? `/api/technicians/free?excludeUserId=${excludeUserId}`
+        : "/api/technicians/free";
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch free technicians");
+      return res.json();
+    },
+    enabled: !!excludeUserId,
   });
 }
 

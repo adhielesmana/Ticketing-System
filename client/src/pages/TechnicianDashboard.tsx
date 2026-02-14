@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { useTickets, useTechnicianPerformance, useAutoAssignTicket } from "@/hooks/use-tickets";
+import { useTickets, useTechnicianPerformance, useAutoAssignTicket, useFreeTechnicians } from "@/hooks/use-tickets";
 import { TicketCard } from "@/components/TicketCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -13,13 +14,32 @@ import {
   Clock,
   AlertTriangle,
   Loader2,
+  Users,
+  UserPlus,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { UserRole } from "@shared/schema";
 import { Redirect } from "wouter";
 
 export default function TechnicianDashboard() {
   const { user } = useAuth();
+  const [showPartnerDialog, setShowPartnerDialog] = useState(false);
+  const [selectedPartnerId, setSelectedPartnerId] = useState<string>("");
 
   if (user && user.role !== UserRole.TECHNICIAN) {
     return <Redirect to="/dashboard/admin" />;
@@ -28,6 +48,7 @@ export default function TechnicianDashboard() {
   const { data: tickets, isLoading } = useTickets({ assignedTo: user?.id });
   const { data: performance } = useTechnicianPerformance();
   const { mutate: autoAssign, isPending: isAutoAssigning } = useAutoAssignTicket();
+  const { data: freeTechnicians, isLoading: loadingFreeTechs } = useFreeTechnicians(user?.id);
 
   const activeTickets = tickets?.filter((t: any) =>
     ['assigned', 'in_progress'].includes(t.status)
@@ -38,6 +59,21 @@ export default function TechnicianDashboard() {
   ) || [];
 
   const hasActiveTicket = activeTickets.length > 0;
+
+  const handleGetTicketClick = () => {
+    setSelectedPartnerId("");
+    setShowPartnerDialog(true);
+  };
+
+  const handleConfirmGetTicket = () => {
+    if (!selectedPartnerId) return;
+    autoAssign(Number(selectedPartnerId), {
+      onSuccess: () => {
+        setShowPartnerDialog(false);
+        setSelectedPartnerId("");
+      },
+    });
+  };
 
   return (
     <div className="container mx-auto max-w-lg pb-20">
@@ -62,7 +98,7 @@ export default function TechnicianDashboard() {
         </div>
 
         <Button
-          onClick={() => autoAssign()}
+          onClick={handleGetTicketClick}
           disabled={isAutoAssigning || hasActiveTicket}
           className="w-full mt-4 bg-white/20 border border-white/20 text-primary-foreground gap-2"
           data-testid="button-get-ticket"
@@ -143,6 +179,72 @@ export default function TechnicianDashboard() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <Dialog open={showPartnerDialog} onOpenChange={setShowPartnerDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="w-5 h-5 text-primary" />
+              Select Partner
+            </DialogTitle>
+            <DialogDescription>
+              Choose a partner technician to work with. Only technicians without active tickets are shown.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-4">
+            <Select value={selectedPartnerId} onValueChange={setSelectedPartnerId}>
+              <SelectTrigger data-testid="select-partner">
+                <SelectValue placeholder="Choose a partner..." />
+              </SelectTrigger>
+              <SelectContent>
+                {loadingFreeTechs ? (
+                  <div className="p-3 text-center text-sm text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin mx-auto mb-1" />
+                    Loading...
+                  </div>
+                ) : freeTechnicians && freeTechnicians.length > 0 ? (
+                  freeTechnicians.map((tech: any) => (
+                    <SelectItem key={tech.id} value={String(tech.id)} data-testid={`option-partner-${tech.id}`}>
+                      <div className="flex items-center gap-2">
+                        <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                        <span>{tech.name}</span>
+                        {tech.isBackboneSpecialist && (
+                          <span className="text-[10px] px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/50 text-violet-700 dark:text-violet-300 rounded-full font-medium">
+                            Backbone
+                          </span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))
+                ) : (
+                  <div className="p-3 text-center text-sm text-muted-foreground">
+                    No available partners
+                  </div>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setShowPartnerDialog(false)} data-testid="button-cancel-partner">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConfirmGetTicket}
+              disabled={!selectedPartnerId || isAutoAssigning}
+              className="gap-2"
+              data-testid="button-confirm-get-ticket"
+            >
+              {isAutoAssigning ? (
+                <><Loader2 className="w-4 h-4 animate-spin" /> Assigning...</>
+              ) : (
+                <><Zap className="w-4 h-4" /> Get Ticket</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

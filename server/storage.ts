@@ -28,10 +28,14 @@ export interface IStorage {
   deleteTicket(id: number): Promise<void>;
 
   assignTicket(ticketId: number, userId: number, assignmentType?: string): Promise<TicketAssignment>;
+  assignTicketWithPartner(ticketId: number, userId: number, partnerId: number, assignmentType?: string): Promise<void>;
   getTicketAssignment(ticketId: number): Promise<TicketAssignment | undefined>;
+  getTicketAssignments(ticketId: number): Promise<TicketAssignment[]>;
   getAssigneeForTicket(ticketId: number): Promise<User | undefined>;
+  getAssigneesForTicket(ticketId: number): Promise<User[]>;
   getActiveTicketForUser(userId: number): Promise<Ticket | undefined>;
   getOldestOpenTicket(isBackboneSpecialist?: boolean): Promise<Ticket | undefined>;
+  getFreeTechnicians(excludeUserId?: number): Promise<User[]>;
 
   logPerformance(log: InsertPerformanceLog): Promise<PerformanceLog>;
   getTechnicianPerformance(userId: number): Promise<TechnicianPerformance>;
@@ -162,6 +166,18 @@ export class DatabaseStorage implements IStorage {
     return assignment;
   }
 
+  async assignTicketWithPartner(ticketId: number, userId: number, partnerId: number, assignmentType: string = "auto"): Promise<void> {
+    await db.update(ticketAssignments)
+      .set({ active: false })
+      .where(eq(ticketAssignments.ticketId, ticketId));
+
+    await db.insert(ticketAssignments)
+      .values([
+        { ticketId, userId, active: true, assignmentType },
+        { ticketId, userId: partnerId, active: true, assignmentType },
+      ]);
+  }
+
   async getTicketAssignment(ticketId: number): Promise<TicketAssignment | undefined> {
     const [assignment] = await db.select()
       .from(ticketAssignments)
@@ -171,11 +187,28 @@ export class DatabaseStorage implements IStorage {
       ));
     return assignment;
   }
+
+  async getTicketAssignments(ticketId: number): Promise<TicketAssignment[]> {
+    return db.select()
+      .from(ticketAssignments)
+      .where(and(
+        eq(ticketAssignments.ticketId, ticketId),
+        eq(ticketAssignments.active, true)
+      ))
+      .orderBy(asc(ticketAssignments.id));
+  }
   
   async getAssigneeForTicket(ticketId: number): Promise<User | undefined> {
     const assignment = await this.getTicketAssignment(ticketId);
     if (!assignment) return undefined;
     return this.getUser(assignment.userId);
+  }
+
+  async getAssigneesForTicket(ticketId: number): Promise<User[]> {
+    const assignments = await this.getTicketAssignments(ticketId);
+    const userPromises = assignments.map(a => this.getUser(a.userId));
+    const results = await Promise.all(userPromises);
+    return results.filter((u): u is User => u !== undefined);
   }
 
   async getActiveTicketForUser(userId: number): Promise<Ticket | undefined> {
@@ -216,6 +249,38 @@ export class DatabaseStorage implements IStorage {
 
     const results = await query.orderBy(asc(tickets.createdAt)).limit(1);
     return results[0];
+  }
+
+  async getFreeTechnicians(excludeUserId?: number): Promise<User[]> {
+    const busyTechIds = db
+      .select({ userId: ticketAssignments.userId })
+      .from(ticketAssignments)
+      .innerJoin(tickets, eq(tickets.id, ticketAssignments.ticketId))
+      .where(
+        and(
+          eq(ticketAssignments.active, true),
+          or(
+            eq(tickets.status, TicketStatus.ASSIGNED),
+            eq(tickets.status, TicketStatus.IN_PROGRESS)
+          )
+        )
+      );
+
+    const allTechs = await db
+      .select()
+      .from(users)
+      .where(
+        and(
+          eq(users.role, "technician"),
+          eq(users.isActive, true),
+          sql`${users.id} NOT IN (${busyTechIds})`
+        )
+      );
+
+    if (excludeUserId) {
+      return allTechs.filter(u => u.id !== excludeUserId);
+    }
+    return allTechs;
   }
 
   async logPerformance(log: InsertPerformanceLog): Promise<PerformanceLog> {

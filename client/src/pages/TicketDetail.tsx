@@ -165,7 +165,7 @@ export default function TicketDetail() {
     });
   };
 
-  const isAssignedToMe = ticket.assignee?.id === user?.id;
+  const isAssignedToMe = ticket.assignees?.some((a: any) => a.id === user?.id) || ticket.assignee?.id === user?.id;
   const canManage = user?.role === 'admin' || user?.role === 'superadmin' || user?.role === 'helpdesk';
   const descImages: string[] = ticket.descriptionImages || [];
   const hasMapPreview = ticket.customerLocationUrl && extractCoordinates(ticket.customerLocationUrl);
@@ -402,19 +402,23 @@ export default function TicketDetail() {
               <CardTitle className="text-base">Assignment</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {ticket.assignee ? (
+              {ticket.assignees && ticket.assignees.length > 0 ? (
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2.5">
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback className="text-xs bg-primary/10 text-primary font-semibold">
-                        {ticket.assignee.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="text-sm font-medium">{ticket.assignee.name}</p>
-                      <p className="text-xs text-muted-foreground capitalize">{ticket.assignee.role}</p>
+                  {ticket.assignees.map((assignee: any, idx: number) => (
+                    <div key={assignee.id} className="flex items-center gap-2.5">
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="text-xs bg-primary/10 text-primary font-semibold">
+                          {assignee.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="text-sm font-medium">{assignee.name}</p>
+                        <p className="text-xs text-muted-foreground capitalize">
+                          {idx === 0 ? "Lead Technician" : "Partner"}
+                        </p>
+                      </div>
                     </div>
-                  </div>
+                  ))}
                   {ticket.assignmentType && (
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       {ticket.assignmentType === 'auto' ? (

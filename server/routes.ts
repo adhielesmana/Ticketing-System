@@ -136,14 +136,18 @@ export async function registerRoutes(
 
       if (user?.role === UserRole.TECHNICIAN) {
          const myTickets = await storage.getTicketsByAssignee(user.id);
-         return res.json(myTickets.map(t => ({ ...t, assignee: user })));
+         const withAssignees = await Promise.all(myTickets.map(async (t) => {
+           const assignees = await storage.getAssigneesForTicket(t.id);
+           return { ...t, assignee: assignees[0], assignees };
+         }));
+         return res.json(withAssignees);
       }
 
       const tickets = await storage.getAllTickets(req.query);
       
       const ticketsWithAssignee = await Promise.all(tickets.map(async (ticket) => {
-        const assignee = await storage.getAssigneeForTicket(ticket.id);
-        return { ...ticket, assignee };
+        const assignees = await storage.getAssigneesForTicket(ticket.id);
+        return { ...ticket, assignee: assignees[0], assignees };
       }));
 
       res.json(ticketsWithAssignee);
@@ -156,9 +160,9 @@ export async function registerRoutes(
     const ticket = await storage.getTicket(Number(req.params.id));
     if (!ticket) return res.status(404).json({ message: "Ticket not found" });
     
-    const assignee = await storage.getAssigneeForTicket(ticket.id);
+    const assignees = await storage.getAssigneesForTicket(ticket.id);
     const assignment = await storage.getTicketAssignment(ticket.id);
-    res.json({ ...ticket, assignee, assignmentType: assignment?.assignmentType, assignedAt: assignment?.assignedAt });
+    res.json({ ...ticket, assignee: assignees[0], assignees, assignmentType: assignment?.assignmentType, assignedAt: assignment?.assignedAt });
   });
 
   app.post(api.tickets.create.path, async (req, res) => {
@@ -225,6 +229,21 @@ export async function registerRoutes(
     res.json(ticket);
   });
 
+  // === FREE TECHNICIANS (no active/in-progress tickets) ===
+  app.get("/api/technicians/free", async (req, res) => {
+    try {
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const excludeId = req.query.excludeUserId ? Number(req.query.excludeUserId) : undefined;
+      const freeTechs = await storage.getFreeTechnicians(excludeId);
+      const safe = freeTechs.map(({ password, ...rest }) => rest);
+      res.json(safe);
+    } catch (err) {
+      console.error("Free technicians error:", err);
+      res.status(500).json({ message: "Failed to fetch free technicians" });
+    }
+  });
+
   // === AUTO-ASSIGN (Technician presses "Get Ticket") ===
   app.post(api.tickets.autoAssign.path, async (req, res) => {
     try {
@@ -241,12 +260,27 @@ export async function registerRoutes(
         return res.status(400).json({ message: "You already have an active ticket. Complete it first." });
       }
 
+      const { partnerId } = req.body || {};
+      if (!partnerId) {
+        return res.status(400).json({ message: "Please select a partner before getting a ticket" });
+      }
+
+      const partner = await storage.getUser(partnerId);
+      if (!partner || partner.role !== UserRole.TECHNICIAN) {
+        return res.status(400).json({ message: "Selected partner is not a valid technician" });
+      }
+
+      const partnerActive = await storage.getActiveTicketForUser(partnerId);
+      if (partnerActive) {
+        return res.status(400).json({ message: "Selected partner already has an active ticket" });
+      }
+
       const ticket = await storage.getOldestOpenTicket(user.isBackboneSpecialist);
       if (!ticket) {
         return res.status(404).json({ message: "No open tickets available" });
       }
 
-      await storage.assignTicket(ticket.id, userId, "auto");
+      await storage.assignTicketWithPartner(ticket.id, userId, partnerId, "auto");
       const updated = await storage.updateTicket(ticket.id, { status: TicketStatus.ASSIGNED });
 
       res.json(updated);
