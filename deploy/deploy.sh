@@ -209,42 +209,75 @@ setup_docker_network
 #====================================================================
 # 5. POSTGRESQL IN DOCKER
 #====================================================================
+wait_for_pg() {
+    log_info "Waiting for PostgreSQL to be ready..."
+    local retries=0
+    until docker exec "$POSTGRES_CONTAINER" pg_isready -U "$DB_USER" &>/dev/null; do
+        retries=$((retries + 1))
+        if [ "$retries" -ge 30 ]; then
+            log_err "PostgreSQL failed to start within 30 seconds"
+            exit 1
+        fi
+        sleep 1
+    done
+}
+
+test_pg_auth() {
+    docker exec "$POSTGRES_CONTAINER" \
+        psql "postgresql://${DB_USER}:${DB_PASS}@127.0.0.1:5432/${DB_NAME}" \
+        -c "SELECT 1;" &>/dev/null
+    return $?
+}
+
+create_pg_container() {
+    if ! docker volume inspect "$POSTGRES_VOLUME" &>/dev/null; then
+        docker volume create "$POSTGRES_VOLUME"
+    fi
+
+    docker run -d \
+        --name "$POSTGRES_CONTAINER" \
+        --network "$DOCKER_NETWORK" \
+        --restart unless-stopped \
+        -e POSTGRES_DB="$DB_NAME" \
+        -e POSTGRES_USER="$DB_USER" \
+        -e POSTGRES_PASSWORD="$DB_PASS" \
+        -p "127.0.0.1:${DB_PORT}:5432" \
+        -v "${POSTGRES_VOLUME}:/var/lib/postgresql/data" \
+        postgres:16-alpine
+
+    wait_for_pg
+    log_ok "PostgreSQL container created and ready"
+}
+
 setup_postgres() {
     if docker ps --format '{{.Names}}' | grep -qw "$POSTGRES_CONTAINER"; then
-        log_ok "PostgreSQL container '$POSTGRES_CONTAINER' is already running"
+        log_info "PostgreSQL container '$POSTGRES_CONTAINER' is running, testing auth..."
+        wait_for_pg
+        if test_pg_auth; then
+            log_ok "PostgreSQL auth OK"
+        else
+            log_warn "PostgreSQL password mismatch detected — recreating with fresh credentials..."
+            docker stop "$POSTGRES_CONTAINER" 2>/dev/null || true
+            docker rm "$POSTGRES_CONTAINER" 2>/dev/null || true
+            docker volume rm "$POSTGRES_VOLUME" 2>/dev/null || true
+            create_pg_container
+        fi
     elif docker ps -a --format '{{.Names}}' | grep -qw "$POSTGRES_CONTAINER"; then
         log_info "Starting existing PostgreSQL container..."
         docker start "$POSTGRES_CONTAINER"
-        log_ok "PostgreSQL container started"
+        wait_for_pg
+        if test_pg_auth; then
+            log_ok "PostgreSQL auth OK"
+        else
+            log_warn "PostgreSQL password mismatch detected — recreating with fresh credentials..."
+            docker stop "$POSTGRES_CONTAINER" 2>/dev/null || true
+            docker rm "$POSTGRES_CONTAINER" 2>/dev/null || true
+            docker volume rm "$POSTGRES_VOLUME" 2>/dev/null || true
+            create_pg_container
+        fi
     else
         log_info "Creating PostgreSQL container..."
-
-        if ! docker volume inspect "$POSTGRES_VOLUME" &>/dev/null; then
-            docker volume create "$POSTGRES_VOLUME"
-        fi
-
-        docker run -d \
-            --name "$POSTGRES_CONTAINER" \
-            --network "$DOCKER_NETWORK" \
-            --restart unless-stopped \
-            -e POSTGRES_DB="$DB_NAME" \
-            -e POSTGRES_USER="$DB_USER" \
-            -e POSTGRES_PASSWORD="$DB_PASS" \
-            -p "127.0.0.1:${DB_PORT}:5432" \
-            -v "${POSTGRES_VOLUME}:/var/lib/postgresql/data" \
-            postgres:16-alpine
-
-        log_info "Waiting for PostgreSQL to be ready..."
-        local retries=0
-        until docker exec "$POSTGRES_CONTAINER" pg_isready -U "$DB_USER" &>/dev/null; do
-            retries=$((retries + 1))
-            if [ "$retries" -ge 30 ]; then
-                log_err "PostgreSQL failed to start within 30 seconds"
-                exit 1
-            fi
-            sleep 1
-        done
-        log_ok "PostgreSQL container created and ready"
+        create_pg_container
     fi
 }
 
