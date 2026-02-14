@@ -336,16 +336,19 @@ run_app_container
 # 8. NGINX CONFIGURATION
 #====================================================================
 configure_nginx() {
-    local conf_file="/etc/nginx/conf.d/${APP_NAME}.conf"
+    local avail_file="/etc/nginx/sites-available/${APP_NAME}"
+    local enabled_link="/etc/nginx/sites-enabled/${APP_NAME}"
 
-    if [ -f "$conf_file" ]; then
+    mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+
+    if [ -f "$avail_file" ]; then
         log_ok "Nginx config for '${APP_NAME}' already exists"
         log_info "Updating proxy port to ${APP_PORT}..."
-        sed -i "s|proxy_pass http://127.0.0.1:[0-9]*;|proxy_pass http://127.0.0.1:${APP_PORT};|g" "$conf_file"
+        sed -i "s|proxy_pass http://127.0.0.1:[0-9]*;|proxy_pass http://127.0.0.1:${APP_PORT};|g" "$avail_file"
     else
         log_info "Creating Nginx configuration..."
 
-        cat > "$conf_file" <<NGINX_CONF
+        cat > "$avail_file" <<NGINX_CONF
 server {
     listen 80;
     server_name ${DOMAIN};
@@ -395,7 +398,17 @@ server {
 }
 NGINX_CONF
 
-        log_ok "Nginx config created at $conf_file"
+        log_ok "Nginx config created at $avail_file"
+    fi
+
+    if [ ! -L "$enabled_link" ]; then
+        ln -sf "$avail_file" "$enabled_link"
+        log_ok "Symlinked to sites-enabled"
+    fi
+
+    if [ -f /etc/nginx/sites-enabled/default ]; then
+        rm -f /etc/nginx/sites-enabled/default
+        log_info "Removed default nginx site"
     fi
 
     mkdir -p /var/lib/letsencrypt
