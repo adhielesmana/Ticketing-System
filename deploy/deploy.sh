@@ -49,61 +49,106 @@ log_info "Install Dir:   $INSTALL_DIR"
 echo ""
 
 #====================================================================
-# 1. PORT CONFLICT DETECTION
+# 1. COLLECT ALL USED PORTS & AUTO-ASSIGN FREE PORTS
 #====================================================================
-detect_port_conflicts() {
-    log_info "Checking for port conflicts..."
+get_all_used_ports() {
+    local used_ports=""
 
-    local conflict=0
-
-    if ss -tlnp 2>/dev/null | grep -q ":${APP_PORT} " ; then
-        local pid_info=$(ss -tlnp | grep ":${APP_PORT} " | awk '{print $NF}')
-        log_err "Port ${APP_PORT} is already in use by: ${pid_info}"
-        conflict=1
+    local sys_ports=$(ss -tlnp 2>/dev/null | awk 'NR>1 {print $4}' | grep -oP ':\K[0-9]+$' | sort -un)
+    if [ -n "$sys_ports" ]; then
+        used_ports="$sys_ports"
     fi
 
-    if ss -tlnp 2>/dev/null | grep -q ":${DB_PORT} " ; then
-        local pid_info=$(ss -tlnp | grep ":${DB_PORT} " | awk '{print $NF}')
-        log_err "Port ${DB_PORT} is already in use by: ${pid_info}"
-        conflict=1
-    fi
-
-    local docker_ports=""
     if command -v docker &>/dev/null; then
-        docker_ports=$(docker ps --format '{{.Ports}}' 2>/dev/null | tr ',' '\n' | grep -oP '0\.0\.0\.0:\K[0-9]+' | sort -u)
-        if echo "$docker_ports" | grep -qw "$APP_PORT"; then
-            local container=$(docker ps --filter "publish=${APP_PORT}" --format '{{.Names}}' 2>/dev/null)
-            if [ "$container" != "$APP_NAME" ]; then
-                log_err "Port ${APP_PORT} is used by Docker container: ${container}"
-                conflict=1
-            fi
-        fi
-        if echo "$docker_ports" | grep -qw "$DB_PORT"; then
-            local container=$(docker ps --filter "publish=${DB_PORT}" --format '{{.Names}}' 2>/dev/null)
-            if [ "$container" != "$POSTGRES_CONTAINER" ]; then
-                log_err "Port ${DB_PORT} is used by Docker container: ${container}"
-                conflict=1
-            fi
-        fi
-    fi
-
-    if [ "$conflict" -eq 1 ]; then
-        echo ""
-        log_err "Port conflicts detected. Options:"
-        log_err "  1. Stop the conflicting service/container"
-        log_err "  2. Change ports: APP_PORT=3200 DB_PORT=5434 ./deploy.sh"
-        echo ""
+        local docker_ports=$(docker ps --format '{{.Ports}}' 2>/dev/null \
+            | tr ',' '\n' \
+            | grep -oP ':\K[0-9]+(?=->)' \
+            | sort -un)
         if [ -n "$docker_ports" ]; then
-            log_info "Currently used Docker ports:"
-            docker ps --format 'table {{.Names}}\t{{.Ports}}' 2>/dev/null
+            used_ports=$(printf '%s\n%s' "$used_ports" "$docker_ports" | sort -un)
         fi
-        exit 1
     fi
 
-    log_ok "No port conflicts detected"
+    echo "$used_ports"
 }
 
-detect_port_conflicts
+is_port_free() {
+    local port=$1
+    local used_ports="$2"
+    if echo "$used_ports" | grep -qw "$port"; then
+        return 1
+    fi
+    return 0
+}
+
+find_free_port() {
+    local start=$1
+    local used_ports="$2"
+    local port=$start
+    while ! is_port_free "$port" "$used_ports"; do
+        port=$((port + 1))
+        if [ "$port" -gt 65535 ]; then
+            log_err "No free port found starting from $start"
+            exit 1
+        fi
+    done
+    echo "$port"
+}
+
+resolve_ports() {
+    log_info "Scanning all running ports (system + Docker containers)..."
+
+    local used_ports
+    used_ports=$(get_all_used_ports)
+    local port_count=$(echo "$used_ports" | grep -c '[0-9]' 2>/dev/null || echo "0")
+    log_info "Found ${port_count} ports currently in use"
+
+    if command -v docker &>/dev/null; then
+        local running=$(docker ps --format 'table {{.Names}}\t{{.Ports}}' 2>/dev/null | tail -n +2)
+        if [ -n "$running" ]; then
+            log_info "Running Docker containers:"
+            echo "$running" | while read -r line; do
+                echo "         $line"
+            done
+        fi
+    fi
+
+    local own_app_running=0
+    local own_db_running=0
+    if command -v docker &>/dev/null; then
+        if docker ps --format '{{.Names}}' 2>/dev/null | grep -qw "$POSTGRES_CONTAINER"; then
+            own_db_running=1
+        fi
+    fi
+    if systemctl is-active --quiet "$APP_NAME" 2>/dev/null; then
+        own_app_running=1
+    fi
+
+    if ! is_port_free "$APP_PORT" "$used_ports" && [ "$own_app_running" -eq 0 ]; then
+        local old_port=$APP_PORT
+        APP_PORT=$(find_free_port "$APP_PORT" "$used_ports")
+        log_warn "Port ${old_port} is in use -> auto-assigned APP_PORT=${APP_PORT}"
+        used_ports=$(printf '%s\n%s' "$used_ports" "$APP_PORT" | sort -un)
+    elif ! is_port_free "$APP_PORT" "$used_ports" && [ "$own_app_running" -eq 1 ]; then
+        log_ok "Port ${APP_PORT} is used by our own app service (OK)"
+    else
+        log_ok "APP_PORT ${APP_PORT} is free"
+    fi
+
+    if ! is_port_free "$DB_PORT" "$used_ports" && [ "$own_db_running" -eq 0 ]; then
+        local old_port=$DB_PORT
+        DB_PORT=$(find_free_port "$DB_PORT" "$used_ports")
+        log_warn "Port ${old_port} is in use -> auto-assigned DB_PORT=${DB_PORT}"
+    elif ! is_port_free "$DB_PORT" "$used_ports" && [ "$own_db_running" -eq 1 ]; then
+        log_ok "Port ${DB_PORT} is used by our own DB container (OK)"
+    else
+        log_ok "DB_PORT ${DB_PORT} is free"
+    fi
+
+    log_ok "Final ports -> APP: ${APP_PORT}, DB: ${DB_PORT}"
+}
+
+resolve_ports
 
 #====================================================================
 # 2. INSTALL NGINX (if not present)
