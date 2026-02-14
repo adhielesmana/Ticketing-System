@@ -63,27 +63,26 @@ export default function Login() {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4" style={{ background: "linear-gradient(135deg, hsl(221 83% 53% / 0.05) 0%, hsl(199 89% 48% / 0.05) 100%)" }}>
-      <div className="w-full max-w-sm space-y-8">
-        <div className="flex flex-col items-center gap-3 text-center">
-          {logoUrl ? (
-            <img src={logoUrl} alt="Company Logo" className="h-16 max-w-[200px] object-contain" data-testid="img-login-logo" />
-          ) : (
-            <div className="w-14 h-14 rounded-md bg-primary flex items-center justify-center">
-              <Shield className="w-8 h-8 text-primary-foreground" />
-            </div>
-          )}
-          <div>
-            <h1 className="text-2xl font-bold font-display tracking-tight" data-testid="text-login-title">
-              {logoUrl ? "Welcome Back" : "NetGuard ISP"}
-            </h1>
-            <p className="text-muted-foreground text-sm mt-1">
-              Ticketing & Maintenance System
-            </p>
-          </div>
-        </div>
-
+      <div className="w-full max-w-sm">
         <Card>
-          <CardHeader className="pb-4">
+          <div className="flex flex-col items-center gap-3 text-center pt-8 pb-2 px-6">
+            {logoUrl ? (
+              <img src={logoUrl} alt="Company Logo" className="h-16 max-w-[200px] object-contain" data-testid="img-login-logo" />
+            ) : (
+              <div className="w-14 h-14 rounded-md bg-primary flex items-center justify-center">
+                <Shield className="w-8 h-8 text-primary-foreground" />
+              </div>
+            )}
+            <div>
+              <h1 className="text-2xl font-bold font-display tracking-tight" data-testid="text-login-title">
+                {logoUrl ? "Welcome Back" : "NetGuard ISP"}
+              </h1>
+              <p className="text-muted-foreground text-sm mt-1">
+                Ticketing & Maintenance System
+              </p>
+            </div>
+          </div>
+          <CardHeader className="pb-4 pt-4">
             <CardTitle className="text-lg">Sign In</CardTitle>
             <CardDescription>
               Enter your credentials to access the system
