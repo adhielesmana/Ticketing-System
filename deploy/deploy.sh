@@ -30,10 +30,15 @@ APP_PORT="${APP_PORT:-3100}"
 DB_PORT="${DB_PORT:-5433}"
 DB_NAME="${DB_NAME:-netguard_db}"
 DB_USER="${DB_USER:-netguard}"
-DB_PASS="${DB_PASS:-$(openssl rand -hex 16)}"
-SESSION_SECRET="${SESSION_SECRET:-$(openssl rand -hex 32)}"
 SSL_EMAIL="${SSL_EMAIL:-admin@yourdomain.com}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/netguard}"
+
+if [ -f "${INSTALL_DIR}/.credentials" ]; then
+    log_info "Loading existing credentials from ${INSTALL_DIR}/.credentials"
+    eval "$(grep -E '^(DB_PASS|SESSION_SECRET)=' "${INSTALL_DIR}/.credentials")"
+fi
+DB_PASS="${DB_PASS:-$(openssl rand -hex 16)}"
+SESSION_SECRET="${SESSION_SECRET:-$(openssl rand -hex 32)}"
 DOCKER_NETWORK="${DOCKER_NETWORK:-netguard_net}"
 APP_CONTAINER="${APP_CONTAINER:-netguard_app}"
 POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-netguard_postgres}"
@@ -303,6 +308,8 @@ SESSION_SECRET=${SESSION_SECRET}
 NODE_ENV=production
 PORT=3000
 ENVFILE
+    chmod 600 .env
+    log_ok "Environment file created with restricted permissions (600)"
 
     cat > .dockerignore <<DOCKERIGNORE
 node_modules
@@ -557,12 +564,24 @@ echo "    Restart:    docker restart ${APP_CONTAINER}"
 echo "    DB Shell:   docker exec -it ${POSTGRES_CONTAINER} psql -U ${DB_USER} -d ${DB_NAME}"
 echo "    Nginx:      nginx -t && systemctl reload nginx"
 echo ""
-echo "  Database URL (internal to Docker network):"
-echo "    postgresql://${DB_USER}:${DB_PASS}@${POSTGRES_CONTAINER}:5432/${DB_NAME}"
+echo "  Credentials saved to: ${INSTALL_DIR}/.credentials (root-only, chmod 600)"
+echo "  Environment file:     ${INSTALL_DIR}/.env (root-only, chmod 600)"
 echo ""
 echo "  To update the app later, run:"
 echo "    cd ${PROJECT_DIR} && ./deploy/update.sh"
 echo ""
+
+cat > "${INSTALL_DIR}/.credentials" <<CREDS
+# NetGuard ISP - Database & Session Credentials
+# This file is root-only readable (chmod 600)
+# Generated at: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
+DB_NAME=${DB_NAME}
+DB_USER=${DB_USER}
+DB_PASS=${DB_PASS}
+SESSION_SECRET=${SESSION_SECRET}
+DATABASE_URL=postgresql://${DB_USER}:${DB_PASS}@${POSTGRES_CONTAINER}:5432/${DB_NAME}
+CREDS
+chmod 600 "${INSTALL_DIR}/.credentials"
 
 cat > "/etc/netguard-deploy-info" <<INFO2
 INSTALL_DIR=${INSTALL_DIR}
@@ -574,6 +593,7 @@ UPLOADS_VOLUME=${UPLOADS_VOLUME}
 APP_PORT=${APP_PORT}
 DB_PORT=${DB_PORT}
 INFO2
+chmod 600 /etc/netguard-deploy-info
 
 cat > "${INSTALL_DIR}/.deploy-info" <<INFO
 DOMAIN=${DOMAIN}
@@ -589,3 +609,4 @@ UPLOADS_VOLUME=${UPLOADS_VOLUME}
 INSTALL_DIR=${INSTALL_DIR}
 DEPLOYED_AT="$(date -u +'%Y-%m-%d %H:%M:%S UTC')"
 INFO
+chmod 600 "${INSTALL_DIR}/.deploy-info"
