@@ -37,3 +37,11 @@ author = "agent"
 task = "shell.exec"
 args = "npm run dev"
 waitForPort = 5000
+
+[userenv]
+
+[userenv.shared]
+S3_ENDPOINT = "https://is3.cloudhost.id"
+S3_BUCKET = "apjii-mitradc"
+S3_ACCESS_KEY_ID = "3Z6BZV3L26EIDJ99X42M"
+S3_SECRET_ACCESS_KEY = "CwaARdj2EBuhrLiV6UjLBgw9qpkJdSPIdCyTLTYb"
