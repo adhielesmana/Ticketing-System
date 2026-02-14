@@ -19,7 +19,7 @@ export function Navigation() {
   const isTechnician = user.role === UserRole.TECHNICIAN;
 
   return (
-    <header className="bg-white border-b border-border sticky top-0 z-50 shadow-sm">
+    <header className="bg-background border-b border-border sticky top-0 z-50 shadow-sm">
       <div className="container mx-auto px-4 h-16 flex items-center justify-between">
         <div className="flex items-center gap-8">
           <Link href="/" className="flex items-center gap-2">
@@ -78,7 +78,7 @@ export function Navigation() {
             variant="ghost" 
             size="icon" 
             onClick={() => logout()}
-            className="text-muted-foreground hover:text-destructive"
+            className="text-muted-foreground"
           >
             <LogOut className="w-5 h-5" />
           </Button>

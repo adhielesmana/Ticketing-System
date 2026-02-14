@@ -30,6 +30,11 @@ export interface IStorage {
   getAssigneeForTicket(ticketId: number): Promise<User | undefined>;
   getActiveTicketForUser(userId: number): Promise<Ticket | undefined>;
   
+  // Delete/Update
+  deleteTicket(id: number): Promise<void>;
+  updateUser(id: number, updates: Partial<InsertUser>): Promise<User | undefined>;
+  deleteUser(id: number): Promise<void>;
+
   // Performance
   logPerformance(log: InsertPerformanceLog): Promise<PerformanceLog>;
   
@@ -173,6 +178,28 @@ export class DatabaseStorage implements IStorage {
       ));
       
     return result?.ticket;
+  }
+
+  // Delete ticket
+  async deleteTicket(id: number): Promise<void> {
+    await db.delete(ticketAssignments).where(eq(ticketAssignments.ticketId, id));
+    await db.delete(tickets).where(eq(tickets.id, id));
+  }
+
+  // Update user
+  async updateUser(id: number, updates: Partial<InsertUser>): Promise<User | undefined> {
+    const [user] = await db
+      .update(users)
+      .set(updates)
+      .where(eq(users.id, id))
+      .returning();
+    return user;
+  }
+
+  // Delete user
+  async deleteUser(id: number): Promise<void> {
+    await db.delete(ticketAssignments).where(eq(ticketAssignments.userId, id));
+    await db.delete(users).where(eq(users.id, id));
   }
 
   // Performance

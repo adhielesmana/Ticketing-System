@@ -11,6 +11,7 @@ import Login from "@/pages/Login";
 import AdminDashboard from "@/pages/AdminDashboard";
 import TechnicianDashboard from "@/pages/TechnicianDashboard";
 import TicketDetail from "@/pages/TicketDetail";
+import TicketsPage from "@/pages/TicketsPage";
 import UsersPage from "@/pages/UsersPage";
 import NotFound from "@/pages/not-found";
 
@@ -63,8 +64,7 @@ function Router() {
       </Route>
       
       <Route path="/tickets">
-        {/* Reusing AdminDashboard layout but can be separate list view */}
-        {() => <ProtectedRoute component={AdminDashboard} />}
+        {() => <ProtectedRoute component={TicketsPage} />}
       </Route>
 
       <Route path="/users">

@@ -20,7 +20,7 @@ export function useTickets(filters?: TicketFilters) {
       
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch tickets");
-      return api.tickets.list.responses[200].parse(await res.json());
+      return res.json();
     },
   });
 }
@@ -33,7 +33,7 @@ export function useTicket(id: number) {
       const res = await fetch(url, { credentials: "include" });
       if (res.status === 404) return null;
       if (!res.ok) throw new Error("Failed to fetch ticket");
-      return api.tickets.get.responses[200].parse(await res.json());
+      return res.json();
     },
     enabled: !!id,
   });
@@ -52,7 +52,7 @@ export function useCreateTicket() {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to create ticket");
-      return api.tickets.create.responses[201].parse(await res.json());
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.tickets.list.path] });
@@ -78,11 +78,34 @@ export function useUpdateTicket() {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to update ticket");
-      return api.tickets.update.responses[200].parse(await res.json());
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.tickets.list.path] });
       toast({ title: "Success", description: "Ticket updated" });
+    },
+  });
+}
+
+export function useDeleteTicket() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const url = buildUrl(api.tickets.delete.path, { id });
+      const res = await fetch(url, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to delete ticket");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.tickets.list.path] });
+      toast({ title: "Deleted", description: "Ticket deleted successfully" });
+    },
+    onError: (error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     },
   });
 }
@@ -101,7 +124,7 @@ export function useAssignTicket() {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to assign ticket");
-      return api.tickets.assign.responses[200].parse(await res.json());
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.tickets.list.path] });
@@ -122,7 +145,7 @@ export function useStartTicket() {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to start ticket");
-      return api.tickets.start.responses[200].parse(await res.json());
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.tickets.list.path] });
@@ -145,7 +168,7 @@ export function useCloseTicket() {
         credentials: "include",
       });
       if (!res.ok) throw new Error("Failed to close ticket");
-      return api.tickets.close.responses[200].parse(await res.json());
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.tickets.list.path] });
@@ -160,7 +183,7 @@ export function useDashboardStats() {
     queryFn: async () => {
       const res = await fetch(api.dashboard.stats.path, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch stats");
-      return api.dashboard.stats.responses[200].parse(await res.json());
+      return res.json();
     },
   });
 }

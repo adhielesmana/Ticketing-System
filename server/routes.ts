@@ -91,6 +91,29 @@ export async function registerRoutes(
     }
   });
 
+  // Update user
+  app.patch(api.users.update.path, async (req, res) => {
+    try {
+      const input = api.users.update.input.parse(req.body);
+      if (input.password) {
+        input.password = await hash(input.password, 10);
+      }
+      const user = await storage.updateUser(Number(req.params.id), input);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      res.json(user);
+    } catch (err) {
+      res.status(400).json({ message: "Invalid request" });
+    }
+  });
+
+  // Delete user
+  app.delete(api.users.delete.path, async (req, res) => {
+    const user = await storage.getUser(Number(req.params.id));
+    if (!user) return res.status(404).json({ message: "User not found" });
+    await storage.deleteUser(Number(req.params.id));
+    res.status(204).send();
+  });
+
   // === TICKETS ===
   app.get(api.tickets.list.path, async (req, res) => {
     try {
@@ -172,6 +195,14 @@ export async function registerRoutes(
     } catch (err) {
       res.status(400).json({ message: "Invalid request" });
     }
+  });
+
+  // Delete ticket
+  app.delete(api.tickets.delete.path, async (req, res) => {
+    const ticket = await storage.getTicket(Number(req.params.id));
+    if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+    await storage.deleteTicket(Number(req.params.id));
+    res.status(204).send();
   });
 
   app.post(api.tickets.assign.path, async (req, res) => {
