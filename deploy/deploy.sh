@@ -3,12 +3,12 @@ set -e
 
 #====================================================================
 # NetGuard ISP Ticketing System - Debian/Ubuntu Deployment Script
-# Version: 4
+# Version: 5
 # Run as root on Debian/Ubuntu with Docker already installed
 # Both the app and PostgreSQL run inside Docker containers
 #====================================================================
 
-DEPLOY_VERSION="4"
+DEPLOY_VERSION="5"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -23,7 +23,7 @@ log_ok()    { echo -e "${GREEN}[OK]${NC} $1"; }
 log_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_err()   { echo -e "${RED}[ERROR]${NC} $1"; }
 
-TOTAL_STEPS=10
+TOTAL_STEPS=11
 CHECKLIST_RESULTS=()
 
 step_start() {
@@ -552,17 +552,101 @@ ENVFILE
         exit 1
     fi
 
-    log_info "Pushing database schema..."
-    docker exec "$APP_CONTAINER" npx drizzle-kit push --force 2>&1 | tail -5
-    log_ok "Database schema updated"
 }
 
 run_app_container
 step_done 7 "Pre-flight auth check & start app container"
 
-step_start 8 "Nginx configuration"
+step_start 8 "Create database tables & seed data"
 #====================================================================
-# 8. NGINX CONFIGURATION
+# 8. DATABASE SCHEMA & SEED
+#====================================================================
+setup_database_schema() {
+    log_info "Pushing database schema (creating/updating tables)..."
+    docker exec "$APP_CONTAINER" npx drizzle-kit push --force 2>&1 | tail -10
+    log_ok "Schema push complete"
+
+    log_info "Verifying tables were created..."
+    local tables
+    tables=$(docker exec -e PGPASSWORD="$DB_PASS" "$POSTGRES_CONTAINER" \
+        psql -h 127.0.0.1 -U "$DB_USER" -d "$DB_NAME" -tAc \
+        "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename;" 2>/dev/null)
+
+    if [ -z "$tables" ]; then
+        log_err "No tables found in database after schema push!"
+        exit 1
+    fi
+
+    local expected_tables=("users" "tickets" "ticket_assignments" "performance_logs" "settings")
+    local missing=0
+    for tbl in "${expected_tables[@]}"; do
+        if echo "$tables" | grep -qw "$tbl"; then
+            log_ok "  Table: ${tbl}"
+        else
+            log_warn "  Table: ${tbl} — MISSING"
+            missing=$((missing + 1))
+        fi
+    done
+
+    if [ "$missing" -gt 0 ]; then
+        log_warn "${missing} expected table(s) missing — schema may be incomplete"
+    else
+        log_ok "All ${#expected_tables[@]} expected tables verified"
+    fi
+
+    log_info "Waiting for app to seed default data (first boot)..."
+    sleep 5
+
+    local user_count
+    user_count=$(docker exec -e PGPASSWORD="$DB_PASS" "$POSTGRES_CONTAINER" \
+        psql -h 127.0.0.1 -U "$DB_USER" -d "$DB_NAME" -tAc \
+        "SELECT COUNT(*) FROM users;" 2>/dev/null || echo "0")
+
+    if [ "$user_count" -gt 0 ]; then
+        log_ok "Users table has ${user_count} user(s) — seed data present"
+
+        local admin_exists
+        admin_exists=$(docker exec -e PGPASSWORD="$DB_PASS" "$POSTGRES_CONTAINER" \
+            psql -h 127.0.0.1 -U "$DB_USER" -d "$DB_NAME" -tAc \
+            "SELECT username FROM users WHERE role='superadmin' LIMIT 1;" 2>/dev/null || echo "")
+        if [ -n "$admin_exists" ]; then
+            log_ok "  Superadmin account: ${admin_exists}"
+        else
+            log_warn "  No superadmin user found"
+        fi
+    else
+        log_warn "Users table is empty — seed may not have run yet"
+        log_info "  The app seeds on first startup. Check logs: docker logs ${APP_CONTAINER}"
+    fi
+
+    log_info "Checking database user privileges..."
+    local priv_check
+    priv_check=$(docker exec -e PGPASSWORD="$DB_PASS" "$POSTGRES_CONTAINER" \
+        psql -h 127.0.0.1 -U "$DB_USER" -d "$DB_NAME" -tAc \
+        "SELECT has_database_privilege('${DB_USER}', '${DB_NAME}', 'CREATE');" 2>/dev/null || echo "f")
+    if [ "$priv_check" = "t" ]; then
+        log_ok "  User '${DB_USER}' has CREATE privilege on '${DB_NAME}'"
+    else
+        log_warn "  User '${DB_USER}' may lack full privileges on '${DB_NAME}'"
+    fi
+
+    local table_priv
+    table_priv=$(docker exec -e PGPASSWORD="$DB_PASS" "$POSTGRES_CONTAINER" \
+        psql -h 127.0.0.1 -U "$DB_USER" -d "$DB_NAME" -tAc \
+        "SELECT has_table_privilege('${DB_USER}', 'users', 'INSERT');" 2>/dev/null || echo "f")
+    if [ "$table_priv" = "t" ]; then
+        log_ok "  User '${DB_USER}' has INSERT privilege on tables"
+    else
+        log_warn "  User '${DB_USER}' may lack INSERT privilege"
+    fi
+}
+
+setup_database_schema
+step_done 8 "Create database tables & seed data"
+
+step_start 9 "Nginx configuration"
+#====================================================================
+# 9. NGINX CONFIGURATION
 #====================================================================
 configure_nginx() {
     local avail_file="/etc/nginx/sites-available/${APP_NAME}"
@@ -657,11 +741,11 @@ NGINX_CONF
 }
 
 configure_nginx
-step_done 8 "Nginx configuration"
+step_done 9 "Nginx configuration"
 
-step_start 9 "SSL certificate"
+step_start 10 "SSL certificate"
 #====================================================================
-# 9. SSL CERTIFICATE (Let's Encrypt)
+# 10. SSL CERTIFICATE (Let's Encrypt)
 #====================================================================
 setup_ssl() {
     if [ -d "/etc/letsencrypt/live/${DOMAIN}" ]; then
@@ -704,11 +788,11 @@ setup_ssl() {
 }
 
 setup_ssl
-step_done 9 "SSL certificate"
+step_done 10 "SSL certificate"
 
-step_start 10 "Firewall configuration"
+step_start 11 "Firewall configuration"
 #====================================================================
-# 10. FIREWALL
+# 11. FIREWALL
 #====================================================================
 configure_firewall() {
     if command -v ufw &>/dev/null; then
@@ -732,7 +816,7 @@ configure_firewall() {
 }
 
 configure_firewall
-step_done 10 "Firewall configuration"
+step_done 11 "Firewall configuration"
 
 #====================================================================
 # DONE
