@@ -236,16 +236,33 @@ test_pg_auth() {
 
 destroy_pg() {
     log_warn "Removing existing PostgreSQL container and data volume..."
+
     docker stop "$APP_CONTAINER" 2>/dev/null || true
     docker rm -f "$APP_CONTAINER" 2>/dev/null || true
+
     docker stop "$POSTGRES_CONTAINER" 2>/dev/null || true
+    sleep 3
     docker rm -f "$POSTGRES_CONTAINER" 2>/dev/null || true
     sleep 2
-    docker volume rm -f "$POSTGRES_VOLUME" 2>/dev/null || true
+
+    local vol_retries=0
+    while docker volume inspect "$POSTGRES_VOLUME" &>/dev/null; do
+        docker volume rm -f "$POSTGRES_VOLUME" 2>/dev/null || true
+        vol_retries=$((vol_retries + 1))
+        if [ "$vol_retries" -ge 10 ]; then
+            log_err "Cannot remove volume $POSTGRES_VOLUME after 10 attempts"
+            log_err "Check: docker ps -a --filter volume=$POSTGRES_VOLUME"
+            exit 1
+        fi
+        sleep 2
+    done
+    log_ok "Volume $POSTGRES_VOLUME confirmed removed"
+
     rm -f "${INSTALL_DIR}/.credentials" 2>/dev/null || true
     rm -f "${INSTALL_DIR}/.env" 2>/dev/null || true
+
     DB_PASS="$(openssl rand -hex 16)"
-    SESSION_SECRET="${SESSION_SECRET:-$(openssl rand -hex 32)}"
+
     log_ok "Old containers and data removed, new credentials generated"
 }
 
@@ -265,6 +282,19 @@ create_pg_container() {
 
     wait_for_pg
     log_ok "PostgreSQL container created and ready"
+}
+
+save_credentials() {
+    mkdir -p "$INSTALL_DIR"
+    cat > "${INSTALL_DIR}/.credentials" <<CREDS
+DB_NAME=${DB_NAME}
+DB_USER=${DB_USER}
+DB_PASS=${DB_PASS}
+SESSION_SECRET=${SESSION_SECRET}
+DATABASE_URL=postgresql://${DB_USER}:${DB_PASS}@${POSTGRES_CONTAINER}:5432/${DB_NAME}
+CREDS
+    chmod 600 "${INSTALL_DIR}/.credentials"
+    log_ok "Credentials saved to ${INSTALL_DIR}/.credentials (chmod 600)"
 }
 
 setup_postgres() {
@@ -297,21 +327,35 @@ setup_postgres() {
 
     if [ "$need_create" -eq 1 ]; then
         if docker volume inspect "$POSTGRES_VOLUME" &>/dev/null; then
-            log_warn "Stale volume found, removing..."
+            log_warn "Stale volume found, force-removing..."
+            local stale_containers
+            stale_containers=$(docker ps -a --filter "volume=$POSTGRES_VOLUME" --format '{{.Names}}' 2>/dev/null || true)
+            if [ -n "$stale_containers" ]; then
+                log_warn "Removing containers holding the volume: $stale_containers"
+                echo "$stale_containers" | xargs -r docker rm -f 2>/dev/null || true
+                sleep 2
+            fi
             docker volume rm -f "$POSTGRES_VOLUME" 2>/dev/null || true
+            if docker volume inspect "$POSTGRES_VOLUME" &>/dev/null; then
+                log_err "Cannot remove stale volume $POSTGRES_VOLUME"
+                exit 1
+            fi
         fi
+
         log_info "Creating fresh PostgreSQL container..."
         create_pg_container
 
         wait_for_pg
         if ! test_pg_auth; then
-            log_err "PostgreSQL auth still failing after fresh create. Check credentials."
+            log_err "PostgreSQL auth still failing after fresh create."
             log_err "DB_USER=$DB_USER DB_NAME=$DB_NAME"
             docker logs "$POSTGRES_CONTAINER" --tail 10
             exit 1
         fi
         log_ok "Fresh PostgreSQL verified — auth and database OK"
     fi
+
+    save_credentials
 }
 
 setup_postgres
@@ -360,7 +404,16 @@ run_app_container() {
         docker rm "$APP_CONTAINER" 2>/dev/null || true
     fi
 
-    log_info "Writing environment file with current credentials..."
+    log_info "Final pre-flight: verifying PostgreSQL credentials before starting app..."
+    if ! test_pg_auth; then
+        log_err "FATAL: DB credentials do not match the running PostgreSQL."
+        log_err "DB_USER=$DB_USER DB_NAME=$DB_NAME"
+        log_err "This should not happen. The deploy script has a bug."
+        exit 1
+    fi
+    log_ok "Pre-flight auth check passed"
+
+    log_info "Writing environment file with verified credentials..."
     cat > "${INSTALL_DIR}/.env" <<ENVFILE
 DATABASE_URL=postgresql://${DB_USER}:${DB_PASS}@${POSTGRES_CONTAINER}:5432/${DB_NAME}
 SESSION_SECRET=${SESSION_SECRET}
@@ -599,18 +652,6 @@ echo ""
 echo "  To update the app later, run:"
 echo "    cd ${PROJECT_DIR} && ./deploy/update.sh"
 echo ""
-
-cat > "${INSTALL_DIR}/.credentials" <<CREDS
-# NetGuard ISP - Database & Session Credentials
-# This file is root-only readable (chmod 600)
-# Generated at: $(date -u +'%Y-%m-%d %H:%M:%S UTC')
-DB_NAME=${DB_NAME}
-DB_USER=${DB_USER}
-DB_PASS=${DB_PASS}
-SESSION_SECRET=${SESSION_SECRET}
-DATABASE_URL=postgresql://${DB_USER}:${DB_PASS}@${POSTGRES_CONTAINER}:5432/${DB_NAME}
-CREDS
-chmod 600 "${INSTALL_DIR}/.credentials"
 
 cat > "/etc/netguard-deploy-info" <<INFO2
 INSTALL_DIR=${INSTALL_DIR}

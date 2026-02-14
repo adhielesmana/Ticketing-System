@@ -1,0 +1,33 @@
+ [1] LOG:  starting PostgreSQL 16.12 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
+2026-02-14 23:08:38.722 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+2026-02-14 23:08:38.723 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+2026-02-14 23:08:38.725 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-02-14 23:08:38.732 UTC [35] LOG:  database system was shut down at 2026-02-14 23:08:06 UTC
+2026-02-14 23:08:38.741 UTC [1] LOG:  database system is ready to accept connections
+2026-02-14 23:08:39.833 UTC [45] FATAL:  database "netguard" does not exist
+2026-02-14 23:09:03.426 UTC [54] FATAL:  password authentication failed for user "netguard"
+2026-02-14 23:09:03.426 UTC [54] DETAIL:  Connection matched file "/var/lib/postgresql/data/pg_hba.conf" line 128: "host all all all scram-sha-256"
+2026-02-14 23:09:04.765 UTC [55] FATAL:  password authentication failed for user "netguard"
+2026-02-14 23:09:04.765 UTC [55] DETAIL:  Connection matched file "/var/lib/postgresql/data/pg_hba.conf" line 128: "host all all all scram-sha-256"
+2026-02-14 23:09:06.178 UTC [56] FATAL:  password authentication failed for user "netguard"
+2026-02-14 23:09:06.178 UTC [56] DETAIL:  Connection matched file "/var/lib/postgresql/data/pg_hba.conf" line 128: "host all all all scram-sha-256"
+2026-02-14 23:09:07.646 UTC [57] FATAL:  password authentication failed for user "netguard"
+2026-02-14 23:09:07.646 UTC [57] DETAIL:  Connection matched file "/var/lib/postgresql/data/pg_hba.conf" line 128: "host all all all scram-sha-256"
+2026-02-14 23:09:09.442 UTC [58] FATAL:  password authentication failed for user "netguard"
+2026-02-14 23:09:09.442 UTC [58] DETAIL:  Connection matched file "/var/lib/postgresql/data/pg_hba.conf" line 128: "host all all all scram-sha-256"
+2026-02-14 23:09:12.094 UTC [59] FATAL:  password authentication failed for user "netguard"
+2026-02-14 23:09:12.094 UTC [59] DETAIL:  Connection matched file "/var/lib/postgresql/data/pg_hba.conf" line 128: "host all all all scram-sha-256"
+2026-02-14 23:09:16.263 UTC [60] FATAL:  password authentication failed for user "netguard"
+2026-02-14 23:09:16.263 UTC [60] DETAIL:  Connection matched file "/var/lib/postgresql/data/pg_hba.conf" line 128: "host all all all scram-sha-256"
+2026-02-14 23:09:23.664 UTC [62] FATAL:  password authentication failed for user "netguard"
+2026-02-14 23:09:23.664 UTC [62] DETAIL:  Connection matched file "/var/lib/postgresql/data/pg_hba.conf" line 128: "host all all all scram-sha-256"
+2026-02-14 23:09:37.416 UTC [63] FATAL:  password authentication failed for user "netguard"
+2026-02-14 23:09:37.416 UTC [63] DETAIL:  Connection matched file "/var/lib/postgresql/data/pg_hba.conf" line 128: "host all all all scram-sha-256"
+2026-02-14 23:10:04.272 UTC [66] FATAL:  password authentication failed for user "netguard"
+2026-02-14 23:10:04.272 UTC [66] DETAIL:  Connection matched file "/var/lib/postgresql/data/pg_hba.conf" line 128: "host all all all scram-sha-256"
+2026-02-14 23:10:56.419 UTC [69] FATAL:  password authentication failed for user "netguard"
+2026-02-14 23:10:56.419 UTC [69] DETAIL:  Connection matched file "/var/lib/postgresql/data/pg_hba.conf" line 128: "host all all all scram-sha-256"
+2026-02-14 23:11:57.328 UTC [73] FATAL:  password authentication failed for user "netguard"
+2026-02-14 23:11:57.328 UTC [73] DETAIL:  Connection matched file "/var/lib/postgresql/data/pg_hba.conf" line 128: "host all all all scram-sha-256"
+2026-02-14 23:12:58.237 UTC [77] FATAL:  password authentication failed for user "netguard"
+2026-02-14 23:12:58.237 UTC [77] DETAIL:  Connection matched file "/var/lib/postgresql/data/pg_hba.conf" line 128: "host all all all scram-sha-256"
