@@ -1,18 +1,160 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+// === ENUMS ===
+export const UserRole = {
+  SUPERADMIN: "superadmin",
+  ADMIN: "admin",
+  HELPDESK: "helpdesk",
+  TECHNICIAN: "technician",
+} as const;
+
+export const TicketType = {
+  HOME_MAINTENANCE: "home_maintenance",
+  BACKBONE_MAINTENANCE: "backbone_maintenance",
+  INSTALLATION: "installation",
+} as const;
+
+export const TicketPriority = {
+  LOW: "low",
+  MEDIUM: "medium",
+  HIGH: "high",
+  CRITICAL: "critical",
+} as const;
+
+export const TicketStatus = {
+  OPEN: "open",
+  WAITING_ASSIGNMENT: "waiting_assignment",
+  ASSIGNED: "assigned",
+  IN_PROGRESS: "in_progress",
+  CLOSED: "closed",
+  OVERDUE: "overdue",
+} as const;
+
+export const PerformStatus = {
+  PERFORM: "perform",
+  NOT_PERFORM: "not_perform",
+} as const;
+
+// === TABLES ===
+
 export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  email: text("email").notNull().unique(),
+  username: text("username").notNull().unique(), // Added for auth
+  password: text("password").notNull(), // Added for auth
+  phone: text("phone"),
+  role: text("role").notNull().default(UserRole.TECHNICIAN), // stored as string, validated by app
+  isBackboneSpecialist: boolean("is_backbone_specialist").default(false).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+export const tickets = pgTable("tickets", {
+  id: serial("id").primaryKey(),
+  ticketNumber: text("ticket_number").notNull().unique(),
+  type: text("type").notNull(), // TicketType
+  priority: text("priority").notNull(), // TicketPriority
+  status: text("status").notNull().default(TicketStatus.OPEN), // TicketStatus
+  
+  customerName: text("customer_name").notNull(),
+  customerPhone: text("customer_phone").notNull(),
+  customerEmail: text("customer_email"),
+  customerLocationUrl: text("customer_location_url").notNull(),
+  
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  actionDescription: text("action_description"),
+  proofImageUrl: text("proof_image_url"),
+  speedtestResult: text("speedtest_result"),
+  
+  slaDeadline: timestamp("sla_deadline").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  closedAt: timestamp("closed_at"),
+  durationMinutes: integer("duration_minutes"),
+  closedReason: text("closed_reason"),
+  closedNote: text("closed_note"),
+  performStatus: text("perform_status"), // PerformStatus
 });
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
+export const ticketAssignments = pgTable("ticket_assignments", {
+  id: serial("id").primaryKey(),
+  ticketId: integer("ticket_id").notNull(),
+  userId: integer("user_id").notNull(),
+  assignedAt: timestamp("assigned_at").defaultNow().notNull(),
+  active: boolean("active").default(true).notNull(), // To track current assignment vs history
+});
+
+export const performanceLogs = pgTable("performance_logs", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull(),
+  ticketId: integer("ticket_id").notNull(),
+  result: text("result").notNull(), // PerformStatus
+  completedWithinSLA: boolean("completed_within_sla").notNull(),
+  durationMinutes: integer("duration_minutes").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// === SCHEMAS ===
+
+export const insertUserSchema = createInsertSchema(users).omit({ 
+  id: true, 
+  createdAt: true 
+});
+
+export const insertTicketSchema = createInsertSchema(tickets).omit({ 
+  id: true, 
+  createdAt: true,
+  closedAt: true,
+  durationMinutes: true,
+  performStatus: true
+});
+
+export const insertAssignmentSchema = createInsertSchema(ticketAssignments).omit({
+  id: true,
+  assignedAt: true,
+  active: true
+});
+
+export const insertPerformanceLogSchema = createInsertSchema(performanceLogs).omit({
+  id: true,
+  createdAt: true
+});
+
+// === TYPES ===
+
 export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+
+export type Ticket = typeof tickets.$inferSelect;
+export type InsertTicket = z.infer<typeof insertTicketSchema>;
+
+export type TicketAssignment = typeof ticketAssignments.$inferSelect;
+export type InsertAssignment = z.infer<typeof insertAssignmentSchema>;
+
+export type PerformanceLog = typeof performanceLogs.$inferSelect;
+export type InsertPerformanceLog = z.infer<typeof insertPerformanceLogSchema>;
+
+// === API CONTRACT TYPES ===
+
+export const TicketStatusValues = Object.values(TicketStatus);
+export const TicketPriorityValues = Object.values(TicketPriority);
+export const TicketTypeValues = Object.values(TicketType);
+export const UserRoleValues = Object.values(UserRole);
+
+export interface LoginResponse {
+  user: User;
+}
+
+export interface TicketWithAssignment extends Ticket {
+  assignee?: User;
+}
+
+export interface DashboardStats {
+  totalOpen: number;
+  totalAssigned: number;
+  totalClosed: number;
+  slaBreachCount: number;
+}
