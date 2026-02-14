@@ -299,50 +299,26 @@ async function seedDatabase() {
 
   console.log("Seeding database...");
 
-  const passwordHash = await hash("password123", 10);
+  const passwordHash = await hash("Admin!123#", 10);
 
   // Superadmin
   await storage.createUser({
-    name: "Super Admin",
-    email: "super@isp.com",
-    username: "superadmin",
-    password: passwordHash,
+    name: "Adhie Lesmana",
+    email: "adhielesmana@isp.com",
+    username: "adhielesmana",
+    password: passwordHash, // Admin!123# hashed
     role: UserRole.SUPERADMIN,
     phone: "1234567890",
     isBackboneSpecialist: false,
     isActive: true,
   });
 
-  // Admin
-  await storage.createUser({
-    name: "Admin User",
-    email: "admin@isp.com",
-    username: "admin",
-    password: passwordHash,
-    role: UserRole.ADMIN,
-    phone: "0987654321",
-    isBackboneSpecialist: false,
-    isActive: true,
-  });
-
-  // Helpdesk
-  await storage.createUser({
-    name: "Helpdesk Staff",
-    email: "helpdesk@isp.com",
-    username: "helpdesk",
-    password: passwordHash,
-    role: UserRole.HELPDESK,
-    phone: "1112223333",
-    isBackboneSpecialist: false,
-    isActive: true,
-  });
-
-  // Technician
+  // Also create a test tech if needed or just use the tech1 below
   const tech1 = await storage.createUser({
     name: "John Tech",
     email: "tech1@isp.com",
     username: "tech1",
-    password: passwordHash,
+    password: passwordHash, // Admin!123# hashed
     role: UserRole.TECHNICIAN,
     phone: "5556667777",
     isBackboneSpecialist: false,
