@@ -26,6 +26,9 @@ import {
   AlertOctagon,
   CheckCircle2,
   ExternalLink,
+  Zap,
+  UserCheck,
+  ImageIcon,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useState } from "react";
@@ -60,6 +63,7 @@ export default function TicketDetail() {
   const { mutate: closeTicket } = useCloseTicket();
 
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [closeData, setCloseData] = useState({
     actionDescription: "",
     speedtestResult: "",
@@ -106,6 +110,7 @@ export default function TicketDetail() {
 
   const isAssignedToMe = ticket.assignee?.id === user?.id;
   const canManage = user?.role === 'admin' || user?.role === 'superadmin' || user?.role === 'helpdesk';
+  const descImages: string[] = ticket.descriptionImages || [];
 
   return (
     <div className="container mx-auto p-4 lg:p-6 max-w-4xl space-y-5">
@@ -148,8 +153,33 @@ export default function TicketDetail() {
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Description</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
               <p className="text-sm whitespace-pre-wrap leading-relaxed text-muted-foreground">{ticket.description}</p>
+              
+              {descImages.length > 0 && (
+                <div className="space-y-2 pt-2">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    <ImageIcon className="w-3 h-3" />
+                    Attachments ({descImages.length})
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {descImages.map((url, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setImagePreview(url)}
+                        className="rounded-md overflow-visible border border-border hover-elevate"
+                        data-testid={`button-preview-image-${i}`}
+                      >
+                        <img
+                          src={url}
+                          alt={`Attachment ${i + 1}`}
+                          className="w-full h-24 object-cover rounded-md"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -321,18 +351,29 @@ export default function TicketDetail() {
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Assignment</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
               {ticket.assignee ? (
-                <div className="flex items-center gap-2.5">
-                  <Avatar className="h-8 w-8">
-                    <AvatarFallback className="text-xs bg-primary/10 text-primary font-semibold">
-                      {ticket.assignee.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="text-sm font-medium">{ticket.assignee.name}</p>
-                    <p className="text-xs text-muted-foreground capitalize">{ticket.assignee.role}</p>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2.5">
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback className="text-xs bg-primary/10 text-primary font-semibold">
+                        {ticket.assignee.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="text-sm font-medium">{ticket.assignee.name}</p>
+                      <p className="text-xs text-muted-foreground capitalize">{ticket.assignee.role}</p>
+                    </div>
                   </div>
+                  {ticket.assignmentType && (
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      {ticket.assignmentType === 'auto' ? (
+                        <><Zap className="w-3 h-3 text-amber-500" /> Auto-assigned</>
+                      ) : (
+                        <><UserCheck className="w-3 h-3 text-blue-500" /> Manually assigned</>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 p-2.5 rounded-md">
@@ -360,10 +401,24 @@ export default function TicketDetail() {
                 <span className="text-muted-foreground">SLA Deadline</span>
                 <span>{format(new Date(ticket.slaDeadline), 'MMM d, HH:mm')}</span>
               </div>
+              {ticket.assignedAt && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Assigned At</span>
+                  <span>{format(new Date(ticket.assignedAt), 'MMM d, HH:mm')}</span>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
       </div>
+
+      {imagePreview && (
+        <Dialog open={!!imagePreview} onOpenChange={() => setImagePreview(null)}>
+          <DialogContent className="max-w-2xl p-2">
+            <img src={imagePreview} alt="Preview" className="w-full rounded-md" />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

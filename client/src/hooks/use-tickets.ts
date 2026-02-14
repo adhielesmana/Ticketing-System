@@ -133,6 +133,33 @@ export function useAssignTicket() {
   });
 }
 
+export function useAutoAssignTicket() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch(api.tickets.autoAssign.path, {
+        method: api.tickets.autoAssign.method,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Failed to auto-assign");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.tickets.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.performance.me.path] });
+      toast({ title: "Ticket Assigned", description: "A new ticket has been assigned to you" });
+    },
+    onError: (error) => {
+      toast({ title: "No Tickets", description: error.message, variant: "destructive" });
+    },
+  });
+}
+
 export function useStartTicket() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -172,6 +199,7 @@ export function useCloseTicket() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.tickets.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.performance.me.path] });
       toast({ title: "Closed", description: "Ticket closed successfully" });
     },
   });
@@ -184,6 +212,81 @@ export function useDashboardStats() {
       const res = await fetch(api.dashboard.stats.path, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch stats");
       return res.json();
+    },
+  });
+}
+
+export function useTechnicianPerformance() {
+  return useQuery({
+    queryKey: [api.performance.me.path],
+    queryFn: async () => {
+      const res = await fetch(api.performance.me.path, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch performance");
+      return res.json();
+    },
+  });
+}
+
+export function useUploadImages() {
+  return useMutation({
+    mutationFn: async (files: File[]) => {
+      const formData = new FormData();
+      files.forEach(f => formData.append("files", f));
+      const res = await fetch("/api/upload/multiple", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Upload failed");
+      return res.json() as Promise<{ urls: string[] }>;
+    },
+  });
+}
+
+export function useUploadFile() {
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Upload failed");
+      return res.json() as Promise<{ url: string }>;
+    },
+  });
+}
+
+export function useSetting(key: string) {
+  return useQuery({
+    queryKey: [api.settings.get.path, key],
+    queryFn: async () => {
+      const url = buildUrl(api.settings.get.path, { key });
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch setting");
+      return res.json();
+    },
+  });
+}
+
+export function useUpdateSetting() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ key, value }: { key: string; value: string | null }) => {
+      const res = await fetch(api.settings.set.path, {
+        method: api.settings.set.method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, value }),
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to update setting");
+      return res.json();
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: [api.settings.get.path, variables.key] });
     },
   });
 }

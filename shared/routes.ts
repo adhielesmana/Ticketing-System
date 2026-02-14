@@ -7,6 +7,7 @@ import {
   tickets,
   ticketAssignments,
   performanceLogs,
+  settings,
   UserRoleValues,
   TicketStatusValues,
   TicketPriorityValues,
@@ -29,7 +30,6 @@ export const errorSchemas = {
   }),
 };
 
-// Filter schemas
 export const ticketFilterSchema = z.object({
   status: z.enum(TicketStatusValues as [string, ...string[]]).optional(),
   type: z.enum(TicketTypeValues as [string, ...string[]]).optional(),
@@ -160,10 +160,19 @@ export const api = {
     assign: {
       method: 'POST' as const,
       path: '/api/tickets/:id/assign' as const,
-      input: z.object({ userId: z.number().optional() }), // Optional for auto-assign
+      input: z.object({ userId: z.number().optional() }),
       responses: {
         200: z.custom<typeof tickets.$inferSelect>(),
         400: errorSchemas.validation,
+      },
+    },
+    autoAssign: {
+      method: 'POST' as const,
+      path: '/api/tickets/auto-assign' as const,
+      responses: {
+        200: z.custom<typeof tickets.$inferSelect>(),
+        400: errorSchemas.validation,
+        404: errorSchemas.notFound,
       },
     },
     start: {
@@ -199,6 +208,47 @@ export const api = {
           slaBreachCount: z.number(),
           myActiveTickets: z.number().optional(),
         }),
+      },
+    },
+  },
+  performance: {
+    me: {
+      method: 'GET' as const,
+      path: '/api/performance/me' as const,
+      responses: {
+        200: z.object({
+          totalCompleted: z.number(),
+          slaComplianceRate: z.number(),
+          avgResolutionMinutes: z.number(),
+          totalOverdue: z.number(),
+        }),
+      },
+    },
+  },
+  settings: {
+    get: {
+      method: 'GET' as const,
+      path: '/api/settings/:key' as const,
+      responses: {
+        200: z.object({ key: z.string(), value: z.string().nullable() }),
+      },
+    },
+    list: {
+      method: 'GET' as const,
+      path: '/api/settings' as const,
+      responses: {
+        200: z.array(z.object({ key: z.string(), value: z.string().nullable() })),
+      },
+    },
+    set: {
+      method: 'PUT' as const,
+      path: '/api/settings' as const,
+      input: z.object({
+        key: z.string(),
+        value: z.string().nullable(),
+      }),
+      responses: {
+        200: z.object({ key: z.string(), value: z.string().nullable() }),
       },
     },
   },

@@ -7,24 +7,43 @@ import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import multer from "multer";
 import { TicketStatus, UserRole, TicketPriority, TicketType } from "@shared/schema";
 import { hash, compare } from "bcryptjs";
+import path from "path";
+import fs from "fs";
 
-// S3 Configuration
 const s3Client = new S3Client({
-  region: "us-east-1", // Default region, can be overriden by endpoint
+  region: "us-east-1",
   endpoint: process.env.S3_ENDPOINT,
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY_ID || "",
     secretAccessKey: process.env.S3_SECRET_ACCESS_KEY || "",
   },
-  forcePathStyle: true, // Needed for some S3 compatible providers
+  forcePathStyle: true,
 });
 
-const upload = multer({ storage: multer.memoryStorage() });
+const uploadsDir = path.resolve(process.cwd(), "uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only image files are allowed'));
+    }
+  }
+});
 
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+
+  app.use('/uploads', (await import('express')).default.static(uploadsDir));
 
   // === AUTH ===
   app.post(api.auth.login.path, async (req, res) => {
@@ -36,9 +55,6 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Invalid username or password" });
       }
 
-      // In a real app, we would use sessions or JWT. 
-      // For this MVP, we'll return the user object and frontend can store it.
-      // Ideally use express-session with the existing setup.
       (req as any).session.userId = user.id;
       res.json(user);
     } catch (err) {
@@ -91,7 +107,6 @@ export async function registerRoutes(
     }
   });
 
-  // Update user
   app.patch(api.users.update.path, async (req, res) => {
     try {
       const input = api.users.update.input.parse(req.body);
@@ -106,7 +121,6 @@ export async function registerRoutes(
     }
   });
 
-  // Delete user
   app.delete(api.users.delete.path, async (req, res) => {
     const user = await storage.getUser(Number(req.params.id));
     if (!user) return res.status(404).json({ message: "User not found" });
@@ -117,26 +131,16 @@ export async function registerRoutes(
   // === TICKETS ===
   app.get(api.tickets.list.path, async (req, res) => {
     try {
-      // Parse query params using the schema to ensure types
-      // Express query params are strings, so we might need manual coercion if not using z.coerce in schema
-      // But for simple enums and strings it's fine.
       const userId = (req as any).session.userId;
       const user = userId ? await storage.getUser(userId) : undefined;
 
-      let filters = req.query;
-
-      // Technicians only see their own tickets unless they are filtering specifically?
-      // The spec says "View assigned ticket only" for Technician.
       if (user?.role === UserRole.TECHNICIAN) {
          const myTickets = await storage.getTicketsByAssignee(user.id);
-         // Apply other filters in memory or improve storage method
-         // For MVP, just return assigned tickets
          return res.json(myTickets.map(t => ({ ...t, assignee: user })));
       }
 
-      const tickets = await storage.getAllTickets(filters);
+      const tickets = await storage.getAllTickets(req.query);
       
-      // Enrich with assignee
       const ticketsWithAssignee = await Promise.all(tickets.map(async (ticket) => {
         const assignee = await storage.getAssigneeForTicket(ticket.id);
         return { ...ticket, assignee };
@@ -153,27 +157,28 @@ export async function registerRoutes(
     if (!ticket) return res.status(404).json({ message: "Ticket not found" });
     
     const assignee = await storage.getAssigneeForTicket(ticket.id);
-    res.json({ ...ticket, assignee });
+    const assignment = await storage.getTicketAssignment(ticket.id);
+    res.json({ ...ticket, assignee, assignmentType: assignment?.assignmentType, assignedAt: assignment?.assignedAt });
   });
 
   app.post(api.tickets.create.path, async (req, res) => {
     try {
-      const input = api.tickets.create.input.parse(req.body);
+      const input = req.body;
       
-      // Calculate SLA Deadline
       const now = new Date();
       let slaHours = 24;
       if (input.type === TicketType.INSTALLATION) slaHours = 72;
       const slaDeadline = new Date(now.getTime() + slaHours * 60 * 60 * 1000);
 
+      const ticketNumber = `INC-${Date.now().toString().slice(-6)}`;
+
       const ticket = await storage.createTicket({
         ...input,
+        ticketNumber,
         slaDeadline,
         status: TicketStatus.OPEN,
+        customerLocationUrl: input.customerLocationUrl || "",
       });
-
-      // Auto-assign logic could go here
-      // For now, we leave it open as per spec "Manual assignment" is also a thing
 
       res.status(201).json(ticket);
     } catch (err) {
@@ -183,6 +188,7 @@ export async function registerRoutes(
           field: err.errors[0].path.join('.'),
         });
       }
+      console.error("Create ticket error:", err);
       res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -197,7 +203,6 @@ export async function registerRoutes(
     }
   });
 
-  // Delete ticket
   app.delete(api.tickets.delete.path, async (req, res) => {
     const ticket = await storage.getTicket(Number(req.params.id));
     if (!ticket) return res.status(404).json({ message: "Ticket not found" });
@@ -207,18 +212,48 @@ export async function registerRoutes(
 
   app.post(api.tickets.assign.path, async (req, res) => {
     const ticketId = Number(req.params.id);
-    const { userId } = req.body; // If undefined, try auto-assign?
+    const { userId } = req.body;
 
     if (userId) {
-      await storage.assignTicket(ticketId, userId);
+      await storage.assignTicket(ticketId, userId, "manual");
       await storage.updateTicket(ticketId, { status: TicketStatus.ASSIGNED });
     } else {
-       // Implement auto-assign logic here if needed, or return error
        return res.status(400).json({ message: "User ID required for manual assignment" });
     }
     
     const ticket = await storage.getTicket(ticketId);
     res.json(ticket);
+  });
+
+  // === AUTO-ASSIGN (Technician presses "Get Ticket") ===
+  app.post(api.tickets.autoAssign.path, async (req, res) => {
+    try {
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+
+      const user = await storage.getUser(userId);
+      if (!user || user.role !== UserRole.TECHNICIAN) {
+        return res.status(403).json({ message: "Only technicians can use auto-assign" });
+      }
+
+      const activeTicket = await storage.getActiveTicketForUser(userId);
+      if (activeTicket) {
+        return res.status(400).json({ message: "You already have an active ticket. Complete it first." });
+      }
+
+      const ticket = await storage.getOldestOpenTicket(user.isBackboneSpecialist);
+      if (!ticket) {
+        return res.status(404).json({ message: "No open tickets available" });
+      }
+
+      await storage.assignTicket(ticket.id, userId, "auto");
+      const updated = await storage.updateTicket(ticket.id, { status: TicketStatus.ASSIGNED });
+
+      res.json(updated);
+    } catch (err) {
+      console.error("Auto-assign error:", err);
+      res.status(500).json({ message: "Failed to auto-assign ticket" });
+    }
   });
 
   app.post(api.tickets.start.path, async (req, res) => {
@@ -233,7 +268,6 @@ export async function registerRoutes(
 
     if (!existingTicket) return res.status(404).json({ message: "Ticket not found" });
 
-    // Calculate duration
     const now = new Date();
     const durationMinutes = Math.floor((now.getTime() - existingTicket.createdAt.getTime()) / 60000);
 
@@ -245,7 +279,6 @@ export async function registerRoutes(
       ...input
     });
 
-    // Log performance
     const assignee = await storage.getAssigneeForTicket(ticketId);
     if (assignee) {
       await storage.logPerformance({
@@ -266,32 +299,78 @@ export async function registerRoutes(
     res.json(stats);
   });
 
+  // === TECHNICIAN PERFORMANCE ===
+  app.get(api.performance.me.path, async (req, res) => {
+    const userId = (req as any).session.userId;
+    if (!userId) return res.status(401).json({ message: "Not authenticated" });
 
-  // === FILE UPLOAD (S3) ===
+    const performance = await storage.getTechnicianPerformance(userId);
+    res.json(performance);
+  });
+
+  // === SETTINGS ===
+  app.get(api.settings.get.path, async (req, res) => {
+    const key = req.params.key;
+    const setting = await storage.getSetting(key);
+    res.json(setting || { key, value: null });
+  });
+
+  app.get(api.settings.list.path, async (req, res) => {
+    const allSettings = await storage.getAllSettings();
+    res.json(allSettings);
+  });
+
+  app.put(api.settings.set.path, async (req, res) => {
+    const userId = (req as any).session.userId;
+    if (!userId) return res.status(401).json({ message: "Not authenticated" });
+
+    const user = await storage.getUser(userId);
+    if (!user || (user.role !== UserRole.SUPERADMIN && user.role !== UserRole.ADMIN)) {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+
+    const { key, value } = req.body;
+    const setting = await storage.setSetting(key, value);
+    res.json(setting);
+  });
+
+  // === FILE UPLOAD (Local) ===
   app.post("/api/upload", upload.single("file"), async (req, res) => {
     if (!req.file) return res.status(400).json({ message: "No file uploaded" });
 
     try {
-      const fileKey = `uploads/${Date.now()}-${req.file.originalname}`;
-      const bucketName = process.env.S3_BUCKET;
+      const ext = path.extname(req.file.originalname);
+      const filename = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}${ext}`;
+      const filepath = path.join(uploadsDir, filename);
       
-      await s3Client.send(new PutObjectCommand({
-        Bucket: bucketName,
-        Key: fileKey,
-        Body: req.file.buffer,
-        ContentType: req.file.mimetype,
-        // ACL: 'public-read' // Depending on bucket settings
-      }));
-
-      // Construct public URL
-      // If using generic S3, might be endpoint/bucket/key or bucket.endpoint/key
-      // Simplest assumption: endpoint + / + bucket + / + key if endpoint doesn't include bucket
-      // Adjust based on provider. Assuming path-style for compatibility.
-      const url = `${process.env.S3_ENDPOINT}/${bucketName}/${fileKey}`;
+      fs.writeFileSync(filepath, req.file.buffer);
       
+      const url = `/uploads/${filename}`;
       res.json({ url });
     } catch (err) {
-      console.error("S3 Upload Error:", err);
+      console.error("Upload Error:", err);
+      res.status(500).json({ message: "Upload failed" });
+    }
+  });
+
+  app.post("/api/upload/multiple", upload.array("files", 10), async (req, res) => {
+    const files = req.files as Express.Multer.File[];
+    if (!files || files.length === 0) return res.status(400).json({ message: "No files uploaded" });
+
+    try {
+      const urls: string[] = [];
+      for (const file of files) {
+        const ext = path.extname(file.originalname);
+        const filename = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}${ext}`;
+        const filepath = path.join(uploadsDir, filename);
+        
+        fs.writeFileSync(filepath, file.buffer);
+        urls.push(`/uploads/${filename}`);
+      }
+      
+      res.json({ urls });
+    } catch (err) {
+      console.error("Upload Error:", err);
       res.status(500).json({ message: "Upload failed" });
     }
   });
@@ -299,10 +378,7 @@ export async function registerRoutes(
   // === SLA CHECKER (Background Job) ===
   setInterval(async () => {
     try {
-      const openTickets = await storage.getAllTickets({ 
-        // We'd need a way to query "not closed" efficiently
-        // For MVP, get all and filter in memory or add 'active' filter to storage
-      });
+      const openTickets = await storage.getAllTickets({});
 
       const now = new Date();
       for (const ticket of openTickets) {
@@ -316,7 +392,7 @@ export async function registerRoutes(
     } catch (err) {
       console.error("SLA Checker Error:", err);
     }
-  }, 5 * 60 * 1000); // Every 5 minutes
+  }, 5 * 60 * 1000);
 
   // === SEED DATA ===
   await seedDatabase();
@@ -332,7 +408,6 @@ async function seedDatabase() {
 
   const passwordHash = await hash("Admin!123#", 10);
 
-  // Superadmin
   await storage.createUser({
     name: "Adhie Lesmana",
     email: "adhielesmana@isp.com",
@@ -344,7 +419,6 @@ async function seedDatabase() {
     isActive: true,
   });
 
-  // Technician
   const tech1 = await storage.createUser({
     name: "John Tech",
     email: "tech1@isp.com",
@@ -356,7 +430,6 @@ async function seedDatabase() {
     isActive: true,
   });
 
-  // Backbone Specialist
   await storage.createUser({
     name: "Backbone Bob",
     email: "backbone@isp.com",
@@ -368,10 +441,19 @@ async function seedDatabase() {
     isActive: true,
   });
 
-  // Create some tickets
+  await storage.createUser({
+    name: "Helpdesk Helen",
+    email: "helpdesk@isp.com",
+    username: "helpdesk",
+    password: passwordHash,
+    role: UserRole.HELPDESK,
+    phone: "1112223333",
+    isBackboneSpecialist: false,
+    isActive: true,
+  });
+
   const now = new Date();
   
-  // Open Ticket
   await storage.createTicket({
     ticketNumber: "INC-1001",
     type: TicketType.HOME_MAINTENANCE,
@@ -385,7 +467,6 @@ async function seedDatabase() {
     slaDeadline: new Date(now.getTime() + 24 * 60 * 60 * 1000),
   });
 
-  // Assigned Ticket
   const t2 = await storage.createTicket({
     ticketNumber: "INC-1002",
     type: TicketType.INSTALLATION,
@@ -398,7 +479,20 @@ async function seedDatabase() {
     description: "Install 100Mbps plan.",
     slaDeadline: new Date(now.getTime() + 72 * 60 * 60 * 1000),
   });
-  await storage.assignTicket(t2.id, tech1.id);
+  await storage.assignTicket(t2.id, tech1.id, "manual");
+
+  await storage.createTicket({
+    ticketNumber: "INC-1003",
+    type: TicketType.HOME_MAINTENANCE,
+    priority: TicketPriority.LOW,
+    status: TicketStatus.OPEN,
+    customerName: "Carol Williams",
+    customerPhone: "555-111-2222",
+    customerLocationUrl: "https://maps.google.com/?q=41.8781,-87.6298",
+    title: "Slow Internet Speed",
+    description: "Customer reports speed drops during evening hours.",
+    slaDeadline: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+  });
 
   console.log("Seeding complete.");
 }

@@ -2,7 +2,6 @@ import { pgTable, text, serial, integer, boolean, timestamp, jsonb } from "drizz
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// === ENUMS ===
 export const UserRole = {
   SUPERADMIN: "superadmin",
   ADMIN: "admin",
@@ -37,16 +36,19 @@ export const PerformStatus = {
   NOT_PERFORM: "not_perform",
 } as const;
 
-// === TABLES ===
+export const AssignmentType = {
+  MANUAL: "manual",
+  AUTO: "auto",
+} as const;
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
-  username: text("username").notNull().unique(), // Added for auth
-  password: text("password").notNull(), // Added for auth
+  username: text("username").notNull().unique(),
+  password: text("password").notNull(),
   phone: text("phone"),
-  role: text("role").notNull().default(UserRole.TECHNICIAN), // stored as string, validated by app
+  role: text("role").notNull().default(UserRole.TECHNICIAN),
   isBackboneSpecialist: boolean("is_backbone_specialist").default(false).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -55,9 +57,9 @@ export const users = pgTable("users", {
 export const tickets = pgTable("tickets", {
   id: serial("id").primaryKey(),
   ticketNumber: text("ticket_number").notNull().unique(),
-  type: text("type").notNull(), // TicketType
-  priority: text("priority").notNull(), // TicketPriority
-  status: text("status").notNull().default(TicketStatus.OPEN), // TicketStatus
+  type: text("type").notNull(),
+  priority: text("priority").notNull(),
+  status: text("status").notNull().default(TicketStatus.OPEN),
   
   customerName: text("customer_name").notNull(),
   customerPhone: text("customer_phone").notNull(),
@@ -66,6 +68,7 @@ export const tickets = pgTable("tickets", {
   
   title: text("title").notNull(),
   description: text("description").notNull(),
+  descriptionImages: text("description_images").array(),
   actionDescription: text("action_description"),
   proofImageUrl: text("proof_image_url"),
   speedtestResult: text("speedtest_result"),
@@ -76,7 +79,7 @@ export const tickets = pgTable("tickets", {
   durationMinutes: integer("duration_minutes"),
   closedReason: text("closed_reason"),
   closedNote: text("closed_note"),
-  performStatus: text("perform_status"), // PerformStatus
+  performStatus: text("perform_status"),
 });
 
 export const ticketAssignments = pgTable("ticket_assignments", {
@@ -84,20 +87,26 @@ export const ticketAssignments = pgTable("ticket_assignments", {
   ticketId: integer("ticket_id").notNull(),
   userId: integer("user_id").notNull(),
   assignedAt: timestamp("assigned_at").defaultNow().notNull(),
-  active: boolean("active").default(true).notNull(), // To track current assignment vs history
+  active: boolean("active").default(true).notNull(),
+  assignmentType: text("assignment_type").default(AssignmentType.MANUAL).notNull(),
 });
 
 export const performanceLogs = pgTable("performance_logs", {
   id: serial("id").primaryKey(),
   userId: integer("user_id").notNull(),
   ticketId: integer("ticket_id").notNull(),
-  result: text("result").notNull(), // PerformStatus
+  result: text("result").notNull(),
   completedWithinSLA: boolean("completed_within_sla").notNull(),
   durationMinutes: integer("duration_minutes").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// === SCHEMAS ===
+export const settings = pgTable("settings", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  value: text("value"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
 
 export const insertUserSchema = createInsertSchema(users).omit({ 
   id: true, 
@@ -123,7 +132,10 @@ export const insertPerformanceLogSchema = createInsertSchema(performanceLogs).om
   createdAt: true
 });
 
-// === TYPES ===
+export const insertSettingsSchema = createInsertSchema(settings).omit({
+  id: true,
+  updatedAt: true
+});
 
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -137,7 +149,8 @@ export type InsertAssignment = z.infer<typeof insertAssignmentSchema>;
 export type PerformanceLog = typeof performanceLogs.$inferSelect;
 export type InsertPerformanceLog = z.infer<typeof insertPerformanceLogSchema>;
 
-// === API CONTRACT TYPES ===
+export type Setting = typeof settings.$inferSelect;
+export type InsertSetting = z.infer<typeof insertSettingsSchema>;
 
 export const TicketStatusValues = Object.values(TicketStatus);
 export const TicketPriorityValues = Object.values(TicketPriority);
@@ -157,4 +170,11 @@ export interface DashboardStats {
   totalAssigned: number;
   totalClosed: number;
   slaBreachCount: number;
+}
+
+export interface TechnicianPerformance {
+  totalCompleted: number;
+  slaComplianceRate: number;
+  avgResolutionMinutes: number;
+  totalOverdue: number;
 }

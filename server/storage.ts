@@ -1,44 +1,45 @@
 import { db } from "./db";
 import { 
-  users, tickets, ticketAssignments, performanceLogs,
+  users, tickets, ticketAssignments, performanceLogs, settings,
   type User, type InsertUser, 
   type Ticket, type InsertTicket,
   type TicketAssignment, type InsertAssignment,
   type PerformanceLog, type InsertPerformanceLog,
+  type Setting, type InsertSetting,
+  type TechnicianPerformance,
   TicketStatus
 } from "@shared/schema";
-import { eq, or, and, sql, desc } from "drizzle-orm";
+import { eq, or, and, sql, desc, asc } from "drizzle-orm";
 
 export interface IStorage {
-  // Users
   getUser(id: number): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   getAllUsers(role?: string): Promise<User[]>;
-  
-  // Tickets
+  updateUser(id: number, updates: Partial<InsertUser>): Promise<User | undefined>;
+  deleteUser(id: number): Promise<void>;
+
   getTicket(id: number): Promise<Ticket | undefined>;
   getTicketByNumber(ticketNumber: string): Promise<Ticket | undefined>;
   createTicket(ticket: InsertTicket): Promise<Ticket>;
   updateTicket(id: number, ticket: Partial<InsertTicket>): Promise<Ticket>;
   getAllTickets(filters?: any): Promise<Ticket[]>;
   getTicketsByAssignee(userId: number): Promise<Ticket[]>;
-  
-  // Assignments
-  assignTicket(ticketId: number, userId: number): Promise<TicketAssignment>;
+  deleteTicket(id: number): Promise<void>;
+
+  assignTicket(ticketId: number, userId: number, assignmentType?: string): Promise<TicketAssignment>;
   getTicketAssignment(ticketId: number): Promise<TicketAssignment | undefined>;
   getAssigneeForTicket(ticketId: number): Promise<User | undefined>;
   getActiveTicketForUser(userId: number): Promise<Ticket | undefined>;
-  
-  // Delete/Update
-  deleteTicket(id: number): Promise<void>;
-  updateUser(id: number, updates: Partial<InsertUser>): Promise<User | undefined>;
-  deleteUser(id: number): Promise<void>;
+  getOldestOpenTicket(isBackboneSpecialist?: boolean): Promise<Ticket | undefined>;
 
-  // Performance
   logPerformance(log: InsertPerformanceLog): Promise<PerformanceLog>;
-  
-  // Dashboard
+  getTechnicianPerformance(userId: number): Promise<TechnicianPerformance>;
+
+  getSetting(key: string): Promise<Setting | undefined>;
+  setSetting(key: string, value: string | null): Promise<Setting>;
+  getAllSettings(): Promise<Setting[]>;
+
   getDashboardStats(): Promise<{
     totalOpen: number;
     totalAssigned: number;
@@ -48,7 +49,6 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  // Users
   async getUser(id: number): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
@@ -71,7 +71,20 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(users);
   }
 
-  // Tickets
+  async updateUser(id: number, updates: Partial<InsertUser>): Promise<User | undefined> {
+    const [user] = await db
+      .update(users)
+      .set(updates)
+      .where(eq(users.id, id))
+      .returning();
+    return user;
+  }
+
+  async deleteUser(id: number): Promise<void> {
+    await db.delete(ticketAssignments).where(eq(ticketAssignments.userId, id));
+    await db.delete(users).where(eq(users.id, id));
+  }
+
   async getTicket(id: number): Promise<Ticket | undefined> {
     const [ticket] = await db.select().from(tickets).where(eq(tickets.id, id));
     return ticket;
@@ -119,7 +132,6 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTicketsByAssignee(userId: number): Promise<Ticket[]> {
-    // Join tickets with assignments
     const result = await db
       .select({ ticket: tickets })
       .from(tickets)
@@ -133,15 +145,18 @@ export class DatabaseStorage implements IStorage {
     return result.map(r => r.ticket);
   }
 
-  // Assignments
-  async assignTicket(ticketId: number, userId: number): Promise<TicketAssignment> {
-    // Deactivate old assignments
+  async deleteTicket(id: number): Promise<void> {
+    await db.delete(ticketAssignments).where(eq(ticketAssignments.ticketId, id));
+    await db.delete(tickets).where(eq(tickets.id, id));
+  }
+
+  async assignTicket(ticketId: number, userId: number, assignmentType: string = "manual"): Promise<TicketAssignment> {
     await db.update(ticketAssignments)
       .set({ active: false })
       .where(eq(ticketAssignments.ticketId, ticketId));
       
     const [assignment] = await db.insert(ticketAssignments)
-      .values({ ticketId, userId, active: true })
+      .values({ ticketId, userId, active: true, assignmentType })
       .returning();
       
     return assignment;
@@ -180,42 +195,83 @@ export class DatabaseStorage implements IStorage {
     return result?.ticket;
   }
 
-  // Delete ticket
-  async deleteTicket(id: number): Promise<void> {
-    await db.delete(ticketAssignments).where(eq(ticketAssignments.ticketId, id));
-    await db.delete(tickets).where(eq(tickets.id, id));
+  async getOldestOpenTicket(isBackboneSpecialist?: boolean): Promise<Ticket | undefined> {
+    let query = db.select().from(tickets).$dynamic();
+    
+    if (isBackboneSpecialist) {
+      query = query.where(
+        and(
+          eq(tickets.status, TicketStatus.OPEN),
+          eq(tickets.type, "backbone_maintenance")
+        )
+      );
+    } else {
+      query = query.where(
+        and(
+          eq(tickets.status, TicketStatus.OPEN),
+          sql`${tickets.type} != 'backbone_maintenance'`
+        )
+      );
+    }
+
+    const results = await query.orderBy(asc(tickets.createdAt)).limit(1);
+    return results[0];
   }
 
-  // Update user
-  async updateUser(id: number, updates: Partial<InsertUser>): Promise<User | undefined> {
-    const [user] = await db
-      .update(users)
-      .set(updates)
-      .where(eq(users.id, id))
-      .returning();
-    return user;
-  }
-
-  // Delete user
-  async deleteUser(id: number): Promise<void> {
-    await db.delete(ticketAssignments).where(eq(ticketAssignments.userId, id));
-    await db.delete(users).where(eq(users.id, id));
-  }
-
-  // Performance
   async logPerformance(log: InsertPerformanceLog): Promise<PerformanceLog> {
     const [entry] = await db.insert(performanceLogs).values(log).returning();
     return entry;
   }
 
-  // Dashboard
+  async getTechnicianPerformance(userId: number): Promise<TechnicianPerformance> {
+    const [stats] = await db.select({
+      totalCompleted: sql<number>`count(*)`,
+      slaComplianceCount: sql<number>`count(case when ${performanceLogs.completedWithinSLA} = true then 1 end)`,
+      avgResolutionMinutes: sql<number>`coalesce(avg(${performanceLogs.durationMinutes}), 0)`,
+      totalOverdue: sql<number>`count(case when ${performanceLogs.completedWithinSLA} = false then 1 end)`,
+    }).from(performanceLogs).where(eq(performanceLogs.userId, userId));
+
+    const totalCompleted = Number(stats.totalCompleted) || 0;
+    const slaComplianceCount = Number(stats.slaComplianceCount) || 0;
+
+    return {
+      totalCompleted,
+      slaComplianceRate: totalCompleted > 0 ? Math.round((slaComplianceCount / totalCompleted) * 100) : 100,
+      avgResolutionMinutes: Math.round(Number(stats.avgResolutionMinutes) || 0),
+      totalOverdue: Number(stats.totalOverdue) || 0,
+    };
+  }
+
+  async getSetting(key: string): Promise<Setting | undefined> {
+    const [setting] = await db.select().from(settings).where(eq(settings.key, key));
+    return setting;
+  }
+
+  async setSetting(key: string, value: string | null): Promise<Setting> {
+    const existing = await this.getSetting(key);
+    if (existing) {
+      const [updated] = await db.update(settings)
+        .set({ value, updatedAt: new Date() })
+        .where(eq(settings.key, key))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(settings)
+      .values({ key, value })
+      .returning();
+    return created;
+  }
+
+  async getAllSettings(): Promise<Setting[]> {
+    return await db.select().from(settings);
+  }
+
   async getDashboardStats(): Promise<{
     totalOpen: number;
     totalAssigned: number;
     totalClosed: number;
     slaBreachCount: number;
   }> {
-    // Only count active tickets for open/assigned
     const [stats] = await db.select({
       totalOpen: sql<number>`count(case when ${tickets.status} = ${TicketStatus.OPEN} then 1 end)`,
       totalAssigned: sql<number>`count(case when ${tickets.status} IN (${TicketStatus.ASSIGNED}, ${TicketStatus.IN_PROGRESS}) then 1 end)`,
