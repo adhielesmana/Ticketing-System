@@ -53,7 +53,7 @@ cp "$SCRIPT_DIR/Dockerfile" "$INSTALL_DIR/Dockerfile"
 cd "$INSTALL_DIR"
 
 log_info "Rebuilding Docker image '${APP_NAME}'..."
-docker build -t "$APP_NAME" . 2>&1 | tail -5
+docker build -t "$APP_NAME" . 2>&1 | tail -20
 
 log_info "Stopping old app container..."
 docker stop "$APP_CONTAINER" 2>/dev/null || true

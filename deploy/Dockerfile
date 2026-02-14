@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:20-alpine
 
 WORKDIR /app
 
@@ -7,17 +7,6 @@ RUN npm ci
 
 COPY . .
 RUN npm run build
-
-FROM node:20-alpine AS runner
-
-WORKDIR /app
-
-COPY package*.json ./
-RUN npm ci
-
-COPY --from=builder /app/dist ./dist
-COPY shared ./shared
-COPY drizzle.config.ts ./
 
 RUN mkdir -p /app/uploads
 

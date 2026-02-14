@@ -282,7 +282,7 @@ uploads
 DOCKERIGNORE
 
     log_info "Building Docker image '${APP_NAME}'..."
-    docker build -t "$APP_NAME" . 2>&1 | tail -5
+    docker build -t "$APP_NAME" . 2>&1 | tail -20
 
     log_ok "Docker image built"
 }
