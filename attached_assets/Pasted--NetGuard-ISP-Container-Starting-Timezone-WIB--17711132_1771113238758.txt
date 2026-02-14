@@ -1,0 +1,66 @@
+==============================================
+  NetGuard ISP - Container Starting
+  Timezone: WIB (+0700)
+==============================================
+[OK] PostgreSQL data directory exists
+[INFO] Starting PostgreSQL...
+pg_ctl: another server might be running; trying to start server anyway
+waiting for server to start.... done
+server started
+[INFO] Configuring database user and database...
+[INFO] Creating database 'netguard_db'...
+==============================================
+  NetGuard ISP - Container Starting
+  Timezone: WIB (+0700)
+==============================================
+[OK] PostgreSQL data directory exists
+[INFO] Starting PostgreSQL...
+pg_ctl: another server might be running; trying to start server anyway
+waiting for server to start.... done
+server started
+[INFO] Configuring database user and database...
+[INFO] Creating database 'netguard_db'...
+==============================================
+  NetGuard ISP - Container Starting
+  Timezone: WIB (+0700)
+==============================================
+[OK] PostgreSQL data directory exists
+[INFO] Starting PostgreSQL...
+pg_ctl: another server might be running; trying to start server anyway
+waiting for server to start.... done
+server started
+[INFO] Configuring database user and database...
+[INFO] Creating database 'netguard_db'...
+==============================================
+  NetGuard ISP - Container Starting
+  Timezone: WIB (+0700)
+==============================================
+[OK] PostgreSQL data directory exists
+[INFO] Starting PostgreSQL...
+pg_ctl: another server might be running; trying to start server anyway
+waiting for server to start.... done
+server started
+[INFO] Configuring database user and database...
+[INFO] Creating database 'netguard_db'...
+==============================================
+  NetGuard ISP - Container Starting
+  Timezone: WIB (+0700)
+==============================================
+[OK] PostgreSQL data directory exists
+[INFO] Starting PostgreSQL...
+pg_ctl: another server might be running; trying to start server anyway
+waiting for server to start.... done
+server started
+[INFO] Configuring database user and database...
+[INFO] Creating database 'netguard_db'...
+==============================================
+  NetGuard ISP - Container Starting
+  Timezone: WIB (+0700)
+==============================================
+[OK] PostgreSQL data directory exists
+[INFO] Starting PostgreSQL...
+pg_ctl: another server might be running; trying to start server anyway
+waiting for server to start.... done
+server started
+[INFO] Configuring database user and database...
+[INFO] Creating database 'netguard_db'...
