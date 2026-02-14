@@ -282,6 +282,7 @@ docker run -d \
     -e DB_NAME="$DB_NAME" \
     -e DB_PASS="$DB_PASS" \
     -e SESSION_SECRET="$SESSION_SECRET" \
+    -e RUN_MIGRATIONS=true \
     -e NODE_ENV=production \
     -e TZ=Asia/Jakarta \
     -p "127.0.0.1:${APP_PORT}:3000" \
@@ -488,7 +489,7 @@ echo "  Useful commands:"
 echo "    App logs:   docker logs ${APP_CONTAINER} -f"
 echo "    App shell:  docker exec -it ${APP_CONTAINER} sh"
 echo "    Restart:    docker restart ${APP_CONTAINER}"
-echo "    DB Shell:   docker exec -it ${APP_CONTAINER} psql -U ${DB_USER} -d ${DB_NAME}"
+echo "    DB Shell:   docker exec -it ${APP_CONTAINER} psql -h 127.0.0.1 -U ${DB_USER} -d ${DB_NAME}"
 echo "    Nginx:      nginx -t && systemctl reload nginx"
 echo ""
 echo "  Credentials: ${INSTALL_DIR}/.credentials (root-only, chmod 600)"

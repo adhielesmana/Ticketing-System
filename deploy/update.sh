@@ -126,6 +126,7 @@ docker run -d \
     -e DB_NAME="$DB_NAME" \
     -e DB_PASS="$DB_PASS" \
     -e SESSION_SECRET="$SESSION_SECRET" \
+    -e RUN_MIGRATIONS=auto \
     -e NODE_ENV=production \
     -e TZ=Asia/Jakarta \
     -p "127.0.0.1:${APP_PORT}:3000" \
@@ -177,5 +178,5 @@ echo -e "${GREEN}Update deployed successfully! (v${UPDATE_VERSION})${NC}"
 echo ""
 echo "  App logs:  docker logs ${APP_CONTAINER} -f"
 echo "  Restart:   docker restart ${APP_CONTAINER}"
-echo "  DB Shell:  docker exec -it ${APP_CONTAINER} psql -U ${DB_USER} -d ${DB_NAME}"
+echo "  DB Shell:  docker exec -it ${APP_CONTAINER} psql -h 127.0.0.1 -U ${DB_USER} -d ${DB_NAME}"
 echo ""
