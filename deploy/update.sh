@@ -24,11 +24,11 @@ INSTALL_DIR="${INSTALL_DIR:-/opt/netguard}"
 
 DEPLOY_INFO="${INSTALL_DIR}/.deploy-info"
 if [ -f "$DEPLOY_INFO" ]; then
-    source "$DEPLOY_INFO"
+    eval "$(grep -v 'DEPLOYED_AT' "$DEPLOY_INFO")"
 elif [ -f /etc/netguard-deploy-info ]; then
-    source /etc/netguard-deploy-info
+    eval "$(grep -v 'DEPLOYED_AT' /etc/netguard-deploy-info)"
     if [ -f "${INSTALL_DIR}/.deploy-info" ]; then
-        source "${INSTALL_DIR}/.deploy-info"
+        eval "$(grep -v 'DEPLOYED_AT' "${INSTALL_DIR}/.deploy-info")"
     fi
 else
     APP_NAME="${APP_NAME:-netguard}"
