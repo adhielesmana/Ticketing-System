@@ -24,6 +24,7 @@ import { Input } from "@/components/ui/input";
 import { Shield, Lock } from "lucide-react";
 import { UserRole } from "@shared/schema";
 import { useEffect } from "react";
+import { useSetting } from "@/hooks/use-tickets";
 
 const loginSchema = z.object({
   username: z.string().min(1, "Username is required"),
@@ -33,6 +34,8 @@ const loginSchema = z.object({
 export default function Login() {
   const { login, isLoggingIn, user } = useAuth();
   const [_, setLocation] = useLocation();
+  const { data: logoSetting } = useSetting("logo_url");
+  const logoUrl = logoSetting?.value;
 
   useEffect(() => {
     if (user) {
@@ -62,12 +65,16 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center p-4" style={{ background: "linear-gradient(135deg, hsl(221 83% 53% / 0.05) 0%, hsl(199 89% 48% / 0.05) 100%)" }}>
       <div className="w-full max-w-sm space-y-8">
         <div className="flex flex-col items-center gap-3 text-center">
-          <div className="w-14 h-14 rounded-md bg-primary flex items-center justify-center">
-            <Shield className="w-8 h-8 text-primary-foreground" />
-          </div>
+          {logoUrl ? (
+            <img src={logoUrl} alt="Company Logo" className="h-16 max-w-[200px] object-contain" data-testid="img-login-logo" />
+          ) : (
+            <div className="w-14 h-14 rounded-md bg-primary flex items-center justify-center">
+              <Shield className="w-8 h-8 text-primary-foreground" />
+            </div>
+          )}
           <div>
             <h1 className="text-2xl font-bold font-display tracking-tight" data-testid="text-login-title">
-              NetGuard ISP
+              {logoUrl ? "Welcome Back" : "NetGuard ISP"}
             </h1>
             <p className="text-muted-foreground text-sm mt-1">
               Ticketing & Maintenance System
