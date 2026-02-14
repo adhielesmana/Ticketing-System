@@ -2,8 +2,8 @@
 set -e
 
 #====================================================================
-# NetGuard ISP Ticketing System - CentOS Deployment Script
-# Run as root on CentOS 7/8/9 with Docker already installed
+# NetGuard ISP Ticketing System - Debian/Ubuntu Deployment Script
+# Run as root on Debian/Ubuntu with Docker already installed
 #====================================================================
 
 RED='\033[0;31m'
@@ -161,27 +161,8 @@ install_nginx() {
 
     log_info "Installing Nginx..."
 
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        case "$ID" in
-            centos|rhel|rocky|alma)
-                if [ "${VERSION_ID%%.*}" -ge 8 ]; then
-                    dnf install -y epel-release
-                    dnf install -y nginx
-                else
-                    yum install -y epel-release
-                    yum install -y nginx
-                fi
-                ;;
-            *)
-                log_err "Unsupported OS: $ID. This script supports CentOS/RHEL/Rocky/Alma."
-                exit 1
-                ;;
-        esac
-    else
-        yum install -y epel-release
-        yum install -y nginx
-    fi
+    apt-get update -qq
+    apt-get install -y nginx
 
     systemctl enable nginx
     systemctl start nginx
@@ -201,16 +182,8 @@ install_certbot() {
 
     log_info "Installing Certbot..."
 
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        if [ "${VERSION_ID%%.*}" -ge 8 ]; then
-            dnf install -y certbot python3-certbot-nginx
-        else
-            yum install -y certbot python2-certbot-nginx 2>/dev/null || yum install -y certbot python-certbot-nginx 2>/dev/null
-        fi
-    else
-        yum install -y certbot python2-certbot-nginx 2>/dev/null || true
-    fi
+    apt-get update -qq
+    apt-get install -y certbot python3-certbot-nginx
 
     log_ok "Certbot installed"
 }
@@ -229,8 +202,11 @@ install_node() {
 
     log_info "Installing Node.js 20 LTS..."
 
-    curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
-    yum install -y nodejs
+    apt-get update -qq
+    apt-get install -y ca-certificates curl gnupg
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    apt-get install -y nodejs
 
     log_ok "Node.js $(node --version) installed"
 }
@@ -519,14 +495,23 @@ setup_ssl
 # 11. FIREWALL
 #====================================================================
 configure_firewall() {
-    if command -v firewall-cmd &>/dev/null && systemctl is-active --quiet firewalld; then
-        log_info "Configuring firewall..."
+    if command -v ufw &>/dev/null; then
+        local ufw_status=$(ufw status 2>/dev/null | head -1)
+        if echo "$ufw_status" | grep -qi "active"; then
+            log_info "Configuring UFW firewall..."
+            ufw allow 'Nginx Full' 2>/dev/null || { ufw allow 80/tcp; ufw allow 443/tcp; }
+            log_ok "UFW firewall configured for HTTP/HTTPS"
+        else
+            log_info "UFW is installed but inactive, skipping firewall config"
+        fi
+    elif command -v firewall-cmd &>/dev/null && systemctl is-active --quiet firewalld; then
+        log_info "Configuring firewalld..."
         firewall-cmd --permanent --add-service=http 2>/dev/null || true
         firewall-cmd --permanent --add-service=https 2>/dev/null || true
         firewall-cmd --reload 2>/dev/null || true
         log_ok "Firewall configured for HTTP/HTTPS"
     else
-        log_info "Firewall not active, skipping firewall config"
+        log_info "No active firewall detected, skipping firewall config"
     fi
 }
 
