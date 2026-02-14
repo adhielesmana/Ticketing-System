@@ -217,7 +217,7 @@ setup_docker_network
 wait_for_pg() {
     log_info "Waiting for PostgreSQL to be ready..."
     local retries=0
-    until docker exec "$POSTGRES_CONTAINER" pg_isready -U "$DB_USER" &>/dev/null; do
+    until docker exec "$POSTGRES_CONTAINER" pg_isready -U "$DB_USER" -d postgres &>/dev/null; do
         retries=$((retries + 1))
         if [ "$retries" -ge 30 ]; then
             log_err "PostgreSQL failed to start within 30 seconds"
@@ -225,6 +225,7 @@ wait_for_pg() {
         fi
         sleep 1
     done
+    log_ok "PostgreSQL is accepting connections"
 }
 
 test_pg_auth() {
@@ -234,36 +235,42 @@ test_pg_auth() {
     return $?
 }
 
-destroy_pg() {
-    log_warn "Removing existing PostgreSQL container and data volume..."
+fix_pg_password() {
+    log_info "Resetting password for user '$DB_USER' via Unix socket (trust auth)..."
+    docker exec "$POSTGRES_CONTAINER" \
+        psql -U "$DB_USER" -d postgres \
+        -c "ALTER USER ${DB_USER} WITH PASSWORD '${DB_PASS}';" &>/dev/null
+    if [ $? -eq 0 ]; then
+        log_ok "Password updated successfully"
+        return 0
+    else
+        log_warn "ALTER USER failed, trying as postgres superuser..."
+        docker exec "$POSTGRES_CONTAINER" \
+            psql -U postgres -d postgres \
+            -c "ALTER USER ${DB_USER} WITH PASSWORD '${DB_PASS}';" &>/dev/null
+        return $?
+    fi
+}
 
-    docker stop "$APP_CONTAINER" 2>/dev/null || true
-    docker rm -f "$APP_CONTAINER" 2>/dev/null || true
-
-    docker stop "$POSTGRES_CONTAINER" 2>/dev/null || true
-    sleep 3
-    docker rm -f "$POSTGRES_CONTAINER" 2>/dev/null || true
-    sleep 2
-
-    local vol_retries=0
-    while docker volume inspect "$POSTGRES_VOLUME" &>/dev/null; do
-        docker volume rm -f "$POSTGRES_VOLUME" 2>/dev/null || true
-        vol_retries=$((vol_retries + 1))
-        if [ "$vol_retries" -ge 10 ]; then
-            log_err "Cannot remove volume $POSTGRES_VOLUME after 10 attempts"
-            log_err "Check: docker ps -a --filter volume=$POSTGRES_VOLUME"
-            exit 1
+ensure_database_exists() {
+    local db_exists
+    db_exists=$(docker exec "$POSTGRES_CONTAINER" \
+        psql -U "$DB_USER" -d postgres -tAc \
+        "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}';" 2>/dev/null)
+    if [ "$db_exists" != "1" ]; then
+        log_info "Database '$DB_NAME' does not exist, creating..."
+        docker exec "$POSTGRES_CONTAINER" \
+            psql -U "$DB_USER" -d postgres \
+            -c "CREATE DATABASE ${DB_NAME};" &>/dev/null
+        if [ $? -eq 0 ]; then
+            log_ok "Database '$DB_NAME' created"
+        else
+            log_warn "Create as $DB_USER failed, trying as postgres superuser..."
+            docker exec "$POSTGRES_CONTAINER" \
+                psql -U postgres -d postgres \
+                -c "CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};" &>/dev/null || true
         fi
-        sleep 2
-    done
-    log_ok "Volume $POSTGRES_VOLUME confirmed removed"
-
-    rm -f "${INSTALL_DIR}/.credentials" 2>/dev/null || true
-    rm -f "${INSTALL_DIR}/.env" 2>/dev/null || true
-
-    DB_PASS="$(openssl rand -hex 16)"
-
-    log_ok "Old containers and data removed, new credentials generated"
+    fi
 }
 
 create_pg_container() {
@@ -301,25 +308,66 @@ setup_postgres() {
     local need_create=0
 
     if docker ps --format '{{.Names}}' | grep -qw "$POSTGRES_CONTAINER"; then
-        log_info "PostgreSQL container '$POSTGRES_CONTAINER' is running, testing auth..."
+        log_info "PostgreSQL container '$POSTGRES_CONTAINER' is running"
         wait_for_pg
+        ensure_database_exists
         if test_pg_auth; then
-            log_ok "PostgreSQL auth and database OK"
+            log_ok "PostgreSQL auth OK"
         else
-            log_warn "Auth or database check failed — will recreate"
-            destroy_pg
-            need_create=1
+            log_warn "Password mismatch — fixing via Unix socket..."
+            fix_pg_password
+            if test_pg_auth; then
+                log_ok "PostgreSQL auth OK after password reset"
+            else
+                log_warn "Password fix failed — will destroy and recreate from scratch"
+                log_info "Stopping and removing PostgreSQL container..."
+                docker stop "$POSTGRES_CONTAINER" 2>/dev/null || true
+                sleep 3
+                docker rm -f "$POSTGRES_CONTAINER" 2>/dev/null || true
+                sleep 2
+                docker stop "$APP_CONTAINER" 2>/dev/null || true
+                docker rm -f "$APP_CONTAINER" 2>/dev/null || true
+                local vol_retries=0
+                while docker volume inspect "$POSTGRES_VOLUME" &>/dev/null; do
+                    local holders
+                    holders=$(docker ps -a --filter "volume=$POSTGRES_VOLUME" --format '{{.Names}}' 2>/dev/null || true)
+                    if [ -n "$holders" ]; then
+                        echo "$holders" | xargs -r docker rm -f 2>/dev/null || true
+                        sleep 2
+                    fi
+                    docker volume rm -f "$POSTGRES_VOLUME" 2>/dev/null || true
+                    vol_retries=$((vol_retries + 1))
+                    if [ "$vol_retries" -ge 10 ]; then
+                        log_err "Cannot remove volume $POSTGRES_VOLUME after 10 attempts"
+                        exit 1
+                    fi
+                    sleep 2
+                done
+                log_ok "Volume removed"
+                DB_PASS="$(openssl rand -hex 16)"
+                need_create=1
+            fi
         fi
     elif docker ps -a --format '{{.Names}}' | grep -qw "$POSTGRES_CONTAINER"; then
-        log_info "Starting existing PostgreSQL container..."
+        log_info "Starting stopped PostgreSQL container..."
         docker start "$POSTGRES_CONTAINER"
         wait_for_pg
+        ensure_database_exists
         if test_pg_auth; then
-            log_ok "PostgreSQL auth and database OK"
+            log_ok "PostgreSQL auth OK"
         else
-            log_warn "Auth or database check failed — will recreate"
-            destroy_pg
-            need_create=1
+            log_warn "Password mismatch — fixing via Unix socket..."
+            fix_pg_password
+            ensure_database_exists
+            if ! test_pg_auth; then
+                log_err "Cannot fix PostgreSQL auth. Removing container..."
+                docker stop "$POSTGRES_CONTAINER" 2>/dev/null || true
+                docker rm -f "$POSTGRES_CONTAINER" 2>/dev/null || true
+                DB_PASS="$(openssl rand -hex 16)"
+                need_create=1
+            else
+                log_ok "PostgreSQL auth OK after password reset"
+            fi
         fi
     else
         need_create=1
@@ -331,7 +379,6 @@ setup_postgres() {
             local stale_containers
             stale_containers=$(docker ps -a --filter "volume=$POSTGRES_VOLUME" --format '{{.Names}}' 2>/dev/null || true)
             if [ -n "$stale_containers" ]; then
-                log_warn "Removing containers holding the volume: $stale_containers"
                 echo "$stale_containers" | xargs -r docker rm -f 2>/dev/null || true
                 sleep 2
             fi
@@ -346,8 +393,9 @@ setup_postgres() {
         create_pg_container
 
         wait_for_pg
+        ensure_database_exists
         if ! test_pg_auth; then
-            log_err "PostgreSQL auth still failing after fresh create."
+            log_err "PostgreSQL auth STILL failing after fresh create."
             log_err "DB_USER=$DB_USER DB_NAME=$DB_NAME"
             docker logs "$POSTGRES_CONTAINER" --tail 10
             exit 1
