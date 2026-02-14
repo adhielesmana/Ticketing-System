@@ -4,6 +4,7 @@ set -e
 #====================================================================
 # NetGuard ISP Ticketing System - Debian/Ubuntu Deployment Script
 # Run as root on Debian/Ubuntu with Docker already installed
+# Both the app and PostgreSQL run inside Docker containers
 #====================================================================
 
 RED='\033[0;31m'
@@ -21,7 +22,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 #====================================================================
-# CONFIGURATION - Edit these before running
+# CONFIGURATION - Edit these or pass as environment variables
 #====================================================================
 DOMAIN="${DOMAIN:-tickets.yourdomain.com}"
 APP_NAME="${APP_NAME:-netguard}"
@@ -34,8 +35,10 @@ SESSION_SECRET="${SESSION_SECRET:-$(openssl rand -hex 32)}"
 SSL_EMAIL="${SSL_EMAIL:-admin@yourdomain.com}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/netguard}"
 DOCKER_NETWORK="${DOCKER_NETWORK:-netguard_net}"
+APP_CONTAINER="${APP_CONTAINER:-netguard_app}"
 POSTGRES_CONTAINER="${POSTGRES_CONTAINER:-netguard_postgres}"
 POSTGRES_VOLUME="${POSTGRES_VOLUME:-netguard_pgdata}"
+UPLOADS_VOLUME="${UPLOADS_VOLUME:-netguard_uploads}"
 
 echo ""
 echo "=============================================="
@@ -115,12 +118,10 @@ resolve_ports() {
 
     local own_app_running=0
     local own_db_running=0
-    if command -v docker &>/dev/null; then
-        if docker ps --format '{{.Names}}' 2>/dev/null | grep -qw "$POSTGRES_CONTAINER"; then
-            own_db_running=1
-        fi
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qw "$POSTGRES_CONTAINER"; then
+        own_db_running=1
     fi
-    if systemctl is-active --quiet "$APP_NAME" 2>/dev/null; then
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -qw "$APP_CONTAINER"; then
         own_app_running=1
     fi
 
@@ -130,7 +131,7 @@ resolve_ports() {
         log_warn "Port ${old_port} is in use -> auto-assigned APP_PORT=${APP_PORT}"
         used_ports=$(printf '%s\n%s' "$used_ports" "$APP_PORT" | sort -un)
     elif ! is_port_free "$APP_PORT" "$used_ports" && [ "$own_app_running" -eq 1 ]; then
-        log_ok "Port ${APP_PORT} is used by our own app service (OK)"
+        log_ok "Port ${APP_PORT} is used by our own app container (OK)"
     else
         log_ok "APP_PORT ${APP_PORT} is free"
     fi
@@ -191,30 +192,7 @@ install_certbot() {
 install_certbot
 
 #====================================================================
-# 4. INSTALL NODE.JS (if not present)
-#====================================================================
-install_node() {
-    if command -v node &>/dev/null; then
-        local node_ver=$(node --version)
-        log_ok "Node.js is already installed ($node_ver)"
-        return 0
-    fi
-
-    log_info "Installing Node.js 20 LTS..."
-
-    apt-get update -qq
-    apt-get install -y ca-certificates curl gnupg
-    mkdir -p /etc/apt/keyrings
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-    apt-get install -y nodejs
-
-    log_ok "Node.js $(node --version) installed"
-}
-
-install_node
-
-#====================================================================
-# 5. DOCKER NETWORK
+# 4. DOCKER NETWORK
 #====================================================================
 setup_docker_network() {
     if docker network inspect "$DOCKER_NETWORK" &>/dev/null; then
@@ -229,7 +207,7 @@ setup_docker_network() {
 setup_docker_network
 
 #====================================================================
-# 6. POSTGRESQL IN DOCKER
+# 5. POSTGRESQL IN DOCKER
 #====================================================================
 setup_postgres() {
     if docker ps --format '{{.Names}}' | grep -qw "$POSTGRES_CONTAINER"; then
@@ -268,95 +246,94 @@ setup_postgres() {
         done
         log_ok "PostgreSQL container created and ready"
     fi
-
-    export DATABASE_URL="postgresql://${DB_USER}:${DB_PASS}@127.0.0.1:${DB_PORT}/${DB_NAME}"
 }
 
 setup_postgres
 
 #====================================================================
-# 7. DEPLOY APPLICATION
+# 6. COPY SOURCE & BUILD APP DOCKER IMAGE
 #====================================================================
-deploy_app() {
-    log_info "Deploying application to $INSTALL_DIR..."
-
+build_app() {
+    log_info "Copying project files to $INSTALL_DIR..."
     mkdir -p "$INSTALL_DIR"
 
-    rsync -a --exclude='node_modules' --exclude='.git' --exclude='dist' \
-        --exclude='uploads' --exclude='.env' \
-        "$PROJECT_DIR/" "$INSTALL_DIR/"
+    cp -a "$PROJECT_DIR/." "$INSTALL_DIR/" 2>/dev/null || true
+    rm -rf "$INSTALL_DIR/node_modules" "$INSTALL_DIR/.git"
+
+    cp "$SCRIPT_DIR/Dockerfile" "$INSTALL_DIR/Dockerfile"
 
     cd "$INSTALL_DIR"
 
     cat > .env <<ENVFILE
-DATABASE_URL=${DATABASE_URL}
+DATABASE_URL=postgresql://${DB_USER}:${DB_PASS}@${POSTGRES_CONTAINER}:5432/${DB_NAME}
 SESSION_SECRET=${SESSION_SECRET}
 NODE_ENV=production
-PORT=${APP_PORT}
+PORT=3000
 ENVFILE
 
-    log_info "Installing dependencies..."
-    npm ci --production=false 2>&1 | tail -1
+    cat > .dockerignore <<DOCKERIGNORE
+node_modules
+.git
+dist
+deploy
+uploads
+.env
+*.log
+DOCKERIGNORE
 
-    log_info "Building application..."
-    npm run build 2>&1 | tail -3
+    log_info "Building Docker image '${APP_NAME}'..."
+    docker build -t "$APP_NAME" . 2>&1 | tail -5
 
-    log_info "Pushing database schema..."
-    npm run db:push 2>&1 | tail -3
-
-    mkdir -p "$INSTALL_DIR/uploads"
-
-    log_ok "Application built and database updated"
+    log_ok "Docker image built"
 }
 
-deploy_app
+build_app
 
 #====================================================================
-# 8. SYSTEMD SERVICE
+# 7. RUN APP CONTAINER
 #====================================================================
-setup_systemd() {
-    local service_file="/etc/systemd/system/${APP_NAME}.service"
+run_app_container() {
+    if docker ps --format '{{.Names}}' | grep -qw "$APP_CONTAINER"; then
+        log_info "Stopping existing app container..."
+        docker stop "$APP_CONTAINER" 2>/dev/null || true
+        docker rm "$APP_CONTAINER" 2>/dev/null || true
+    elif docker ps -a --format '{{.Names}}' | grep -qw "$APP_CONTAINER"; then
+        docker rm "$APP_CONTAINER" 2>/dev/null || true
+    fi
 
-    log_info "Creating systemd service..."
+    if ! docker volume inspect "$UPLOADS_VOLUME" &>/dev/null; then
+        docker volume create "$UPLOADS_VOLUME"
+    fi
 
-    cat > "$service_file" <<SERVICE
-[Unit]
-Description=NetGuard ISP Ticketing System
-After=network.target docker.service
-Requires=docker.service
+    log_info "Starting app container..."
 
-[Service]
-Type=simple
-WorkingDirectory=${INSTALL_DIR}
-EnvironmentFile=${INSTALL_DIR}/.env
-ExecStart=/usr/bin/node ${INSTALL_DIR}/dist/index.cjs
-Restart=always
-RestartSec=5
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=${APP_NAME}
+    docker run -d \
+        --name "$APP_CONTAINER" \
+        --network "$DOCKER_NETWORK" \
+        --restart unless-stopped \
+        --env-file "${INSTALL_DIR}/.env" \
+        -p "127.0.0.1:${APP_PORT}:3000" \
+        -v "${UPLOADS_VOLUME}:/app/uploads" \
+        "$APP_NAME"
 
-[Install]
-WantedBy=multi-user.target
-SERVICE
-
-    systemctl daemon-reload
-    systemctl enable "$APP_NAME"
-    systemctl restart "$APP_NAME"
-
-    sleep 2
-    if systemctl is-active --quiet "$APP_NAME"; then
-        log_ok "Application service started on port ${APP_PORT}"
+    sleep 3
+    if docker ps --format '{{.Names}}' | grep -qw "$APP_CONTAINER"; then
+        log_ok "App container started on port ${APP_PORT}"
     else
-        log_err "Service failed to start. Check: journalctl -u ${APP_NAME} -n 50"
+        log_err "App container failed to start. Check: docker logs ${APP_CONTAINER}"
+        docker logs "$APP_CONTAINER" --tail 20
         exit 1
     fi
+
+    log_info "Pushing database schema..."
+    docker exec "$APP_CONTAINER" npx drizzle-kit push --force 2>&1 | tail -5
+    log_ok "Database schema updated"
 }
 
-setup_systemd
+run_app_container
 
 #====================================================================
-# 9. NGINX CONFIGURATION
+# 8. NGINX CONFIGURATION
 #====================================================================
 configure_nginx() {
     local conf_file="/etc/nginx/conf.d/${APP_NAME}.conf"
@@ -387,7 +364,6 @@ server {
     listen 443 ssl http2;
     server_name ${DOMAIN};
 
-    # SSL will be configured by certbot
     ssl_certificate     /etc/nginx/ssl/${APP_NAME}_self.crt;
     ssl_certificate_key /etc/nginx/ssl/${APP_NAME}_self.key;
 
@@ -416,12 +392,6 @@ server {
         proxy_cache_bypass \$http_upgrade;
         proxy_read_timeout 86400;
     }
-
-    location /uploads/ {
-        alias ${INSTALL_DIR}/uploads/;
-        expires 30d;
-        add_header Cache-Control "public, immutable";
-    }
 }
 NGINX_CONF
 
@@ -447,7 +417,7 @@ NGINX_CONF
 configure_nginx
 
 #====================================================================
-# 10. SSL CERTIFICATE (Let's Encrypt)
+# 9. SSL CERTIFICATE (Let's Encrypt)
 #====================================================================
 setup_ssl() {
     if [ -d "/etc/letsencrypt/live/${DOMAIN}" ]; then
@@ -492,7 +462,7 @@ setup_ssl() {
 setup_ssl
 
 #====================================================================
-# 11. FIREWALL
+# 10. FIREWALL
 #====================================================================
 configure_firewall() {
     if command -v ufw &>/dev/null; then
@@ -530,15 +500,19 @@ echo "  App Port:     ${APP_PORT} (internal)"
 echo "  DB Port:      ${DB_PORT} (localhost only)"
 echo "  Install Dir:  ${INSTALL_DIR}"
 echo ""
+echo "  Docker containers:"
+echo "    App:  ${APP_CONTAINER}"
+echo "    DB:   ${POSTGRES_CONTAINER}"
+echo ""
 echo "  Useful commands:"
-echo "    Status:     systemctl status ${APP_NAME}"
-echo "    Logs:       journalctl -u ${APP_NAME} -f"
-echo "    Restart:    systemctl restart ${APP_NAME}"
+echo "    App logs:   docker logs ${APP_CONTAINER} -f"
+echo "    App shell:  docker exec -it ${APP_CONTAINER} sh"
+echo "    Restart:    docker restart ${APP_CONTAINER}"
 echo "    DB Shell:   docker exec -it ${POSTGRES_CONTAINER} psql -U ${DB_USER} -d ${DB_NAME}"
 echo "    Nginx:      nginx -t && systemctl reload nginx"
 echo ""
-echo "  Database URL (save this):"
-echo "    ${DATABASE_URL}"
+echo "  Database URL (internal to Docker network):"
+echo "    postgresql://${DB_USER}:${DB_PASS}@${POSTGRES_CONTAINER}:5432/${DB_NAME}"
 echo ""
 echo "  To update the app later, run:"
 echo "    cd ${PROJECT_DIR} && ./deploy/update.sh"
@@ -547,17 +521,25 @@ echo ""
 cat > "/etc/netguard-deploy-info" <<INFO2
 INSTALL_DIR=${INSTALL_DIR}
 APP_NAME=${APP_NAME}
+APP_CONTAINER=${APP_CONTAINER}
+POSTGRES_CONTAINER=${POSTGRES_CONTAINER}
+DOCKER_NETWORK=${DOCKER_NETWORK}
+UPLOADS_VOLUME=${UPLOADS_VOLUME}
+APP_PORT=${APP_PORT}
+DB_PORT=${DB_PORT}
 INFO2
 
 cat > "${INSTALL_DIR}/.deploy-info" <<INFO
 DOMAIN=${DOMAIN}
 APP_NAME=${APP_NAME}
 APP_PORT=${APP_PORT}
+APP_CONTAINER=${APP_CONTAINER}
 DB_PORT=${DB_PORT}
 DB_NAME=${DB_NAME}
 DB_USER=${DB_USER}
 POSTGRES_CONTAINER=${POSTGRES_CONTAINER}
 DOCKER_NETWORK=${DOCKER_NETWORK}
+UPLOADS_VOLUME=${UPLOADS_VOLUME}
 INSTALL_DIR=${INSTALL_DIR}
 DEPLOYED_AT=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
 INFO
