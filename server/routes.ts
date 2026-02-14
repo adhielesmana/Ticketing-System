@@ -176,12 +176,17 @@ export async function registerRoutes(
 
       const ticketNumber = `INC-${Date.now().toString().slice(-6)}`;
 
+      const bonusSettingKey = `bonus_${input.type}`;
+      const bonusSetting = await storage.getSetting(bonusSettingKey);
+      const bonus = bonusSetting?.value || "0";
+
       const ticket = await storage.createTicket({
         ...input,
         ticketNumber,
         slaDeadline,
         status: TicketStatus.OPEN,
         customerLocationUrl: input.customerLocationUrl || "",
+        bonus,
       });
 
       res.status(201).json(ticket);
@@ -305,11 +310,13 @@ export async function registerRoutes(
     const now = new Date();
     const durationMinutes = Math.floor((now.getTime() - existingTicket.createdAt.getTime()) / 60000);
 
+    const isWithinSLA = existingTicket.slaDeadline > now;
     const ticket = await storage.updateTicket(ticketId, {
       status: TicketStatus.CLOSED,
       closedAt: now,
       durationMinutes,
-      performStatus: existingTicket.slaDeadline > now ? "perform" : "not_perform",
+      performStatus: isWithinSLA ? "perform" : "not_perform",
+      bonus: isWithinSLA ? existingTicket.bonus : "0",
       ...input
     });
 
@@ -366,6 +373,86 @@ export async function registerRoutes(
     const { key, value } = req.body;
     const setting = await storage.setSetting(key, value);
     res.json(setting);
+  });
+
+  // === REPORTS ===
+  app.get(api.reports.tickets.path, async (req, res) => {
+    try {
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const user = await storage.getUser(userId);
+      if (!user || user.role === UserRole.TECHNICIAN) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+      const filters = {
+        dateFrom: req.query.dateFrom as string | undefined,
+        dateTo: req.query.dateTo as string | undefined,
+        type: req.query.type as string | undefined,
+        status: req.query.status as string | undefined,
+      };
+      const data = await storage.getTicketsReport(filters);
+      const withAssignees = await Promise.all(data.map(async (t: any) => {
+        const assignees = await storage.getAssigneesForTicket(t.id);
+        return { ...t, assignees: assignees.map((a: any) => ({ id: a.id, name: a.name })) };
+      }));
+      res.json(withAssignees);
+    } catch (err) {
+      console.error("Report error:", err);
+      res.status(500).json({ message: "Failed to generate report" });
+    }
+  });
+
+  app.get(api.reports.bonusSummary.path, async (req, res) => {
+    try {
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const user = await storage.getUser(userId);
+      if (!user || user.role === UserRole.TECHNICIAN) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+      const filters = {
+        dateFrom: req.query.dateFrom as string | undefined,
+        dateTo: req.query.dateTo as string | undefined,
+      };
+      const data = await storage.getBonusSummary(filters);
+      res.json(data);
+    } catch (err) {
+      console.error("Bonus report error:", err);
+      res.status(500).json({ message: "Failed to generate bonus report" });
+    }
+  });
+
+  app.get(api.reports.performanceSummary.path, async (req, res) => {
+    try {
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const user = await storage.getUser(userId);
+      if (!user || user.role === UserRole.TECHNICIAN) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+      const filters = {
+        dateFrom: req.query.dateFrom as string | undefined,
+        dateTo: req.query.dateTo as string | undefined,
+      };
+      const data = await storage.getPerformanceSummary(filters);
+      res.json(data);
+    } catch (err) {
+      console.error("Performance report error:", err);
+      res.status(500).json({ message: "Failed to generate performance report" });
+    }
+  });
+
+  // === TECHNICIAN BONUS TOTAL ===
+  app.get("/api/technician/bonus-total", async (req, res) => {
+    try {
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const data = await storage.getTechnicianBonusTotal(userId);
+      res.json(data);
+    } catch (err) {
+      console.error("Bonus total error:", err);
+      res.status(500).json({ message: "Failed to fetch bonus total" });
+    }
   });
 
   // === FILE UPLOAD (Local) ===

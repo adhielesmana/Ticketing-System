@@ -44,6 +44,11 @@ export interface IStorage {
   setSetting(key: string, value: string | null): Promise<Setting>;
   getAllSettings(): Promise<Setting[]>;
 
+  getTicketsReport(filters?: { dateFrom?: string; dateTo?: string; type?: string; status?: string }): Promise<any[]>;
+  getBonusSummary(filters?: { dateFrom?: string; dateTo?: string }): Promise<any[]>;
+  getPerformanceSummary(filters?: { dateFrom?: string; dateTo?: string }): Promise<any[]>;
+  getTechnicianBonusTotal(userId: number): Promise<{ totalBonus: number; ticketCount: number }>;
+
   getDashboardStats(): Promise<{
     totalOpen: number;
     totalAssigned: number;
@@ -329,6 +334,111 @@ export class DatabaseStorage implements IStorage {
 
   async getAllSettings(): Promise<Setting[]> {
     return await db.select().from(settings);
+  }
+
+  async getTicketsReport(filters: { dateFrom?: string; dateTo?: string; type?: string; status?: string } = {}): Promise<any[]> {
+    let query = db.select().from(tickets).$dynamic();
+    const conditions = [];
+    
+    if (filters.type) conditions.push(eq(tickets.type, filters.type));
+    if (filters.status) conditions.push(eq(tickets.status, filters.status));
+    if (filters.dateFrom) conditions.push(sql`${tickets.createdAt} >= ${filters.dateFrom}::timestamp`);
+    if (filters.dateTo) conditions.push(sql`${tickets.createdAt} <= ${filters.dateTo}::timestamp + interval '1 day'`);
+    
+    if (conditions.length > 0) {
+      query = query.where(and(...conditions));
+    }
+    
+    const ticketRows = await query.orderBy(desc(tickets.createdAt));
+    const result: any[] = [];
+    for (const ticket of ticketRows) {
+      const assignees = await this.getAssigneesForTicket(ticket.id);
+      result.push({
+        ...ticket,
+        assignees: assignees.map(a => ({ id: a.id, name: a.name })),
+      });
+    }
+    return result;
+  }
+
+  async getBonusSummary(filters: { dateFrom?: string; dateTo?: string } = {}): Promise<any[]> {
+    const conditions = [eq(tickets.status, TicketStatus.CLOSED)];
+    if (filters.dateFrom) conditions.push(sql`${tickets.closedAt} >= ${filters.dateFrom}::timestamp`);
+    if (filters.dateTo) conditions.push(sql`${tickets.closedAt} <= ${filters.dateTo}::timestamp + interval '1 day'`);
+
+    const closedTickets = await db.select().from(tickets).where(and(...conditions)).orderBy(desc(tickets.closedAt));
+    
+    const result: any[] = [];
+    for (const ticket of closedTickets) {
+      const assignees = await this.getAssigneesForTicket(ticket.id);
+      result.push({
+        ...ticket,
+        assignees: assignees.map(a => ({ id: a.id, name: a.name })),
+      });
+    }
+    return result;
+  }
+
+  async getPerformanceSummary(filters: { dateFrom?: string; dateTo?: string } = {}): Promise<any[]> {
+    const conditions: any[] = [];
+    if (filters.dateFrom) conditions.push(sql`${performanceLogs.createdAt} >= ${filters.dateFrom}::timestamp`);
+    if (filters.dateTo) conditions.push(sql`${performanceLogs.createdAt} <= ${filters.dateTo}::timestamp + interval '1 day'`);
+
+    const techs = await db.select().from(users).where(eq(users.role, "technician"));
+    
+    const result: any[] = [];
+    for (const tech of techs) {
+      const techConditions = [eq(performanceLogs.userId, tech.id), ...conditions];
+      const [stats] = await db.select({
+        totalCompleted: sql<number>`count(*)`,
+        slaComplianceCount: sql<number>`count(case when ${performanceLogs.completedWithinSLA} = true then 1 end)`,
+        avgResolutionMinutes: sql<number>`coalesce(avg(${performanceLogs.durationMinutes}), 0)`,
+        totalOverdue: sql<number>`count(case when ${performanceLogs.completedWithinSLA} = false then 1 end)`,
+      }).from(performanceLogs).where(and(...techConditions));
+
+      const bonusConditions = [
+        eq(tickets.status, TicketStatus.CLOSED),
+        sql`${tickets.id} IN (SELECT ticket_id FROM ticket_assignments WHERE user_id = ${tech.id} AND active = true)`,
+      ];
+      if (filters.dateFrom) bonusConditions.push(sql`${tickets.closedAt} >= ${filters.dateFrom}::timestamp`);
+      if (filters.dateTo) bonusConditions.push(sql`${tickets.closedAt} <= ${filters.dateTo}::timestamp + interval '1 day'`);
+
+      const [bonusResult] = await db.select({
+        totalBonus: sql<number>`coalesce(sum(${tickets.bonus}::numeric), 0)`,
+      }).from(tickets).where(and(...bonusConditions));
+
+      const totalCompleted = Number(stats.totalCompleted) || 0;
+      const slaComplianceCount = Number(stats.slaComplianceCount) || 0;
+
+      result.push({
+        technicianId: tech.id,
+        technicianName: tech.name,
+        totalCompleted,
+        slaComplianceRate: totalCompleted > 0 ? Math.round((slaComplianceCount / totalCompleted) * 100) : 100,
+        avgResolutionMinutes: Math.round(Number(stats.avgResolutionMinutes) || 0),
+        totalOverdue: Number(stats.totalOverdue) || 0,
+        totalBonus: Number(bonusResult.totalBonus) || 0,
+      });
+    }
+    return result;
+  }
+
+  async getTechnicianBonusTotal(userId: number): Promise<{ totalBonus: number; ticketCount: number }> {
+    const [result] = await db.select({
+      totalBonus: sql<number>`coalesce(sum(${tickets.bonus}::numeric), 0)`,
+      ticketCount: sql<number>`count(*)`,
+    }).from(tickets)
+      .innerJoin(ticketAssignments, eq(tickets.id, ticketAssignments.ticketId))
+      .where(and(
+        eq(ticketAssignments.userId, userId),
+        eq(ticketAssignments.active, true),
+        eq(tickets.status, TicketStatus.CLOSED)
+      ));
+
+    return {
+      totalBonus: Number(result.totalBonus) || 0,
+      ticketCount: Number(result.ticketCount) || 0,
+    };
   }
 
   async getDashboardStats(): Promise<{

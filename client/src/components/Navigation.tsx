@@ -13,6 +13,7 @@ import {
   Upload,
   X,
   Loader2,
+  FileText,
 } from "lucide-react";
 import { UserRole } from "@shared/schema";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -45,6 +46,8 @@ export function Navigation() {
     { href: "/dashboard/admin", label: "Dashboard", icon: LayoutDashboard, show: !isTechnician },
     { href: "/tickets", label: "Tickets", icon: Ticket, show: !isTechnician },
     { href: "/users", label: "Staff", icon: Users, show: isAdmin },
+    { href: "/reports", label: "Reports", icon: FileText, show: isAdmin },
+    { href: "/settings", label: "Settings", icon: Settings, show: isAdmin },
   ].filter(item => item.show);
 
   const logoUrl = logoSetting?.value;

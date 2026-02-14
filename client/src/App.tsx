@@ -14,6 +14,8 @@ import TechnicianDashboard from "@/pages/TechnicianDashboard";
 import TicketDetail from "@/pages/TicketDetail";
 import TicketsPage from "@/pages/TicketsPage";
 import UsersPage from "@/pages/UsersPage";
+import SettingsPage from "@/pages/SettingsPage";
+import ReportsPage from "@/pages/ReportsPage";
 import NotFound from "@/pages/not-found";
 
 function ProtectedRoute({ component: Component, ...rest }: any) {
@@ -67,6 +69,14 @@ function Router() {
 
       <Route path="/users">
         {() => <ProtectedRoute component={UsersPage} />}
+      </Route>
+
+      <Route path="/settings">
+        {() => <ProtectedRoute component={SettingsPage} />}
+      </Route>
+
+      <Route path="/reports">
+        {() => <ProtectedRoute component={ReportsPage} />}
       </Route>
 
       <Route component={NotFound} />

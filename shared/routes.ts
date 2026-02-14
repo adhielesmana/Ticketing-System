@@ -187,7 +187,9 @@ export const api = {
       path: '/api/tickets/:id/close' as const,
       input: z.object({
         proofImageUrl: z.string().optional(),
+        proofImageUrls: z.array(z.string()).optional(),
         speedtestResult: z.string().optional(),
+        speedtestImageUrl: z.string().optional(),
         closedNote: z.string().optional(),
         actionDescription: z.string().optional(),
       }),
@@ -222,6 +224,29 @@ export const api = {
           avgResolutionMinutes: z.number(),
           totalOverdue: z.number(),
         }),
+      },
+    },
+  },
+  reports: {
+    tickets: {
+      method: 'GET' as const,
+      path: '/api/reports/tickets' as const,
+      responses: {
+        200: z.array(z.any()),
+      },
+    },
+    bonusSummary: {
+      method: 'GET' as const,
+      path: '/api/reports/bonus-summary' as const,
+      responses: {
+        200: z.array(z.any()),
+      },
+    },
+    performanceSummary: {
+      method: 'GET' as const,
+      path: '/api/reports/performance-summary' as const,
+      responses: {
+        200: z.array(z.any()),
       },
     },
   },

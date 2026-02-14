@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { useTickets, useTechnicianPerformance, useAutoAssignTicket, useFreeTechnicians } from "@/hooks/use-tickets";
+import { useTickets, useTechnicianPerformance, useAutoAssignTicket, useFreeTechnicians, useTechnicianBonusTotal } from "@/hooks/use-tickets";
 import { TicketCard } from "@/components/TicketCard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -47,6 +47,7 @@ export default function TechnicianDashboard() {
 
   const { data: tickets, isLoading } = useTickets({ assignedTo: user?.id });
   const { data: performance } = useTechnicianPerformance();
+  const { data: bonusTotal } = useTechnicianBonusTotal();
   const { mutate: autoAssign, isPending: isAutoAssigning } = useAutoAssignTicket();
   const { data: freeTechnicians, isLoading: loadingFreeTechs } = useFreeTechnicians(user?.id);
 
@@ -86,14 +87,20 @@ export default function TechnicianDashboard() {
           Ready for assignments
         </p>
 
-        <div className="grid grid-cols-2 gap-3 mt-5">
+        <div className="grid grid-cols-3 gap-3 mt-5">
           <div className="bg-white/10 backdrop-blur-sm rounded-md p-3 border border-white/15">
             <div className="text-2xl font-bold" data-testid="text-active-count">{activeTickets.length}</div>
-            <div className="text-xs opacity-70 mt-0.5">Active Tasks</div>
+            <div className="text-xs opacity-70 mt-0.5">Active</div>
           </div>
           <div className="bg-white/10 backdrop-blur-sm rounded-md p-3 border border-white/15">
             <div className="text-2xl font-bold" data-testid="text-completed-count">{performance?.totalCompleted ?? historyTickets.length}</div>
             <div className="text-xs opacity-70 mt-0.5">Completed</div>
+          </div>
+          <div className="bg-white/10 backdrop-blur-sm rounded-md p-3 border border-white/15">
+            <div className="text-lg font-bold" data-testid="text-bonus-total">
+              ${(bonusTotal?.totalBonus ?? 0).toLocaleString()}
+            </div>
+            <div className="text-xs opacity-70 mt-0.5">Bonus</div>
           </div>
         </div>
 

@@ -1,4 +1,4 @@
-import { useTicket, useCloseTicket, useStartTicket, useAssignTicket } from "@/hooks/use-tickets";
+import { useTicket, useCloseTicket, useStartTicket, useAssignTicket, useUploadFile, useUploadImages } from "@/hooks/use-tickets";
 import { useUsers } from "@/hooks/use-users";
 import { useAuth } from "@/hooks/use-auth";
 import { useParams, Link } from "wouter";
@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
@@ -30,11 +29,16 @@ import {
   UserCheck,
   ImageIcon,
   Map,
+  Upload,
+  X,
+  Loader2,
+  Camera,
 } from "lucide-react";
 import { format } from "date-fns";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { useToast } from "@/hooks/use-toast";
 
 const priorityColors: Record<string, string> = {
   low: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
@@ -119,14 +123,21 @@ export default function TicketDetail() {
   const { mutate: startTicket } = useStartTicket();
   const { mutate: closeTicket } = useCloseTicket();
 
+  const { mutateAsync: uploadFile, isPending: isUploadingFile } = useUploadFile();
+  const { mutateAsync: uploadMultiple, isPending: isUploadingMultiple } = useUploadImages();
+  const { toast } = useToast();
+
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [closeData, setCloseData] = useState({
     actionDescription: "",
-    speedtestResult: "",
-    proofImageUrl: "",
+    speedtestImageUrl: "",
+    proofImageUrls: [] as string[],
     closedNote: ""
   });
+
+  const speedtestInputRef = useRef<HTMLInputElement>(null);
+  const proofInputRef = useRef<HTMLInputElement>(null);
 
   if (isLoading) {
     return (
@@ -156,10 +167,44 @@ export default function TicketDetail() {
     );
   }
 
+  const handleSpeedtestUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const result = await uploadFile(file);
+      setCloseData(prev => ({ ...prev, speedtestImageUrl: result.url }));
+    } catch {
+      toast({ title: "Error", description: "Failed to upload speedtest image", variant: "destructive" });
+    }
+    if (speedtestInputRef.current) speedtestInputRef.current.value = "";
+  };
+
+  const handleProofUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    try {
+      const result = await uploadMultiple(Array.from(files));
+      setCloseData(prev => ({ ...prev, proofImageUrls: [...prev.proofImageUrls, ...result.urls] }));
+    } catch {
+      toast({ title: "Error", description: "Failed to upload proof images", variant: "destructive" });
+    }
+    if (proofInputRef.current) proofInputRef.current.value = "";
+  };
+
+  const removeProofImage = (index: number) => {
+    setCloseData(prev => ({
+      ...prev,
+      proofImageUrls: prev.proofImageUrls.filter((_, i) => i !== index)
+    }));
+  };
+
   const handleClose = () => {
     closeTicket({
       id: ticketId,
-      ...closeData
+      actionDescription: closeData.actionDescription,
+      speedtestImageUrl: closeData.speedtestImageUrl || undefined,
+      proofImageUrls: closeData.proofImageUrls.length > 0 ? closeData.proofImageUrls : undefined,
+      closedNote: closeData.closedNote,
     }, {
       onSuccess: () => setCloseDialogOpen(false)
     });
@@ -262,24 +307,63 @@ export default function TicketDetail() {
                     <p className="text-sm">{ticket.actionDescription}</p>
                   </div>
                 )}
-                {ticket.speedtestResult && (
+                {ticket.speedtestImageUrl && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Speedtest Screenshot</p>
+                    <button
+                      onClick={() => setImagePreview(ticket.speedtestImageUrl)}
+                      className="rounded-md overflow-visible border border-border hover-elevate"
+                      data-testid="button-preview-speedtest"
+                    >
+                      <img
+                        src={ticket.speedtestImageUrl}
+                        alt="Speedtest result"
+                        className="w-full max-w-xs h-32 object-cover rounded-md"
+                      />
+                    </button>
+                  </div>
+                )}
+                {ticket.speedtestResult && !ticket.speedtestImageUrl && (
                   <div>
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Speedtest</p>
                     <p className="text-sm font-mono">{ticket.speedtestResult}</p>
                   </div>
                 )}
-                {ticket.proofImageUrl && (
+                {(ticket.proofImageUrls && ticket.proofImageUrls.length > 0) && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Proof Images ({ticket.proofImageUrls.length})</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {ticket.proofImageUrls.map((url: string, i: number) => (
+                        <button
+                          key={i}
+                          onClick={() => setImagePreview(url)}
+                          className="rounded-md overflow-visible border border-border hover-elevate"
+                          data-testid={`button-preview-proof-${i}`}
+                        >
+                          <img
+                            src={url}
+                            alt={`Proof ${i + 1}`}
+                            className="w-full h-28 object-cover rounded-md"
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {ticket.proofImageUrl && (!ticket.proofImageUrls || ticket.proofImageUrls.length === 0) && (
                   <div>
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Proof</p>
-                    <a
-                      href={ticket.proofImageUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-sm text-primary inline-flex items-center gap-1"
+                    <button
+                      onClick={() => setImagePreview(ticket.proofImageUrl)}
+                      className="rounded-md overflow-visible border border-border hover-elevate"
+                      data-testid="button-preview-proof-legacy"
                     >
-                      <ExternalLink className="w-3 h-3" />
-                      View Image
-                    </a>
+                      <img
+                        src={ticket.proofImageUrl}
+                        alt="Proof"
+                        className="w-full max-w-xs h-28 object-cover rounded-md"
+                      />
+                    </button>
                   </div>
                 )}
                 {ticket.closedNote && (
@@ -322,22 +406,94 @@ export default function TicketDetail() {
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <Label>Speedtest Result</Label>
-                        <Input
-                          placeholder="https://speedtest.net/..."
-                          value={closeData.speedtestResult}
-                          onChange={e => setCloseData({...closeData, speedtestResult: e.target.value})}
-                          data-testid="input-speedtest"
+                        <Label>Speedtest Screenshot</Label>
+                        <input
+                          ref={speedtestInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleSpeedtestUpload}
+                          className="hidden"
+                          data-testid="input-speedtest-file"
                         />
+                        {closeData.speedtestImageUrl ? (
+                          <div className="relative rounded-md overflow-visible border border-border">
+                            <img
+                              src={closeData.speedtestImageUrl}
+                              alt="Speedtest"
+                              className="w-full h-32 object-cover rounded-md"
+                            />
+                            <Button
+                              variant="secondary"
+                              size="icon"
+                              className="absolute top-1 right-1 h-6 w-6"
+                              onClick={() => setCloseData(prev => ({ ...prev, speedtestImageUrl: "" }))}
+                              data-testid="button-remove-speedtest"
+                            >
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button
+                            variant="outline"
+                            className="w-full gap-2"
+                            onClick={() => speedtestInputRef.current?.click()}
+                            disabled={isUploadingFile}
+                            data-testid="button-upload-speedtest"
+                          >
+                            {isUploadingFile ? (
+                              <><Loader2 className="w-4 h-4 animate-spin" /> Uploading...</>
+                            ) : (
+                              <><Camera className="w-4 h-4" /> Upload Speedtest Screenshot</>
+                            )}
+                          </Button>
+                        )}
                       </div>
                       <div className="space-y-1.5">
-                        <Label>Proof Image URL</Label>
-                        <Input
-                          placeholder="https://..."
-                          value={closeData.proofImageUrl}
-                          onChange={e => setCloseData({...closeData, proofImageUrl: e.target.value})}
-                          data-testid="input-proof"
+                        <Label>Proof Images</Label>
+                        <input
+                          ref={proofInputRef}
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={handleProofUpload}
+                          className="hidden"
+                          data-testid="input-proof-files"
                         />
+                        {closeData.proofImageUrls.length > 0 && (
+                          <div className="grid grid-cols-3 gap-2">
+                            {closeData.proofImageUrls.map((url, i) => (
+                              <div key={i} className="relative rounded-md overflow-visible border border-border">
+                                <img
+                                  src={url}
+                                  alt={`Proof ${i + 1}`}
+                                  className="w-full h-20 object-cover rounded-md"
+                                />
+                                <Button
+                                  variant="secondary"
+                                  size="icon"
+                                  className="absolute top-0.5 right-0.5 h-5 w-5"
+                                  onClick={() => removeProofImage(i)}
+                                  data-testid={`button-remove-proof-${i}`}
+                                >
+                                  <X className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <Button
+                          variant="outline"
+                          className="w-full gap-2"
+                          onClick={() => proofInputRef.current?.click()}
+                          disabled={isUploadingMultiple}
+                          data-testid="button-upload-proof"
+                        >
+                          {isUploadingMultiple ? (
+                            <><Loader2 className="w-4 h-4 animate-spin" /> Uploading...</>
+                          ) : (
+                            <><Upload className="w-4 h-4" /> Upload Proof Images</>
+                          )}
+                        </Button>
                       </div>
                       <div className="space-y-1.5">
                         <Label>Closing Notes</Label>

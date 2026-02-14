@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -71,7 +71,9 @@ export const tickets = pgTable("tickets", {
   descriptionImages: text("description_images").array(),
   actionDescription: text("action_description"),
   proofImageUrl: text("proof_image_url"),
+  proofImageUrls: text("proof_image_urls").array(),
   speedtestResult: text("speedtest_result"),
+  speedtestImageUrl: text("speedtest_image_url"),
   
   slaDeadline: timestamp("sla_deadline").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -80,6 +82,7 @@ export const tickets = pgTable("tickets", {
   closedReason: text("closed_reason"),
   closedNote: text("closed_note"),
   performStatus: text("perform_status"),
+  bonus: numeric("bonus", { precision: 12, scale: 2 }).default("0"),
 });
 
 export const ticketAssignments = pgTable("ticket_assignments", {

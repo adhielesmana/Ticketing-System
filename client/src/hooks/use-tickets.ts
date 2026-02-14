@@ -244,6 +244,70 @@ export function useTechnicianPerformance() {
   });
 }
 
+export function useTechnicianBonusTotal() {
+  return useQuery({
+    queryKey: ["/api/technician/bonus-total"],
+    queryFn: async () => {
+      const res = await fetch("/api/technician/bonus-total", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch bonus total");
+      return res.json() as Promise<{ totalBonus: number; ticketCount: number }>;
+    },
+  });
+}
+
+export function useTicketsReport(filters?: { dateFrom?: string; dateTo?: string; type?: string; status?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.dateFrom) params.set("dateFrom", filters.dateFrom);
+  if (filters?.dateTo) params.set("dateTo", filters.dateTo);
+  if (filters?.type) params.set("type", filters.type);
+  if (filters?.status) params.set("status", filters.status);
+  const qs = params.toString();
+
+  return useQuery({
+    queryKey: ["/api/reports/tickets", filters],
+    queryFn: async () => {
+      const url = qs ? `/api/reports/tickets?${qs}` : "/api/reports/tickets";
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch report");
+      return res.json();
+    },
+  });
+}
+
+export function useBonusSummary(filters?: { dateFrom?: string; dateTo?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.dateFrom) params.set("dateFrom", filters.dateFrom);
+  if (filters?.dateTo) params.set("dateTo", filters.dateTo);
+  const qs = params.toString();
+
+  return useQuery({
+    queryKey: ["/api/reports/bonus-summary", filters],
+    queryFn: async () => {
+      const url = qs ? `/api/reports/bonus-summary?${qs}` : "/api/reports/bonus-summary";
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch bonus summary");
+      return res.json();
+    },
+  });
+}
+
+export function usePerformanceSummary(filters?: { dateFrom?: string; dateTo?: string }) {
+  const params = new URLSearchParams();
+  if (filters?.dateFrom) params.set("dateFrom", filters.dateFrom);
+  if (filters?.dateTo) params.set("dateTo", filters.dateTo);
+  const qs = params.toString();
+
+  return useQuery({
+    queryKey: ["/api/reports/performance-summary", filters],
+    queryFn: async () => {
+      const url = qs ? `/api/reports/performance-summary?${qs}` : "/api/reports/performance-summary";
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch performance summary");
+      return res.json();
+    },
+  });
+}
+
 export function useUploadImages() {
   return useMutation({
     mutationFn: async (files: File[]) => {

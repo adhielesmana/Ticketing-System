@@ -11,8 +11,11 @@ The system enforces SLA deadlines automatically, prevents technician overload wi
 - Ticket lifecycle management (create, assign, start, close, delete)
 - Automatic SLA enforcement with visual countdown timers
 - Dashboard analytics with charts (recharts)
-- Mobile-first technician view
-- S3-compatible file uploads for proof images
+- Mobile-first technician view with bonus tracking
+- Image uploads: speedtest screenshots, multiple proof images, description images, custom logo
+- Bonus system: configurable per ticket type via Settings, auto-zero for overdue
+- Reports: Tickets Report, Bonus Summary, Performance Summary (all with date filters)
+- Settings page for bonus configuration and system preferences
 - Session-based authentication with bcrypt password hashing
 
 ## User Preferences
@@ -42,6 +45,8 @@ The frontend lives in `client/src/`. Path aliases are configured: `@/` maps to `
 - `/tickets` — Ticket list with filters
 - `/tickets/:id` — Ticket detail with assignment/close actions
 - `/users` — User management (admin only)
+- `/settings` — Bonus configuration and system settings (admin only)
+- `/reports` — Tickets, Bonus, and Performance reports (admin only)
 
 **Auth pattern:** The `useAuth` hook queries `/api/auth/me` to check session state. Auth state is cached in React Query. Protected routes redirect to `/login` if unauthenticated.
 
