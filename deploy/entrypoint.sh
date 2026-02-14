@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-DB_USER="${DB_USER:-netguard}"
-DB_NAME="${DB_NAME:-netguard_db}"
-DB_PASS="${DB_PASS:-netguard123}"
+DB_USER="m4xnetPlus"
+DB_NAME="netguard_db"
+DB_PASS='m4xnetPlus2026#!'
 
 export PGDATA="/var/lib/postgresql/data"
 
