@@ -29,6 +29,7 @@ import {
   Zap,
   UserCheck,
   ImageIcon,
+  Map,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useState } from "react";
@@ -50,6 +51,62 @@ const statusColors: Record<string, string> = {
   closed: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
   overdue: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300",
 };
+
+function extractCoordinates(url: string): { lat: number; lng: number } | null {
+  if (!url) return null;
+  const patterns = [
+    /[?&]q=([-\d.]+),([-\d.]+)/,
+    /@([-\d.]+),([-\d.]+)/,
+    /place\/([-\d.]+),([-\d.]+)/,
+    /ll=([-\d.]+),([-\d.]+)/,
+    /center=([-\d.]+),([-\d.]+)/,
+  ];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) {
+      const lat = parseFloat(match[1]);
+      const lng = parseFloat(match[2]);
+      if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        return { lat, lng };
+      }
+    }
+  }
+  return null;
+}
+
+function GoogleMapsPreview({ url }: { url: string }) {
+  const coords = extractCoordinates(url);
+  if (!coords) return null;
+
+  const embedUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${coords.lng - 0.005},${coords.lat - 0.003},${coords.lng + 0.005},${coords.lat + 0.003}&layer=mapnik&marker=${coords.lat},${coords.lng}`;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+        <Map className="w-3 h-3" />
+        Customer Location
+      </div>
+      <div className="rounded-md overflow-hidden border border-border">
+        <iframe
+          src={embedUrl}
+          className="w-full h-48"
+          title="Customer Location Map"
+          data-testid="map-preview"
+        />
+      </div>
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        className="text-xs text-primary inline-flex items-center gap-1"
+        data-testid="link-open-maps"
+      >
+        <ExternalLink className="w-3 h-3" />
+        Open in Google Maps
+      </a>
+    </div>
+  );
+}
 
 export default function TicketDetail() {
   const { id } = useParams();
@@ -111,6 +168,7 @@ export default function TicketDetail() {
   const isAssignedToMe = ticket.assignee?.id === user?.id;
   const canManage = user?.role === 'admin' || user?.role === 'superadmin' || user?.role === 'helpdesk';
   const descImages: string[] = ticket.descriptionImages || [];
+  const hasMapPreview = ticket.customerLocationUrl && extractCoordinates(ticket.customerLocationUrl);
 
   return (
     <div className="container mx-auto p-4 lg:p-6 max-w-4xl space-y-5">
@@ -153,16 +211,22 @@ export default function TicketDetail() {
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Description</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm whitespace-pre-wrap leading-relaxed text-muted-foreground">{ticket.description}</p>
-              
+            <CardContent className="space-y-4">
+              <p className="text-sm whitespace-pre-wrap leading-relaxed text-muted-foreground" data-testid="text-ticket-description">
+                {ticket.description}
+              </p>
+
+              {hasMapPreview && (
+                <GoogleMapsPreview url={ticket.customerLocationUrl} />
+              )}
+
               {descImages.length > 0 && (
-                <div className="space-y-2 pt-2">
+                <div className="space-y-2 pt-1">
                   <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     <ImageIcon className="w-3 h-3" />
                     Attachments ({descImages.length})
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                     {descImages.map((url, i) => (
                       <button
                         key={i}
@@ -173,7 +237,7 @@ export default function TicketDetail() {
                         <img
                           src={url}
                           alt={`Attachment ${i + 1}`}
-                          className="w-full h-24 object-cover rounded-md"
+                          className="w-full h-28 object-cover rounded-md"
                         />
                       </button>
                     ))}
@@ -228,86 +292,72 @@ export default function TicketDetail() {
             </Card>
           )}
 
-          <div className="flex flex-wrap gap-3">
-            {canManage && ticket.status === 'open' && (
-              <div className="flex items-center gap-2 bg-card border border-border p-2 rounded-md">
-                <span className="text-xs font-medium px-2 text-muted-foreground">Assign to:</span>
-                <Select onValueChange={(val) => assignTicket({ id: ticketId, userId: Number(val) })}>
-                  <SelectTrigger className="w-[180px]" data-testid="select-assign-technician">
-                    <SelectValue placeholder="Select Technician" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {technicians?.map((tech: any) => (
-                      <SelectItem key={tech.id} value={String(tech.id)}>{tech.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+          {isAssignedToMe && (ticket.status === 'assigned' || ticket.status === 'in_progress') && (
+            <div className="flex flex-wrap gap-3">
+              {ticket.status === 'assigned' && (
+                <Button onClick={() => startTicket(ticketId)} data-testid="button-start-work">
+                  Start Work
+                </Button>
+              )}
 
-            {isAssignedToMe && ticket.status === 'assigned' && (
-              <Button onClick={() => startTicket(ticketId)} data-testid="button-start-work">
-                Start Work
-              </Button>
-            )}
-
-            {isAssignedToMe && ticket.status === 'in_progress' && (
-              <Dialog open={closeDialogOpen} onOpenChange={setCloseDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button data-testid="button-complete-close">
-                    Complete & Close
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>Close Ticket</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4 py-2">
-                    <div className="space-y-1.5">
-                      <Label>Action Taken</Label>
-                      <Textarea
-                        placeholder="What did you do to resolve this?"
-                        value={closeData.actionDescription}
-                        onChange={e => setCloseData({...closeData, actionDescription: e.target.value})}
-                        data-testid="textarea-action"
-                      />
+              {ticket.status === 'in_progress' && (
+                <Dialog open={closeDialogOpen} onOpenChange={setCloseDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button data-testid="button-complete-close">
+                      Complete & Close
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Close Ticket</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                      <div className="space-y-1.5">
+                        <Label>Action Taken</Label>
+                        <Textarea
+                          placeholder="What did you do to resolve this?"
+                          value={closeData.actionDescription}
+                          onChange={e => setCloseData({...closeData, actionDescription: e.target.value})}
+                          data-testid="textarea-action"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Speedtest Result</Label>
+                        <Input
+                          placeholder="https://speedtest.net/..."
+                          value={closeData.speedtestResult}
+                          onChange={e => setCloseData({...closeData, speedtestResult: e.target.value})}
+                          data-testid="input-speedtest"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Proof Image URL</Label>
+                        <Input
+                          placeholder="https://..."
+                          value={closeData.proofImageUrl}
+                          onChange={e => setCloseData({...closeData, proofImageUrl: e.target.value})}
+                          data-testid="input-proof"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Closing Notes</Label>
+                        <Textarea
+                          placeholder="Any additional notes..."
+                          value={closeData.closedNote}
+                          onChange={e => setCloseData({...closeData, closedNote: e.target.value})}
+                          data-testid="textarea-notes"
+                        />
+                      </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label>Speedtest Result</Label>
-                      <Input
-                        placeholder="https://speedtest.net/..."
-                        value={closeData.speedtestResult}
-                        onChange={e => setCloseData({...closeData, speedtestResult: e.target.value})}
-                        data-testid="input-speedtest"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Proof Image URL</Label>
-                      <Input
-                        placeholder="https://..."
-                        value={closeData.proofImageUrl}
-                        onChange={e => setCloseData({...closeData, proofImageUrl: e.target.value})}
-                        data-testid="input-proof"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>Closing Notes</Label>
-                      <Textarea
-                        placeholder="Any additional notes..."
-                        value={closeData.closedNote}
-                        onChange={e => setCloseData({...closeData, closedNote: e.target.value})}
-                        data-testid="textarea-notes"
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button variant="outline" onClick={() => setCloseDialogOpen(false)}>Cancel</Button>
-                    <Button onClick={handleClose} data-testid="button-submit-close">Submit</Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            )}
-          </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setCloseDialogOpen(false)}>Cancel</Button>
+                      <Button onClick={handleClose} data-testid="button-submit-close">Submit</Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="space-y-4">
@@ -375,6 +425,23 @@ export default function TicketDetail() {
                     </div>
                   )}
                 </div>
+              ) : canManage && ticket.status === 'open' ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 p-2.5 rounded-md">
+                    <AlertOctagon className="w-4 h-4 shrink-0" />
+                    <span className="text-xs font-medium">Unassigned</span>
+                  </div>
+                  <Select onValueChange={(val) => assignTicket({ id: ticketId, userId: Number(val) })}>
+                    <SelectTrigger data-testid="select-assign-technician">
+                      <SelectValue placeholder="Select Technician" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {technicians?.map((tech: any) => (
+                        <SelectItem key={tech.id} value={String(tech.id)}>{tech.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               ) : (
                 <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 p-2.5 rounded-md">
                   <AlertOctagon className="w-4 h-4 shrink-0" />
@@ -389,20 +456,20 @@ export default function TicketDetail() {
               <CardTitle className="text-base">Details</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
-              <div className="flex justify-between text-sm">
+              <div className="flex justify-between gap-1 text-sm">
                 <span className="text-muted-foreground">Created</span>
                 <span>{format(new Date(ticket.createdAt), 'MMM d, yyyy')}</span>
               </div>
-              <div className="flex justify-between text-sm">
+              <div className="flex justify-between gap-1 text-sm">
                 <span className="text-muted-foreground">Time</span>
                 <span>{format(new Date(ticket.createdAt), 'HH:mm')}</span>
               </div>
-              <div className="flex justify-between text-sm">
+              <div className="flex justify-between gap-1 text-sm">
                 <span className="text-muted-foreground">SLA Deadline</span>
                 <span>{format(new Date(ticket.slaDeadline), 'MMM d, HH:mm')}</span>
               </div>
               {ticket.assignedAt && (
-                <div className="flex justify-between text-sm">
+                <div className="flex justify-between gap-1 text-sm">
                   <span className="text-muted-foreground">Assigned At</span>
                   <span>{format(new Date(ticket.assignedAt), 'MMM d, HH:mm')}</span>
                 </div>
