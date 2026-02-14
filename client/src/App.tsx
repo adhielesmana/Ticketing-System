@@ -8,6 +8,7 @@ import { Loader2 } from "lucide-react";
 import { Navigation } from "@/components/Navigation";
 
 import Login from "@/pages/Login";
+import LandingPage from "@/pages/LandingPage";
 import AdminDashboard from "@/pages/AdminDashboard";
 import TechnicianDashboard from "@/pages/TechnicianDashboard";
 import TicketDetail from "@/pages/TicketDetail";
@@ -41,11 +42,8 @@ function ProtectedRoute({ component: Component, ...rest }: any) {
 function Router() {
   return (
     <Switch>
+      <Route path="/" component={LandingPage} />
       <Route path="/login" component={Login} />
-      
-      <Route path="/">
-        {() => <Redirect to="/dashboard/admin" />}
-      </Route>
 
       <Route path="/dashboard/admin">
         {() => <ProtectedRoute component={AdminDashboard} />}
