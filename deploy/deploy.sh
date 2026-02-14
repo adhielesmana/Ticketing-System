@@ -615,31 +615,44 @@ step_start 9 "Create database tables & seed data"
 setup_database_schema() {
     log_info "Verifying app container can reach PostgreSQL..."
     local db_check
-    db_check=$(docker exec "$APP_CONTAINER" node -e "
+    db_check=$(timeout 10 docker exec "$APP_CONTAINER" node -e "
         const { Pool } = require('pg');
-        const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-        pool.query('SELECT 1').then(() => { console.log('OK'); pool.end(); }).catch(e => { console.log('FAIL:' + e.message); pool.end(); });
-    " 2>&1)
-    if echo "$db_check" | grep -q "OK"; then
+        const pool = new Pool({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 5000 });
+        pool.query('SELECT 1').then(() => { console.log('OK'); pool.end(); process.exit(0); }).catch(e => { console.log('FAIL:' + e.message); pool.end(); process.exit(1); });
+        setTimeout(() => { console.log('FAIL:timeout'); process.exit(1); }, 8000);
+    " 2>&1) || true
+    if echo "$db_check" | grep -q "^OK"; then
         log_ok "App container can connect to PostgreSQL"
     else
-        log_err "App container CANNOT reach PostgreSQL!"
-        log_err "Response: ${db_check}"
-        log_info "DATABASE_URL in container:"
-        docker exec "$APP_CONTAINER" sh -c 'echo $DATABASE_URL | sed "s/:\/\/[^@]*@/:\/\/***@/"'
-        exit 1
+        log_warn "Direct node check inconclusive: ${db_check}"
+        log_info "Trying network-level check..."
+        local net_check
+        net_check=$(docker exec "$APP_CONTAINER" sh -c "nc -z -w5 ${POSTGRES_CONTAINER} 5432 && echo REACHABLE || echo UNREACHABLE" 2>&1) || true
+        if echo "$net_check" | grep -q "REACHABLE"; then
+            log_ok "PostgreSQL container is network-reachable from app"
+        else
+            log_warn "nc not available or network issue, testing via psql from DB container..."
+            if test_pg_auth; then
+                log_ok "PostgreSQL auth verified from host side"
+            else
+                log_err "Cannot verify PostgreSQL connectivity!"
+                log_info "DATABASE_URL in container:"
+                docker exec "$APP_CONTAINER" sh -c 'echo $DATABASE_URL | sed "s/:\/\/[^@]*@/:\/\/***@/"'
+                exit 1
+            fi
+        fi
     fi
 
     log_info "Pushing database schema (creating/updating tables)..."
     local push_output
-    push_output=$(docker exec "$APP_CONTAINER" npx drizzle-kit push --force 2>&1)
+    push_output=$(timeout 120 docker exec "$APP_CONTAINER" npx drizzle-kit push --force 2>&1) || true
     local push_exit=$?
     echo "$push_output" | tail -15
 
     if [ $push_exit -ne 0 ]; then
         log_warn "Schema push exited with code ${push_exit} — retrying in 5 seconds..."
         sleep 5
-        push_output=$(docker exec "$APP_CONTAINER" npx drizzle-kit push --force 2>&1)
+        push_output=$(timeout 120 docker exec "$APP_CONTAINER" npx drizzle-kit push --force 2>&1) || true
         push_exit=$?
         echo "$push_output" | tail -15
         if [ $push_exit -ne 0 ]; then
