@@ -306,19 +306,19 @@ async function seedDatabase() {
     name: "Adhie Lesmana",
     email: "adhielesmana@isp.com",
     username: "adhielesmana",
-    password: passwordHash, // Admin!123# hashed
+    password: passwordHash,
     role: UserRole.SUPERADMIN,
     phone: "1234567890",
     isBackboneSpecialist: false,
     isActive: true,
   });
 
-  // Also create a test tech if needed or just use the tech1 below
+  // Technician
   const tech1 = await storage.createUser({
     name: "John Tech",
     email: "tech1@isp.com",
     username: "tech1",
-    password: passwordHash, // Admin!123# hashed
+    password: passwordHash,
     role: UserRole.TECHNICIAN,
     phone: "5556667777",
     isBackboneSpecialist: false,
