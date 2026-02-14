@@ -158,6 +158,7 @@ docker run -d \
     --network "$DOCKER_NETWORK" \
     --restart unless-stopped \
     --env-file "${INSTALL_DIR}/.env" \
+    -e TZ=Asia/Jakarta \
     -p "127.0.0.1:${APP_PORT}:3000" \
     -v "${UPLOADS_VOLUME}:/app/uploads" \
     "$APP_NAME"

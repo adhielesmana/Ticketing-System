@@ -336,9 +336,12 @@ create_pg_container() {
         -e POSTGRES_DB="$DB_NAME" \
         -e POSTGRES_USER="$DB_USER" \
         -e POSTGRES_PASSWORD="$DB_PASS" \
+        -e TZ=Asia/Jakarta \
+        -e PGTZ=Asia/Jakarta \
         -p "127.0.0.1:${DB_PORT}:5432" \
         -v "${POSTGRES_VOLUME}:/var/lib/postgresql/data" \
-        postgres:16-alpine
+        postgres:16-alpine \
+        -c timezone=Asia/Jakarta
 
     wait_for_pg
     log_ok "PostgreSQL container created and ready"
@@ -539,6 +542,7 @@ ENVFILE
         --network "$DOCKER_NETWORK" \
         --restart unless-stopped \
         --env-file "${INSTALL_DIR}/.env" \
+        -e TZ=Asia/Jakarta \
         -p "127.0.0.1:${APP_PORT}:3000" \
         -v "${UPLOADS_VOLUME}:/app/uploads" \
         "$APP_NAME"
