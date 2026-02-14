@@ -613,9 +613,44 @@ step_start 9 "Create database tables & seed data"
 # 8. DATABASE SCHEMA & SEED
 #====================================================================
 setup_database_schema() {
+    log_info "Verifying app container can reach PostgreSQL..."
+    local db_check
+    db_check=$(docker exec "$APP_CONTAINER" node -e "
+        const { Pool } = require('pg');
+        const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+        pool.query('SELECT 1').then(() => { console.log('OK'); pool.end(); }).catch(e => { console.log('FAIL:' + e.message); pool.end(); });
+    " 2>&1)
+    if echo "$db_check" | grep -q "OK"; then
+        log_ok "App container can connect to PostgreSQL"
+    else
+        log_err "App container CANNOT reach PostgreSQL!"
+        log_err "Response: ${db_check}"
+        log_info "DATABASE_URL in container:"
+        docker exec "$APP_CONTAINER" sh -c 'echo $DATABASE_URL | sed "s/:\/\/[^@]*@/:\/\/***@/"'
+        exit 1
+    fi
+
     log_info "Pushing database schema (creating/updating tables)..."
-    docker exec "$APP_CONTAINER" npx drizzle-kit push --force 2>&1 | tail -10
+    local push_output
+    push_output=$(docker exec "$APP_CONTAINER" npx drizzle-kit push --force 2>&1)
+    local push_exit=$?
+    echo "$push_output" | tail -15
+
+    if [ $push_exit -ne 0 ]; then
+        log_warn "Schema push exited with code ${push_exit} — retrying in 5 seconds..."
+        sleep 5
+        push_output=$(docker exec "$APP_CONTAINER" npx drizzle-kit push --force 2>&1)
+        push_exit=$?
+        echo "$push_output" | tail -15
+        if [ $push_exit -ne 0 ]; then
+            log_err "Schema push failed after retry. Output:"
+            echo "$push_output"
+            exit 1
+        fi
+    fi
     log_ok "Schema push complete"
+
+    sleep 3
 
     log_info "Verifying tables were created..."
     local tables
@@ -624,8 +659,17 @@ setup_database_schema() {
         "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename;" 2>/dev/null)
 
     if [ -z "$tables" ]; then
-        log_err "No tables found in database after schema push!"
-        exit 1
+        log_warn "No tables found — app may create them on startup. Waiting 10 seconds..."
+        sleep 10
+        tables=$(docker exec -e PGPASSWORD="$DB_PASS" "$POSTGRES_CONTAINER" \
+            psql -h 127.0.0.1 -U "$DB_USER" -d "$DB_NAME" -tAc \
+            "SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename;" 2>/dev/null)
+        if [ -z "$tables" ]; then
+            log_err "No tables found in database after schema push and wait!"
+            log_info "Debug: checking app container logs..."
+            docker logs "$APP_CONTAINER" --tail 30
+            exit 1
+        fi
     fi
 
     local expected_tables=("users" "tickets" "ticket_assignments" "performance_logs" "settings")
