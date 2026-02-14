@@ -236,13 +236,17 @@ test_pg_auth() {
 
 destroy_pg() {
     log_warn "Removing existing PostgreSQL container and data volume..."
+    docker stop "$APP_CONTAINER" 2>/dev/null || true
+    docker rm -f "$APP_CONTAINER" 2>/dev/null || true
     docker stop "$POSTGRES_CONTAINER" 2>/dev/null || true
     docker rm -f "$POSTGRES_CONTAINER" 2>/dev/null || true
+    sleep 2
     docker volume rm -f "$POSTGRES_VOLUME" 2>/dev/null || true
     rm -f "${INSTALL_DIR}/.credentials" 2>/dev/null || true
+    rm -f "${INSTALL_DIR}/.env" 2>/dev/null || true
     DB_PASS="$(openssl rand -hex 16)"
     SESSION_SECRET="${SESSION_SECRET:-$(openssl rand -hex 32)}"
-    log_ok "Old PostgreSQL data removed, new credentials generated"
+    log_ok "Old containers and data removed, new credentials generated"
 }
 
 create_pg_container() {
@@ -326,15 +330,6 @@ build_app() {
 
     cd "$INSTALL_DIR"
 
-    cat > .env <<ENVFILE
-DATABASE_URL=postgresql://${DB_USER}:${DB_PASS}@${POSTGRES_CONTAINER}:5432/${DB_NAME}
-SESSION_SECRET=${SESSION_SECRET}
-NODE_ENV=production
-PORT=3000
-ENVFILE
-    chmod 600 .env
-    log_ok "Environment file created with restricted permissions (600)"
-
     cat > .dockerignore <<DOCKERIGNORE
 node_modules
 .git
@@ -364,6 +359,16 @@ run_app_container() {
     elif docker ps -a --format '{{.Names}}' | grep -qw "$APP_CONTAINER"; then
         docker rm "$APP_CONTAINER" 2>/dev/null || true
     fi
+
+    log_info "Writing environment file with current credentials..."
+    cat > "${INSTALL_DIR}/.env" <<ENVFILE
+DATABASE_URL=postgresql://${DB_USER}:${DB_PASS}@${POSTGRES_CONTAINER}:5432/${DB_NAME}
+SESSION_SECRET=${SESSION_SECRET}
+NODE_ENV=production
+PORT=3000
+ENVFILE
+    chmod 600 "${INSTALL_DIR}/.env"
+    log_ok "Environment file written (chmod 600)"
 
     if ! docker volume inspect "$UPLOADS_VOLUME" &>/dev/null; then
         docker volume create "$UPLOADS_VOLUME"
