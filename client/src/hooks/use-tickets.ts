@@ -226,6 +226,7 @@ export function useCloseTicket() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.tickets.list.path] });
       queryClient.invalidateQueries({ queryKey: [api.performance.me.path] });
+      queryClient.invalidateQueries({ queryKey: ["/api/technician/bonus-total"] });
       toast({ title: "Closed", description: "Ticket closed successfully" });
     },
   });
