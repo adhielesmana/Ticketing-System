@@ -39,7 +39,7 @@ export function TicketCard({ ticket, compact = false }: TicketCardProps) {
   if (compact) {
     return (
       <Link href={`/tickets/${ticket.id}`}>
-        <div className="flex items-start gap-3 p-3 rounded-md hover-elevate active-elevate-2 cursor-pointer" data-testid={`card-ticket-compact-${ticket.id}`}>
+        <div className="flex items-start gap-3 p-3 pb-[5px] rounded-md hover-elevate active-elevate-2 cursor-pointer" data-testid={`card-ticket-compact-${ticket.id}`}>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
               <span className="font-mono text-xs text-muted-foreground">#{ticket.ticketIdCustom || ticket.ticketNumber}</span>
