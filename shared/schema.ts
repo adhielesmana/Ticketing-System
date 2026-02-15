@@ -89,6 +89,8 @@ export const tickets = pgTable("tickets", {
   closedNote: text("closed_note"),
   performStatus: text("perform_status"),
   bonus: numeric("bonus", { precision: 12, scale: 2 }).default("0"),
+  ticketFee: numeric("ticket_fee", { precision: 12, scale: 2 }).default("0"),
+  transportFee: numeric("transport_fee", { precision: 12, scale: 2 }).default("0"),
   rejectionReason: text("rejection_reason"),
 });
 

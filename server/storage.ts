@@ -55,7 +55,7 @@ export interface IStorage {
   getTicketsReport(filters?: { dateFrom?: string; dateTo?: string; type?: string; status?: string }): Promise<any[]>;
   getBonusSummary(filters?: { dateFrom?: string; dateTo?: string }): Promise<any[]>;
   getPerformanceSummary(filters?: { dateFrom?: string; dateTo?: string }): Promise<any[]>;
-  getTechnicianBonusTotal(userId: number): Promise<{ totalBonus: number; ticketCount: number }>;
+  getTechnicianBonusTotal(userId: number): Promise<{ totalBonus: number; ticketCount: number; totalTicketFee: number; totalTransportFee: number }>;
 
   getDashboardStats(): Promise<{
     totalOpen: number;
@@ -550,10 +550,26 @@ export class DatabaseStorage implements IStorage {
     const result: any[] = [];
     for (const ticket of closedTickets) {
       const assignees = await this.getAssigneesForTicket(ticket.id);
-      result.push({
-        ...ticket,
-        assignees: assignees.map(a => ({ id: a.id, name: a.name })),
-      });
+      const assigneeList = assignees.map(a => ({ id: a.id, name: a.name }));
+      for (const tech of assigneeList) {
+        result.push({
+          ticketId: ticket.id,
+          ticketNumber: ticket.ticketNumber,
+          ticketIdCustom: ticket.ticketIdCustom,
+          title: ticket.title,
+          type: ticket.type,
+          customerName: ticket.customerName,
+          performStatus: ticket.performStatus,
+          closedAt: ticket.closedAt,
+          technicianId: tech.id,
+          technicianName: tech.name,
+          ticketFee: ticket.ticketFee || "0",
+          transportFee: ticket.transportFee || "0",
+          bonus: ticket.bonus || "0",
+          assigneeCount: assigneeList.length,
+          totalTicketCost: (parseFloat(ticket.bonus || "0") * assigneeList.length).toFixed(2),
+        });
+      }
     }
     return result;
   }
@@ -584,6 +600,8 @@ export class DatabaseStorage implements IStorage {
 
       const [bonusResult] = await db.select({
         totalBonus: sql<number>`coalesce(sum(${tickets.bonus}::numeric), 0)`,
+        totalTicketFee: sql<number>`coalesce(sum(${tickets.ticketFee}::numeric), 0)`,
+        totalTransportFee: sql<number>`coalesce(sum(${tickets.transportFee}::numeric), 0)`,
       }).from(tickets).where(and(...bonusConditions));
 
       const totalCompleted = Number(stats.totalCompleted) || 0;
@@ -597,14 +615,18 @@ export class DatabaseStorage implements IStorage {
         avgResolutionMinutes: Math.round(Number(stats.avgResolutionMinutes) || 0),
         totalOverdue: Number(stats.totalOverdue) || 0,
         totalBonus: Number(bonusResult.totalBonus) || 0,
+        totalTicketFee: Number(bonusResult.totalTicketFee) || 0,
+        totalTransportFee: Number(bonusResult.totalTransportFee) || 0,
       });
     }
     return result;
   }
 
-  async getTechnicianBonusTotal(userId: number): Promise<{ totalBonus: number; ticketCount: number }> {
+  async getTechnicianBonusTotal(userId: number): Promise<{ totalBonus: number; ticketCount: number; totalTicketFee: number; totalTransportFee: number }> {
     const [result] = await db.select({
       totalBonus: sql<number>`coalesce(sum(${tickets.bonus}::numeric), 0)`,
+      totalTicketFee: sql<number>`coalesce(sum(${tickets.ticketFee}::numeric), 0)`,
+      totalTransportFee: sql<number>`coalesce(sum(${tickets.transportFee}::numeric), 0)`,
       ticketCount: sql<number>`count(*)`,
     }).from(tickets)
       .innerJoin(ticketAssignments, eq(tickets.id, ticketAssignments.ticketId))
@@ -617,6 +639,8 @@ export class DatabaseStorage implements IStorage {
     return {
       totalBonus: Number(result.totalBonus) || 0,
       ticketCount: Number(result.ticketCount) || 0,
+      totalTicketFee: Number(result.totalTicketFee) || 0,
+      totalTransportFee: Number(result.totalTransportFee) || 0,
     };
   }
 

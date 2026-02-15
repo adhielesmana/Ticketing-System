@@ -28,6 +28,8 @@ import {
   Clock,
   TrendingUp,
   Users,
+  Truck,
+  Ticket,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -83,9 +85,23 @@ export default function ReportsPage() {
     return <Redirect to="/dashboard/technician" />;
   }
 
-  const totalBonusPaid = bonusData?.reduce((sum: number, t: any) => sum + parseFloat(t.bonus || "0"), 0) || 0;
-  const totalTicketsClosed = bonusData?.length || 0;
-  const overdueTickets = bonusData?.filter((t: any) => t.performStatus === "not_perform").length || 0;
+  const totalBonusPaid = bonusData?.reduce((sum: number, row: any) => sum + parseFloat(row.bonus || "0"), 0) || 0;
+  const uniqueTickets = new Set(bonusData?.map((r: any) => r.ticketId) || []);
+  const totalTicketsClosed = uniqueTickets.size;
+  const overdueRows = bonusData?.filter((r: any) => r.performStatus === "not_perform") || [];
+  const uniqueOverdueTickets = new Set(overdueRows.map((r: any) => r.ticketId));
+  const overdueTickets = uniqueOverdueTickets.size;
+
+  const techBonusSummary: Record<number, { name: string; ticketFee: number; transportFee: number; totalBonus: number; ticketCount: number }> = {};
+  bonusData?.forEach((row: any) => {
+    if (!techBonusSummary[row.technicianId]) {
+      techBonusSummary[row.technicianId] = { name: row.technicianName, ticketFee: 0, transportFee: 0, totalBonus: 0, ticketCount: 0 };
+    }
+    techBonusSummary[row.technicianId].ticketFee += parseFloat(row.ticketFee || "0");
+    techBonusSummary[row.technicianId].transportFee += parseFloat(row.transportFee || "0");
+    techBonusSummary[row.technicianId].totalBonus += parseFloat(row.bonus || "0");
+    techBonusSummary[row.technicianId].ticketCount += 1;
+  });
 
   return (
     <div className="container mx-auto px-4 py-6 space-y-6">
@@ -194,7 +210,9 @@ export default function ReportsPage() {
                         <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs">Status</th>
                         <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs">Customer</th>
                         <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs">Assignees</th>
-                        <th className="px-4 py-2.5 text-right font-medium text-muted-foreground text-xs">Bonus</th>
+                        <th className="px-4 py-2.5 text-right font-medium text-muted-foreground text-xs">Ticket Fee</th>
+                        <th className="px-4 py-2.5 text-right font-medium text-muted-foreground text-xs">Transport</th>
+                        <th className="px-4 py-2.5 text-right font-medium text-muted-foreground text-xs">Bonus/Tech</th>
                         <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs">Created</th>
                       </tr>
                     </thead>
@@ -202,7 +220,7 @@ export default function ReportsPage() {
                       {ticketsData?.map((ticket: any) => (
                         <tr key={ticket.id} className="border-b border-border last:border-0" data-testid={`row-ticket-${ticket.id}`}>
                           <td className="px-4 py-2.5">
-                            <p className="font-mono text-xs">{ticket.ticketNumber}</p>
+                            <p className="font-mono text-xs">{ticket.ticketIdCustom || ticket.ticketNumber}</p>
                             <p className="text-xs text-muted-foreground truncate max-w-[150px]">{ticket.title}</p>
                           </td>
                           <td className="px-4 py-2.5">
@@ -218,7 +236,13 @@ export default function ReportsPage() {
                             {ticket.assignees?.map((a: any) => a.name).join(', ') || '-'}
                           </td>
                           <td className="px-4 py-2.5 text-right font-mono text-xs">
-                            {formatCurrency(ticket.bonus)}
+                            {formatCurrency(ticket.ticketFee || 0)}
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-mono text-xs">
+                            {formatCurrency(ticket.transportFee || 0)}
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-mono text-xs font-semibold">
+                            {formatCurrency(ticket.bonus || 0)}
                           </td>
                           <td className="px-4 py-2.5 text-xs">
                             {format(new Date(ticket.createdAt), 'MMM d, yyyy')}
@@ -227,7 +251,7 @@ export default function ReportsPage() {
                       ))}
                       {(!ticketsData || ticketsData.length === 0) && (
                         <tr>
-                          <td colSpan={7} className="px-4 py-8 text-center text-muted-foreground text-sm">
+                          <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground text-sm">
                             No tickets found
                           </td>
                         </tr>
@@ -294,6 +318,47 @@ export default function ReportsPage() {
             </Card>
           </div>
 
+          {Object.keys(techBonusSummary).length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Per Technician Summary</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm" data-testid="table-tech-bonus-summary">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/30">
+                        <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs">Technician</th>
+                        <th className="px-4 py-2.5 text-center font-medium text-muted-foreground text-xs">Tickets</th>
+                        <th className="px-4 py-2.5 text-right font-medium text-muted-foreground text-xs">Ticket Fee</th>
+                        <th className="px-4 py-2.5 text-right font-medium text-muted-foreground text-xs">Transport Fee</th>
+                        <th className="px-4 py-2.5 text-right font-medium text-muted-foreground text-xs">Total Bonus</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {Object.entries(techBonusSummary).map(([id, tech]) => (
+                        <tr key={id} className="border-b border-border last:border-0" data-testid={`row-tech-summary-${id}`}>
+                          <td className="px-4 py-2.5">
+                            <div className="flex items-center gap-2">
+                              <Users className="w-4 h-4 text-muted-foreground" />
+                              <span className="font-medium text-sm">{tech.name}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-2.5 text-center font-bold">{tech.ticketCount}</td>
+                          <td className="px-4 py-2.5 text-right font-mono text-xs">{formatCurrency(tech.ticketFee)}</td>
+                          <td className="px-4 py-2.5 text-right font-mono text-xs">{formatCurrency(tech.transportFee)}</td>
+                          <td className="px-4 py-2.5 text-right font-mono text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                            {formatCurrency(tech.totalBonus)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {bonusLoading ? (
             <div className="space-y-3">
               {[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full rounded-md" />)}
@@ -301,7 +366,7 @@ export default function ReportsPage() {
           ) : (
             <Card>
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">Bonus Details</CardTitle>
+                <CardTitle className="text-base">Bonus Details (Per Technician)</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <div className="overflow-x-auto">
@@ -311,40 +376,50 @@ export default function ReportsPage() {
                         <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs">Ticket</th>
                         <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs">Type</th>
                         <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs">SLA</th>
-                        <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs">Technicians</th>
-                        <th className="px-4 py-2.5 text-right font-medium text-muted-foreground text-xs">Bonus</th>
+                        <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs">Technician</th>
+                        <th className="px-4 py-2.5 text-right font-medium text-muted-foreground text-xs">Ticket Fee</th>
+                        <th className="px-4 py-2.5 text-right font-medium text-muted-foreground text-xs">Transport</th>
+                        <th className="px-4 py-2.5 text-right font-medium text-muted-foreground text-xs">Total</th>
                         <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs">Closed</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {bonusData?.map((ticket: any) => (
-                        <tr key={ticket.id} className="border-b border-border last:border-0" data-testid={`row-bonus-${ticket.id}`}>
+                      {bonusData?.map((row: any, idx: number) => (
+                        <tr key={`${row.ticketId}-${row.technicianId}-${idx}`} className="border-b border-border last:border-0" data-testid={`row-bonus-${row.ticketId}-${row.technicianId}`}>
                           <td className="px-4 py-2.5">
-                            <p className="font-mono text-xs">{ticket.ticketNumber}</p>
-                            <p className="text-xs text-muted-foreground truncate max-w-[150px]">{ticket.title}</p>
+                            <p className="font-mono text-xs">{row.ticketIdCustom || row.ticketNumber}</p>
+                            <p className="text-xs text-muted-foreground truncate max-w-[150px]">{row.title}</p>
                           </td>
-                          <td className="px-4 py-2.5 text-xs capitalize">{ticket.type.replace(/_/g, ' ')}</td>
+                          <td className="px-4 py-2.5 text-xs capitalize">{row.type.replace(/_/g, ' ')}</td>
                           <td className="px-4 py-2.5">
-                            <Badge className={`text-[10px] ${ticket.performStatus === 'perform' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300'}`}>
-                              {ticket.performStatus === 'perform' ? 'On Time' : 'Overdue'}
+                            <Badge className={`text-[10px] ${row.performStatus === 'perform' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300'}`}>
+                              {row.performStatus === 'perform' ? 'On Time' : 'Overdue'}
                             </Badge>
                           </td>
-                          <td className="px-4 py-2.5 text-xs">
-                            {ticket.assignees?.map((a: any) => a.name).join(', ') || '-'}
+                          <td className="px-4 py-2.5 text-xs font-medium">{row.technicianName}</td>
+                          <td className="px-4 py-2.5 text-right font-mono text-xs">
+                            <span className={parseFloat(row.ticketFee || "0") === 0 ? "text-muted-foreground" : ""}>
+                              {formatCurrency(row.ticketFee)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-mono text-xs">
+                            <span className={parseFloat(row.transportFee || "0") === 0 ? "text-muted-foreground" : ""}>
+                              {formatCurrency(row.transportFee)}
+                            </span>
                           </td>
                           <td className="px-4 py-2.5 text-right font-mono text-xs font-semibold">
-                            <span className={parseFloat(ticket.bonus || "0") === 0 ? "text-muted-foreground" : "text-emerald-600 dark:text-emerald-400"}>
-                              {formatCurrency(ticket.bonus)}
+                            <span className={parseFloat(row.bonus || "0") === 0 ? "text-muted-foreground" : "text-emerald-600 dark:text-emerald-400"}>
+                              {formatCurrency(row.bonus)}
                             </span>
                           </td>
                           <td className="px-4 py-2.5 text-xs">
-                            {ticket.closedAt ? format(new Date(ticket.closedAt), 'MMM d, yyyy') : '-'}
+                            {row.closedAt ? format(new Date(row.closedAt), 'MMM d, yyyy') : '-'}
                           </td>
                         </tr>
                       ))}
                       {(!bonusData || bonusData.length === 0) && (
                         <tr>
-                          <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground text-sm">
+                          <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground text-sm">
                             No closed tickets found
                           </td>
                         </tr>
@@ -406,6 +481,8 @@ export default function ReportsPage() {
                         <th className="px-4 py-2.5 text-center font-medium text-muted-foreground text-xs">SLA Rate</th>
                         <th className="px-4 py-2.5 text-center font-medium text-muted-foreground text-xs">Avg Time</th>
                         <th className="px-4 py-2.5 text-center font-medium text-muted-foreground text-xs">Overdue</th>
+                        <th className="px-4 py-2.5 text-right font-medium text-muted-foreground text-xs">Ticket Fee</th>
+                        <th className="px-4 py-2.5 text-right font-medium text-muted-foreground text-xs">Transport</th>
                         <th className="px-4 py-2.5 text-right font-medium text-muted-foreground text-xs">Total Bonus</th>
                       </tr>
                     </thead>
@@ -436,6 +513,12 @@ export default function ReportsPage() {
                               {tech.totalOverdue}
                             </span>
                           </td>
+                          <td className="px-4 py-2.5 text-right font-mono text-xs">
+                            {formatCurrency(tech.totalTicketFee || 0)}
+                          </td>
+                          <td className="px-4 py-2.5 text-right font-mono text-xs">
+                            {formatCurrency(tech.totalTransportFee || 0)}
+                          </td>
                           <td className="px-4 py-2.5 text-right font-mono text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                             {formatCurrency(tech.totalBonus)}
                           </td>
@@ -443,7 +526,7 @@ export default function ReportsPage() {
                       ))}
                       {(!perfData || perfData.length === 0) && (
                         <tr>
-                          <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground text-sm">
+                          <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground text-sm">
                             No performance data found
                           </td>
                         </tr>

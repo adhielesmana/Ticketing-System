@@ -254,9 +254,11 @@ export async function registerRoutes(
 
       const ticketNumber = `INC-${Date.now().toString().slice(-6)}`;
 
-      const bonusSettingKey = `bonus_${input.type}`;
-      const bonusSetting = await storage.getSetting(bonusSettingKey);
-      const bonus = bonusSetting?.value || "0";
+      const ticketFeeSetting = await storage.getSetting(`ticket_fee_${input.type}`);
+      const transportFeeSetting = await storage.getSetting(`transport_fee_${input.type}`);
+      const ticketFee = ticketFeeSetting?.value || "0";
+      const transportFee = transportFeeSetting?.value || "0";
+      const bonus = (parseFloat(ticketFee) + parseFloat(transportFee)).toFixed(2);
 
       let area: string | null = null;
       const locationUrl = input.customerLocationUrl || "";
@@ -273,6 +275,8 @@ export async function registerRoutes(
         customerLocationUrl: locationUrl,
         area,
         bonus,
+        ticketFee,
+        transportFee,
       });
 
       res.status(201).json(ticket);
@@ -490,11 +494,13 @@ export async function registerRoutes(
       durationMinutes,
       performStatus: isWithinSLA ? "perform" : "not_perform",
       bonus: isWithinSLA ? existingTicket.bonus : "0",
+      ticketFee: isWithinSLA ? existingTicket.ticketFee : "0",
+      transportFee: isWithinSLA ? existingTicket.transportFee : "0",
       ...input
     });
 
-    const assignee = await storage.getAssigneeForTicket(ticketId);
-    if (assignee) {
+    const allAssignees = await storage.getAssigneesForTicket(ticketId);
+    for (const assignee of allAssignees) {
       await storage.logPerformance({
         userId: assignee.id,
         ticketId: ticket.id,
