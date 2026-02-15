@@ -229,12 +229,8 @@ export async function registerRoutes(
 
     try {
       const existingAssignees = await storage.getAssigneesForTicket(ticketId);
-      if (existingAssignees.length > 0) {
-        const freeTechs = await storage.getFreeTechnicians();
-        const isFree = freeTechs.some((t: any) => t.id === userId);
-        if (!isFree) {
-          return res.status(400).json({ message: "This technician already has active tickets and cannot be added as a second assignee" });
-        }
+      if (existingAssignees.some((a: any) => a.userId === userId || a.id === userId)) {
+        return res.status(400).json({ message: "This technician is already assigned to this ticket" });
       }
 
       await storage.assignTicket(ticketId, userId, "manual");

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useTickets, useDeleteTicket, useUpdateTicket, useAssignTicket, useFreeTechnicians } from "@/hooks/use-tickets";
+import { useTickets, useDeleteTicket, useUpdateTicket, useAssignTicket } from "@/hooks/use-tickets";
 import { useUsers } from "@/hooks/use-users";
 import { useAuth } from "@/hooks/use-auth";
 import { CreateTicketDialog } from "@/components/CreateTicketDialog";
@@ -55,7 +55,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useForm } from "react-hook-form";
 import { insertTicketSchema, TicketTypeValues, TicketPriorityValues, TicketStatusValues, UserRole } from "@shared/schema";
 import { format } from "date-fns";
-import { Search, Eye, Pencil, Trash2, UserPlus, Ticket } from "lucide-react";
+import { Search, Eye, Pencil, Trash2, UserPlus, Ticket, Check, Loader2 } from "lucide-react";
 
 const priorityColors: Record<string, string> = {
   low: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
@@ -95,12 +95,11 @@ export default function TicketsPage() {
   const [editTicket, setEditTicket] = useState<any>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [assignDialogTicket, setAssignDialogTicket] = useState<any>(null);
+  const [selectedTechIds, setSelectedTechIds] = useState<number[]>([]);
+  const [isAssigning, setIsAssigning] = useState(false);
 
-  const isAddingSecond = assignDialogTicket?.assignees?.length > 0;
-  const { data: freeTechnicians } = useFreeTechnicians(
-    isAddingSecond ? assignDialogTicket?.assignees?.[0]?.id : undefined,
-    isAddingSecond
-  );
+  const existingAssigneeCount = assignDialogTicket?.assignees?.length || 0;
+  const slotsAvailable = 2 - existingAssigneeCount;
 
   const canManage = user?.role === UserRole.SUPERADMIN || user?.role === UserRole.ADMIN;
   const canAssign = canManage || user?.role === UserRole.HELPDESK;
@@ -150,12 +149,42 @@ export default function TicketsPage() {
     }
   }
 
-  function handleAssign(userId: number) {
-    if (assignDialogTicket) {
-      assignTicket(
-        { id: assignDialogTicket.id, userId },
-        { onSuccess: () => setAssignDialogTicket(null) }
-      );
+  function toggleTechSelection(techId: number) {
+    setSelectedTechIds((prev) => {
+      if (prev.includes(techId)) {
+        return prev.filter((id) => id !== techId);
+      }
+      if (prev.length >= slotsAvailable) {
+        return [...prev.slice(1), techId];
+      }
+      return [...prev, techId];
+    });
+  }
+
+  function openAssignDialog(ticket: any) {
+    setSelectedTechIds([]);
+    setAssignDialogTicket(ticket);
+  }
+
+  async function handleAssignConfirm() {
+    if (!assignDialogTicket || selectedTechIds.length === 0) return;
+    setIsAssigning(true);
+    try {
+      for (const userId of selectedTechIds) {
+        await new Promise<void>((resolve, reject) => {
+          assignTicket(
+            { id: assignDialogTicket.id, userId },
+            {
+              onSuccess: () => resolve(),
+              onError: (err: any) => reject(err),
+            }
+          );
+        });
+      }
+    } finally {
+      setIsAssigning(false);
+      setAssignDialogTicket(null);
+      setSelectedTechIds([]);
     }
   }
 
@@ -320,7 +349,7 @@ export default function TicketsPage() {
                             <Button
                               size="icon"
                               variant="ghost"
-                              onClick={() => setAssignDialogTicket(ticket)}
+                              onClick={() => openAssignDialog(ticket)}
                               data-testid={`button-assign-ticket-${ticket.id}`}
                             >
                               <UserPlus className="w-3.5 h-3.5" />
@@ -424,53 +453,86 @@ export default function TicketsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!assignDialogTicket} onOpenChange={(open) => !open && setAssignDialogTicket(null)}>
+      <Dialog open={!!assignDialogTicket} onOpenChange={(open) => { if (!open) { setAssignDialogTicket(null); setSelectedTechIds([]); } }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>
-              {assignDialogTicket?.assignees?.length > 0 ? "Add Second Technician" : "Assign Ticket"}
+              {existingAssigneeCount > 0
+                ? `Add Technician (${existingAssigneeCount}/2 assigned)`
+                : "Assign Technicians"}
             </DialogTitle>
           </DialogHeader>
-          {assignDialogTicket?.assignees?.length > 0 && (
+          {existingAssigneeCount > 0 && (
             <div className="text-xs text-muted-foreground pb-1">
               Already assigned: {assignDialogTicket.assignees.map((a: any) => a.name).join(", ")}
             </div>
           )}
-          <div className="space-y-2 py-2">
+          <p className="text-xs text-muted-foreground">
+            Select up to {slotsAvailable} technician{slotsAvailable > 1 ? "s" : ""}
+            {selectedTechIds.length > 0 && ` — ${selectedTechIds.length} selected`}
+          </p>
+          <div className="space-y-2 py-2 max-h-[50vh] overflow-y-auto">
             {(() => {
-              const techList = isAddingSecond
-                ? (freeTechnicians || []).filter((tech: any) => !assignDialogTicket?.assignees?.some((a: any) => a.id === tech.id))
-                : technicians || [];
+              const existingIds = (assignDialogTicket?.assignees || []).map((a: any) => a.id);
+              const techList = (technicians || []).filter((tech: any) => !existingIds.includes(tech.id));
               if (techList.length === 0) {
                 return (
                   <p className="text-sm text-muted-foreground text-center py-4">
-                    {isAddingSecond ? "No available (free) technicians to add." : "No technicians available."}
+                    No technicians available.
                   </p>
                 );
               }
-              return techList.map((tech: any) => (
-                <Button
-                  key={tech.id}
-                  variant="outline"
-                  className="w-full justify-start gap-3"
-                  onClick={() => handleAssign(tech.id)}
-                  data-testid={`button-assign-to-${tech.id}`}
-                >
-                  <Avatar className="h-7 w-7">
-                    <AvatarFallback className="text-xs bg-muted font-medium">
-                      {tech.name.charAt(0)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="text-left">
-                    <p className="text-sm font-medium">{tech.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {tech.isBackboneSpecialist ? "Backbone Specialist" : "General Technician"}
-                    </p>
-                  </div>
-                </Button>
-              ));
+              return techList.map((tech: any) => {
+                const isSelected = selectedTechIds.includes(tech.id);
+                return (
+                  <Button
+                    key={tech.id}
+                    variant={isSelected ? "default" : "outline"}
+                    className="w-full justify-start gap-3"
+                    onClick={() => toggleTechSelection(tech.id)}
+                    data-testid={`button-assign-to-${tech.id}`}
+                  >
+                    <div className="flex items-center justify-center h-7 w-7 shrink-0">
+                      {isSelected ? (
+                        <Check className="w-4 h-4" />
+                      ) : (
+                        <Avatar className="h-7 w-7">
+                          <AvatarFallback className="text-xs bg-muted font-medium">
+                            {tech.name.charAt(0)}
+                          </AvatarFallback>
+                        </Avatar>
+                      )}
+                    </div>
+                    <div className="text-left">
+                      <p className="text-sm font-medium">{tech.name}</p>
+                      <p className="text-xs opacity-70">
+                        {tech.isBackboneSpecialist ? "Backbone Specialist" : "General Technician"}
+                      </p>
+                    </div>
+                  </Button>
+                );
+              });
             })()}
           </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setAssignDialogTicket(null); setSelectedTechIds([]); }}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAssignConfirm}
+              disabled={selectedTechIds.length === 0 || isAssigning}
+              data-testid="button-confirm-assign"
+            >
+              {isAssigning ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Assigning...
+                </>
+              ) : (
+                `Assign ${selectedTechIds.length > 0 ? selectedTechIds.length : ""} Technician${selectedTechIds.length !== 1 ? "s" : ""}`
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
