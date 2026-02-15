@@ -41,6 +41,9 @@ const formSchema = z.object({
   customerPhone: z.string().min(1, "Phone is required"),
   customerEmail: z.string().optional(),
   customerLocationUrl: z.string().optional(),
+  odpInfo: z.string().optional(),
+  odpLocation: z.string().optional(),
+  ticketIdCustom: z.string().optional(),
   title: z.string().min(1, "Subject is required"),
   description: z.string().min(1, "Description is required"),
   descriptionImages: z.array(z.string()).optional(),
@@ -59,13 +62,15 @@ export function CreateTicketDialog() {
     defaultValues: {
       type: "home_maintenance",
       priority: "medium",
-      status: "open",
       title: "",
       description: "",
       customerName: "",
       customerPhone: "",
       customerEmail: "",
       customerLocationUrl: "",
+      odpInfo: "",
+      odpLocation: "",
+      ticketIdCustom: "",
       descriptionImages: [],
     },
   });
@@ -120,6 +125,9 @@ export function CreateTicketDialog() {
     createTicket({
       ...values,
       slaDeadline,
+      odpInfo: values.odpInfo || undefined,
+      odpLocation: values.odpLocation || undefined,
+      ticketIdCustom: values.ticketIdCustom || undefined,
       descriptionImages: imageUrls.length > 0 ? imageUrls : undefined,
     } as any, {
       onSuccess: () => {
@@ -257,6 +265,51 @@ export function CreateTicketDialog() {
                       <FormLabel>Location URL (Google Maps)</FormLabel>
                       <FormControl>
                         <Input placeholder="https://maps.google.com/..." {...field} data-testid="input-customer-location" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4 border rounded-md p-4 bg-muted/30">
+              <h4 className="font-medium text-xs text-muted-foreground uppercase tracking-wider">Ticket & ODP Info</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <FormField
+                  control={form.control}
+                  name="ticketIdCustom"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Ticket ID (Optional)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Auto-generated if empty" {...field} data-testid="input-ticket-id-custom" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="odpInfo"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>ODP Info</FormLabel>
+                      <FormControl>
+                        <Input placeholder="ODP-XXX-YYY" {...field} data-testid="input-odp-info" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="odpLocation"
+                  render={({ field }) => (
+                    <FormItem className="md:col-span-2">
+                      <FormLabel>ODP Location (Google Maps URL)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="https://maps.google.com/..." {...field} data-testid="input-odp-location" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

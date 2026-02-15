@@ -33,6 +33,7 @@ import {
   X,
   Loader2,
   Camera,
+  Network,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useState, useRef } from "react";
@@ -230,7 +231,7 @@ export default function TicketDetail() {
         </Link>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-mono text-sm text-muted-foreground">#{ticket.ticketNumber}</span>
+            <span className="font-mono text-sm text-muted-foreground" data-testid="text-ticket-id">#{ticket.ticketIdCustom || ticket.ticketNumber}</span>
             <Badge className={`${priorityColors[ticket.priority] || ""} text-[10px] capitalize`}>
               {ticket.priority}
             </Badge>
@@ -553,6 +554,32 @@ export default function TicketDetail() {
                     <ExternalLink className="w-3 h-3" />
                     Open in Maps
                   </a>
+                </div>
+              )}
+              {(ticket.odpInfo || ticket.odpLocation) && (
+                <div className="pt-2 mt-2 border-t space-y-3">
+                  <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">ODP Info</span>
+                  {ticket.odpInfo && (
+                    <div className="flex items-center gap-2.5">
+                      <Network className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <span className="text-sm" data-testid="text-odp-info">{ticket.odpInfo}</span>
+                    </div>
+                  )}
+                  {ticket.odpLocation && (
+                    <div className="flex items-center gap-2.5">
+                      <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <a
+                        href={ticket.odpLocation}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-sm text-primary inline-flex items-center gap-1"
+                        data-testid="link-odp-location"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        ODP Location
+                      </a>
+                    </div>
+                  )}
                 </div>
               )}
             </CardContent>

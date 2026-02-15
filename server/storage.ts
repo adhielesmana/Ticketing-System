@@ -105,6 +105,28 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createTicket(insertTicket: InsertTicket): Promise<Ticket> {
+    if (!insertTicket.ticketIdCustom) {
+      const now = new Date();
+      const yy = String(now.getFullYear()).slice(2);
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      const todayPrefix = `${yy}${mm}${dd}`;
+
+      const todayTickets = await db.select()
+        .from(tickets)
+        .where(sql`${tickets.ticketIdCustom} LIKE ${todayPrefix + '%'}`)
+        .orderBy(desc(tickets.ticketIdCustom))
+        .limit(1);
+
+      let nextSeq = 1;
+      if (todayTickets.length > 0 && todayTickets[0].ticketIdCustom) {
+        const lastSeq = parseInt(todayTickets[0].ticketIdCustom.slice(6));
+        if (!isNaN(lastSeq)) nextSeq = lastSeq + 1;
+      }
+
+      insertTicket = { ...insertTicket, ticketIdCustom: `${todayPrefix}${nextSeq.toString().padStart(4, '0')}` };
+    }
+
     const [ticket] = await db.insert(tickets).values(insertTicket).returning();
     return ticket;
   }

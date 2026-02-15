@@ -42,7 +42,7 @@ export function TicketCard({ ticket, compact = false }: TicketCardProps) {
         <div className="flex items-start gap-3 p-3 rounded-md hover-elevate active-elevate-2 cursor-pointer" data-testid={`card-ticket-compact-${ticket.id}`}>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <span className="font-mono text-xs text-muted-foreground">#{ticket.ticketNumber}</span>
+              <span className="font-mono text-xs text-muted-foreground">#{ticket.ticketIdCustom || ticket.ticketNumber}</span>
               <Badge variant="outline" className={`${priorityVariant[ticket.priority] || ""} text-[10px] px-1.5 py-0`}>
                 {ticket.priority}
               </Badge>
@@ -69,7 +69,7 @@ export function TicketCard({ ticket, compact = false }: TicketCardProps) {
         <div className="flex justify-between items-start gap-2">
           <div className="flex flex-col gap-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-mono text-xs text-muted-foreground">#{ticket.ticketNumber}</span>
+              <span className="font-mono text-xs text-muted-foreground">#{ticket.ticketIdCustom || ticket.ticketNumber}</span>
               <Badge variant="outline" className={`${priorityVariant[ticket.priority] || ""} text-[10px]`}>
                 {ticket.priority}
               </Badge>

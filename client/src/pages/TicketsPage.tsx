@@ -116,6 +116,8 @@ export default function TicketsPage() {
       customerPhone: "",
       customerEmail: "",
       customerLocationUrl: "",
+      odpInfo: "",
+      odpLocation: "",
     },
   });
 
@@ -130,6 +132,8 @@ export default function TicketsPage() {
       customerPhone: ticket.customerPhone,
       customerEmail: ticket.customerEmail || "",
       customerLocationUrl: ticket.customerLocationUrl,
+      odpInfo: ticket.odpInfo || "",
+      odpLocation: ticket.odpLocation || "",
     });
   }
 
@@ -244,7 +248,7 @@ export default function TicketsPage() {
                 ) : (
                   tickets?.map((ticket: any) => (
                     <TableRow key={ticket.id} data-testid={`row-ticket-${ticket.id}`} className="group">
-                      <TableCell className="font-mono text-xs text-muted-foreground">{ticket.ticketNumber}</TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground">{ticket.ticketIdCustom || ticket.ticketNumber}</TableCell>
                       <TableCell>
                         <Link href={`/tickets/${ticket.id}`}>
                           <span className="text-sm font-medium cursor-pointer">{ticket.title}</span>
@@ -400,6 +404,16 @@ export default function TicketsPage() {
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Customer Phone</label>
                 <Input {...editForm.register("customerPhone")} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">ODP Info</label>
+                <Input {...editForm.register("odpInfo")} placeholder="ODP-XXX-YYY" data-testid="input-edit-odp-info" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">ODP Location</label>
+                <Input {...editForm.register("odpLocation")} placeholder="https://maps.google.com/..." data-testid="input-edit-odp-location" />
               </div>
             </div>
             <DialogFooter>
