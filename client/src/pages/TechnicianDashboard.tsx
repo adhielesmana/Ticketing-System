@@ -100,7 +100,7 @@ export default function TechnicianDashboard() {
           </div>
           <div className="bg-white/10 backdrop-blur-sm rounded-md p-3 border border-white/15">
             <div className="text-lg font-bold" data-testid="text-bonus-total">
-              ${(bonusTotal?.totalBonus ?? 0).toLocaleString()}
+              Rp{(bonusTotal?.totalBonus ?? 0).toLocaleString('id-ID')}
             </div>
             <div className="text-xs opacity-70 mt-0.5">Bonus</div>
           </div>

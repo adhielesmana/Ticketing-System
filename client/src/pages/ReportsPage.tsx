@@ -42,7 +42,7 @@ const statusColors: Record<string, string> = {
 
 function formatCurrency(value: number | string): string {
   const num = typeof value === "string" ? parseFloat(value) : value;
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(num || 0);
+  return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(num || 0);
 }
 
 export default function ReportsPage() {
