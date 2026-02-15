@@ -223,15 +223,31 @@ export async function registerRoutes(
     const ticketId = Number(req.params.id);
     const { userId } = req.body;
 
-    if (userId) {
+    if (!userId) {
+      return res.status(400).json({ message: "User ID required for manual assignment" });
+    }
+
+    try {
+      const existingAssignees = await storage.getAssigneesForTicket(ticketId);
+      if (existingAssignees.length > 0) {
+        const freeTechs = await storage.getFreeTechnicians();
+        const isFree = freeTechs.some((t: any) => t.id === userId);
+        if (!isFree) {
+          return res.status(400).json({ message: "This technician already has active tickets and cannot be added as a second assignee" });
+        }
+      }
+
       await storage.assignTicket(ticketId, userId, "manual");
       await storage.updateTicket(ticketId, { status: TicketStatus.ASSIGNED });
-    } else {
-       return res.status(400).json({ message: "User ID required for manual assignment" });
+      const ticket = await storage.getTicket(ticketId);
+      const assignees = await storage.getAssigneesForTicket(ticketId);
+      res.json({ ...ticket, assignee: assignees[0], assignees });
+    } catch (err: any) {
+      if (err.message === "Maximum 2 assignees per ticket") {
+        return res.status(400).json({ message: err.message });
+      }
+      throw err;
     }
-    
-    const ticket = await storage.getTicket(ticketId);
-    res.json(ticket);
   });
 
   // === FREE TECHNICIANS (no active/in-progress tickets) ===

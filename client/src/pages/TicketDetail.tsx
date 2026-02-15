@@ -1,4 +1,4 @@
-import { useTicket, useCloseTicket, useStartTicket, useAssignTicket, useUploadFile, useUploadImages } from "@/hooks/use-tickets";
+import { useTicket, useCloseTicket, useStartTicket, useAssignTicket, useUploadFile, useUploadImages, useFreeTechnicians } from "@/hooks/use-tickets";
 import { useUsers } from "@/hooks/use-users";
 import { useAuth } from "@/hooks/use-auth";
 import { useParams, Link } from "wouter";
@@ -118,6 +118,11 @@ export default function TicketDetail() {
   const { user } = useAuth();
   const { data: ticket, isLoading } = useTicket(ticketId);
   const { data: technicians } = useUsers("technician");
+  const hasOneAssignee = ticket?.assignees?.length === 1;
+  const { data: freeTechnicians } = useFreeTechnicians(
+    hasOneAssignee ? ticket?.assignees?.[0]?.id : undefined,
+    hasOneAssignee
+  );
 
   const { mutate: assignTicket } = useAssignTicket();
   const { mutate: startTicket } = useStartTicket();
@@ -559,22 +564,24 @@ export default function TicketDetail() {
             </CardHeader>
             <CardContent className="space-y-3">
               {ticket.assignees && ticket.assignees.length > 0 ? (
-                <div className="space-y-2">
-                  {ticket.assignees.map((assignee: any, idx: number) => (
-                    <div key={assignee.id} className="flex items-center gap-2.5">
-                      <Avatar className="h-8 w-8">
-                        <AvatarFallback className="text-xs bg-primary/10 text-primary font-semibold">
-                          {assignee.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="text-sm font-medium">{assignee.name}</p>
-                        <p className="text-xs text-muted-foreground capitalize">
-                          {idx === 0 ? "Lead Technician" : "Partner"}
-                        </p>
+                <div className="space-y-3">
+                  <div className="space-y-2">
+                    {ticket.assignees.map((assignee: any, idx: number) => (
+                      <div key={assignee.id} className="flex items-center gap-2.5">
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback className="text-xs bg-primary/10 text-primary font-semibold">
+                            {assignee.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="text-sm font-medium">{assignee.name}</p>
+                          <p className="text-xs text-muted-foreground capitalize">
+                            {idx === 0 ? "Lead Technician" : "Partner"}
+                          </p>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                   {ticket.assignmentType && (
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       {ticket.assignmentType === 'auto' ? (
@@ -584,8 +591,29 @@ export default function TicketDetail() {
                       )}
                     </div>
                   )}
+                  {canManage && ticket.assignees.length < 2 && ticket.status !== 'closed' && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">Only technicians without active tickets are shown:</p>
+                      {freeTechnicians && freeTechnicians.filter((tech: any) => !ticket.assignees.some((a: any) => a.id === tech.id)).length > 0 ? (
+                        <Select onValueChange={(val) => assignTicket({ id: ticketId, userId: Number(val) })}>
+                          <SelectTrigger data-testid="select-add-second-technician">
+                            <SelectValue placeholder="Add second technician..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {freeTechnicians
+                              .filter((tech: any) => !ticket.assignees.some((a: any) => a.id === tech.id))
+                              .map((tech: any) => (
+                              <SelectItem key={tech.id} value={String(tech.id)}>{tech.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <p className="text-xs text-muted-foreground italic">No free technicians available.</p>
+                      )}
+                    </div>
+                  )}
                 </div>
-              ) : canManage && ticket.status === 'open' ? (
+              ) : canManage && ticket.status !== 'closed' ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 p-2.5 rounded-md">
                     <AlertOctagon className="w-4 h-4 shrink-0" />

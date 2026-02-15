@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useTickets, useDeleteTicket, useUpdateTicket, useAssignTicket } from "@/hooks/use-tickets";
+import { useTickets, useDeleteTicket, useUpdateTicket, useAssignTicket, useFreeTechnicians } from "@/hooks/use-tickets";
 import { useUsers } from "@/hooks/use-users";
 import { useAuth } from "@/hooks/use-auth";
 import { CreateTicketDialog } from "@/components/CreateTicketDialog";
@@ -95,6 +95,12 @@ export default function TicketsPage() {
   const [editTicket, setEditTicket] = useState<any>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [assignDialogTicket, setAssignDialogTicket] = useState<any>(null);
+
+  const isAddingSecond = assignDialogTicket?.assignees?.length > 0;
+  const { data: freeTechnicians } = useFreeTechnicians(
+    isAddingSecond ? assignDialogTicket?.assignees?.[0]?.id : undefined,
+    isAddingSecond
+  );
 
   const canManage = user?.role === UserRole.SUPERADMIN || user?.role === UserRole.ADMIN;
   const canAssign = canManage || user?.role === UserRole.HELPDESK;
@@ -261,7 +267,20 @@ export default function TicketsPage() {
                       </TableCell>
                       <TableCell className="text-sm">{ticket.customerName}</TableCell>
                       <TableCell>
-                        {ticket.assignee ? (
+                        {ticket.assignees && ticket.assignees.length > 0 ? (
+                          <div className="space-y-1">
+                            {ticket.assignees.map((a: any) => (
+                              <div key={a.id} className="flex items-center gap-1.5">
+                                <Avatar className="h-5 w-5">
+                                  <AvatarFallback className="text-[9px] bg-muted font-medium">
+                                    {a.name.charAt(0)}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <span className="text-sm">{a.name}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : ticket.assignee ? (
                           <div className="flex items-center gap-1.5">
                             <Avatar className="h-5 w-5">
                               <AvatarFallback className="text-[9px] bg-muted font-medium">
@@ -293,7 +312,7 @@ export default function TicketsPage() {
                               <Eye className="w-3.5 h-3.5" />
                             </Button>
                           </Link>
-                          {canAssign && !ticket.assignee && (ticket.status === "open" || ticket.status === "waiting_assignment") && (
+                          {canAssign && (!ticket.assignees || ticket.assignees.length < 2) && ticket.status !== "closed" && (
                             <Button
                               size="icon"
                               variant="ghost"
@@ -394,30 +413,49 @@ export default function TicketsPage() {
       <Dialog open={!!assignDialogTicket} onOpenChange={(open) => !open && setAssignDialogTicket(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Assign Ticket</DialogTitle>
+            <DialogTitle>
+              {assignDialogTicket?.assignees?.length > 0 ? "Add Second Technician" : "Assign Ticket"}
+            </DialogTitle>
           </DialogHeader>
+          {assignDialogTicket?.assignees?.length > 0 && (
+            <div className="text-xs text-muted-foreground pb-1">
+              Already assigned: {assignDialogTicket.assignees.map((a: any) => a.name).join(", ")}
+            </div>
+          )}
           <div className="space-y-2 py-2">
-            {technicians?.map((tech: any) => (
-              <Button
-                key={tech.id}
-                variant="outline"
-                className="w-full justify-start gap-3"
-                onClick={() => handleAssign(tech.id)}
-                data-testid={`button-assign-to-${tech.id}`}
-              >
-                <Avatar className="h-7 w-7">
-                  <AvatarFallback className="text-xs bg-muted font-medium">
-                    {tech.name.charAt(0)}
-                  </AvatarFallback>
-                </Avatar>
-                <div className="text-left">
-                  <p className="text-sm font-medium">{tech.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {tech.isBackboneSpecialist ? "Backbone Specialist" : "General Technician"}
+            {(() => {
+              const techList = isAddingSecond
+                ? (freeTechnicians || []).filter((tech: any) => !assignDialogTicket?.assignees?.some((a: any) => a.id === tech.id))
+                : technicians || [];
+              if (techList.length === 0) {
+                return (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    {isAddingSecond ? "No available (free) technicians to add." : "No technicians available."}
                   </p>
-                </div>
-              </Button>
-            ))}
+                );
+              }
+              return techList.map((tech: any) => (
+                <Button
+                  key={tech.id}
+                  variant="outline"
+                  className="w-full justify-start gap-3"
+                  onClick={() => handleAssign(tech.id)}
+                  data-testid={`button-assign-to-${tech.id}`}
+                >
+                  <Avatar className="h-7 w-7">
+                    <AvatarFallback className="text-xs bg-muted font-medium">
+                      {tech.name.charAt(0)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="text-left">
+                    <p className="text-sm font-medium">{tech.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {tech.isBackboneSpecialist ? "Backbone Specialist" : "General Technician"}
+                    </p>
+                  </div>
+                </Button>
+              ));
+            })()}
           </div>
         </DialogContent>
       </Dialog>

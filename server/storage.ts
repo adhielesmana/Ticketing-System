@@ -160,10 +160,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async assignTicket(ticketId: number, userId: number, assignmentType: string = "manual"): Promise<TicketAssignment> {
-    await db.update(ticketAssignments)
-      .set({ active: false })
-      .where(eq(ticketAssignments.ticketId, ticketId));
-      
+    const currentAssignments = await this.getTicketAssignments(ticketId);
+    
+    if (currentAssignments.some(a => a.userId === userId)) {
+      return currentAssignments.find(a => a.userId === userId)!;
+    }
+    
+    if (currentAssignments.length >= 2) {
+      throw new Error("Maximum 2 assignees per ticket");
+    }
+    
     const [assignment] = await db.insert(ticketAssignments)
       .values({ ticketId, userId, active: true, assignmentType })
       .returning();

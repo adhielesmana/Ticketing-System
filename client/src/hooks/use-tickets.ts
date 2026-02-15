@@ -123,12 +123,20 @@ export function useAssignTicket() {
         body: JSON.stringify({ userId }),
         credentials: "include",
       });
-      if (!res.ok) throw new Error("Failed to assign ticket");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || "Failed to assign ticket");
+      }
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: [api.tickets.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.tickets.get.path, variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/technicians/free"] });
       toast({ title: "Success", description: "Ticket assigned" });
+    },
+    onError: (error) => {
+      toast({ title: "Assignment Failed", description: error.message, variant: "destructive" });
     },
   });
 }
@@ -162,7 +170,7 @@ export function useAutoAssignTicket() {
   });
 }
 
-export function useFreeTechnicians(excludeUserId?: number) {
+export function useFreeTechnicians(excludeUserId?: number, enabled: boolean = true) {
   return useQuery({
     queryKey: ["/api/technicians/free", excludeUserId],
     queryFn: async () => {
@@ -173,7 +181,7 @@ export function useFreeTechnicians(excludeUserId?: number) {
       if (!res.ok) throw new Error("Failed to fetch free technicians");
       return res.json();
     },
-    enabled: !!excludeUserId,
+    enabled,
   });
 }
 
