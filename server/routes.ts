@@ -657,6 +657,84 @@ export async function registerRoutes(
     }
   });
 
+  // === RECALCULATE BONUSES (admin trigger) ===
+  app.post("/api/recalculate-bonuses", async (req, res) => {
+    try {
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const user = await storage.getUser(userId);
+      if (!user || !["superadmin", "admin"].includes(user.role)) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const ticketFeeHome = (await storage.getSetting("ticket_fee_home_maintenance"))?.value || "0";
+      const transportFeeHome = (await storage.getSetting("transport_fee_home_maintenance"))?.value || "0";
+      const ticketFeeBackbone = (await storage.getSetting("ticket_fee_backbone_maintenance"))?.value || "0";
+      const transportFeeBackbone = (await storage.getSetting("transport_fee_backbone_maintenance"))?.value || "0";
+      const ticketFeeInstall = (await storage.getSetting("ticket_fee_installation"))?.value || "0";
+      const transportFeeInstall = (await storage.getSetting("transport_fee_installation"))?.value || "0";
+
+      const feeMap: Record<string, { ticketFee: string; transportFee: string }> = {
+        home_maintenance: { ticketFee: ticketFeeHome, transportFee: transportFeeHome },
+        backbone_maintenance: { ticketFee: ticketFeeBackbone, transportFee: transportFeeBackbone },
+        installation: { ticketFee: ticketFeeInstall, transportFee: transportFeeInstall },
+      };
+
+      const closedTickets = await storage.getTicketsReport({ status: "closed" });
+      let updatedCount = 0;
+      let perfUpdatedCount = 0;
+
+      for (const ticket of closedTickets) {
+        const fees = feeMap[ticket.type];
+        if (!fees) continue;
+
+        const isWithinSLA = ticket.performStatus === "perform";
+        const ticketFee = isWithinSLA ? fees.ticketFee : "0";
+        const transportFee = isWithinSLA ? fees.transportFee : "0";
+        const bonus = isWithinSLA
+          ? (parseFloat(fees.ticketFee) + parseFloat(fees.transportFee)).toFixed(2)
+          : "0";
+
+        await storage.updateTicket(ticket.id, {
+          ticketFee,
+          transportFee,
+          bonus,
+        });
+        updatedCount++;
+
+        const assignees = await storage.getAssigneesForTicket(ticket.id);
+        const { db } = await import("./db");
+        const { performanceLogs } = await import("@shared/schema");
+        const { eq: eqFn } = await import("drizzle-orm");
+        await db.delete(performanceLogs).where(eqFn(performanceLogs.ticketId, ticket.id));
+
+        const durationMinutes = ticket.closedAt && ticket.createdAt
+          ? Math.floor((new Date(ticket.closedAt).getTime() - new Date(ticket.createdAt).getTime()) / 60000)
+          : 0;
+
+        for (const assignee of assignees) {
+          await storage.logPerformance({
+            userId: assignee.id,
+            ticketId: ticket.id,
+            result: isWithinSLA ? "perform" : "not_perform",
+            completedWithinSLA: isWithinSLA,
+            durationMinutes,
+          });
+          perfUpdatedCount++;
+        }
+      }
+
+      res.json({
+        message: "Recalculation complete",
+        ticketsUpdated: updatedCount,
+        performanceLogsUpdated: perfUpdatedCount,
+      });
+    } catch (err) {
+      console.error("Recalculate bonuses error:", err);
+      res.status(500).json({ message: "Failed to recalculate bonuses" });
+    }
+  });
+
   // === DASHBOARD ===
   app.get(api.dashboard.stats.path, async (req, res) => {
     const stats = await storage.getDashboardStats();

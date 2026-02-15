@@ -66,6 +66,7 @@ export default function SettingsPage() {
   const { mutate: updateSetting, isPending } = useUpdateSetting();
   const [isBackfilling, setIsBackfilling] = useState(false);
   const [isBackfillingNames, setIsBackfillingNames] = useState(false);
+  const [isRecalculating, setIsRecalculating] = useState(false);
 
   const { data: ticketFeeHome } = useSetting("ticket_fee_home_maintenance");
   const { data: transportFeeHome } = useSetting("transport_fee_home_maintenance");
@@ -331,6 +332,54 @@ export default function SettingsPage() {
                     <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Processing...</>
                   ) : (
                     "Format Names"
+                  )}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-md bg-amber-500 flex items-center justify-center shrink-0">
+                <DollarSign className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 space-y-2">
+                <div>
+                  <h3 className="font-semibold text-sm">Recalculate Bonuses & Scores</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Recalculate ticket fee, transport fee, and bonus for all closed tickets using the current fee settings. Also rebuilds performance scores for all assigned technicians. Use this after changing fee settings to fix historical data.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isRecalculating}
+                  data-testid="button-recalculate-bonuses"
+                  onClick={async () => {
+                    setIsRecalculating(true);
+                    try {
+                      const res = await apiRequest("POST", "/api/recalculate-bonuses");
+                      const data = await res.json();
+                      toast({
+                        title: "Recalculation Complete",
+                        description: `${data.ticketsUpdated || 0} ticket(s) updated, ${data.performanceLogsUpdated || 0} performance log(s) refreshed.`,
+                      });
+                    } catch (err: any) {
+                      toast({
+                        title: "Recalculation Failed",
+                        description: err.message || "Something went wrong",
+                        variant: "destructive",
+                      });
+                    } finally {
+                      setIsRecalculating(false);
+                    }
+                  }}
+                >
+                  {isRecalculating ? (
+                    <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Processing...</>
+                  ) : (
+                    "Recalculate All"
                   )}
                 </Button>
               </div>
