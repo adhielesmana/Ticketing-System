@@ -75,9 +75,11 @@ const statusColors: Record<string, string> = {
   rejected: "bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300",
 };
 
-function toUpperName(name: string): string {
+function toUpperName(name: string, maxLen = 0): string {
   if (!name) return "";
-  return name.toUpperCase();
+  const upper = name.toUpperCase();
+  if (maxLen > 0 && upper.length > maxLen) return upper.slice(0, maxLen) + "...";
+  return upper;
 }
 
 function toTitleCase(str: string): string {
@@ -311,7 +313,7 @@ export default function TicketsPage() {
                           {ticket.status.replace(/_/g, " ")}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-sm font-medium">{toUpperName(ticket.customerName)}</TableCell>
+                      <TableCell className="text-sm font-medium" title={toUpperName(ticket.customerName)}>{toUpperName(ticket.customerName, 30)}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{ticket.area || "—"}</TableCell>
                       <TableCell>
                         {ticket.assignees && ticket.assignees.length > 0 ? (
@@ -323,7 +325,7 @@ export default function TicketsPage() {
                                     {a.name.charAt(0).toUpperCase()}
                                   </AvatarFallback>
                                 </Avatar>
-                                <span className="text-sm font-medium">{toUpperName(a.name)}</span>
+                                <span className="text-sm font-medium" title={toUpperName(a.name)}>{toUpperName(a.name, 30)}</span>
                               </div>
                             ))}
                           </div>
@@ -334,7 +336,7 @@ export default function TicketsPage() {
                                 {ticket.assignee.name.charAt(0).toUpperCase()}
                               </AvatarFallback>
                             </Avatar>
-                            <span className="text-sm font-medium">{toUpperName(ticket.assignee.name)}</span>
+                            <span className="text-sm font-medium" title={toUpperName(ticket.assignee.name)}>{toUpperName(ticket.assignee.name, 30)}</span>
                           </div>
                         ) : (
                           <span className="text-xs text-muted-foreground italic">Unassigned</span>
