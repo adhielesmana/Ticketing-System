@@ -1,4 +1,4 @@
-import { useTicket, useCloseTicket, useStartTicket, useAssignTicket, useUploadFile, useUploadImages, useFreeTechnicians } from "@/hooks/use-tickets";
+import { useTicket, useCloseTicket, useStartTicket, useAssignTicket, useUploadFile, useUploadImages, useFreeTechnicians, useNoResponseTicket, useRejectTicket } from "@/hooks/use-tickets";
 import { useUsers } from "@/hooks/use-users";
 import { useAuth } from "@/hooks/use-auth";
 import { useParams, Link } from "wouter";
@@ -34,6 +34,7 @@ import {
   Loader2,
   Camera,
   Network,
+  PhoneOff,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useState, useRef } from "react";
@@ -55,6 +56,8 @@ const statusColors: Record<string, string> = {
   in_progress: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
   closed: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
   overdue: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300",
+  pending_rejection: "bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300",
+  rejected: "bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300",
 };
 
 function extractCoordinates(url: string): { lat: number; lng: number } | null {
@@ -128,12 +131,16 @@ export default function TicketDetail() {
   const { mutate: assignTicket } = useAssignTicket();
   const { mutate: startTicket } = useStartTicket();
   const { mutate: closeTicket } = useCloseTicket();
+  const { mutate: noResponse, isPending: isReportingNoResponse } = useNoResponseTicket();
+  const { mutate: rejectTicket, isPending: isRejecting } = useRejectTicket();
 
   const { mutateAsync: uploadFile, isPending: isUploadingFile } = useUploadFile();
   const { mutateAsync: uploadMultiple, isPending: isUploadingMultiple } = useUploadImages();
   const { toast } = useToast();
 
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  const [noResponseDialogOpen, setNoResponseDialogOpen] = useState(false);
+  const [noResponseReason, setNoResponseReason] = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [closeData, setCloseData] = useState({
     actionDescription: "",
@@ -246,7 +253,7 @@ export default function TicketDetail() {
         </div>
       </div>
 
-      {ticket.status !== 'closed' && (
+      {!['closed', 'rejected'].includes(ticket.status) && (
         <div className="max-w-xs">
           <SLAIndicator
             deadline={ticket.slaDeadline as unknown as string}
@@ -382,6 +389,30 @@ export default function TicketDetail() {
             </Card>
           )}
 
+          {['pending_rejection', 'rejected'].includes(ticket.status) && ticket.rejectionReason && (
+            <Card>
+              <CardContent className="p-4 space-y-2">
+                <div className="flex items-center gap-2">
+                  <PhoneOff className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+                  <p className="text-sm font-medium text-orange-700 dark:text-orange-300">
+                    {ticket.status === 'rejected' ? 'Ticket Rejected - Customer No Response' : 'Customer No Response (Pending Review)'}
+                  </p>
+                </div>
+                <p className="text-sm text-muted-foreground">{ticket.rejectionReason}</p>
+                {canManage && ticket.status === 'pending_rejection' && (
+                  <Button
+                    variant="destructive"
+                    onClick={() => rejectTicket(ticketId)}
+                    disabled={isRejecting}
+                    data-testid="button-confirm-reject"
+                  >
+                    {isRejecting ? <><Loader2 className="w-4 h-4 animate-spin" /> Rejecting...</> : "Confirm Reject"}
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {isAssignedToMe && (ticket.status === 'assigned' || ticket.status === 'in_progress') && (
             <div className="flex flex-wrap gap-3">
               {ticket.status === 'assigned' && (
@@ -389,6 +420,46 @@ export default function TicketDetail() {
                   Start Work
                 </Button>
               )}
+
+              <Dialog open={noResponseDialogOpen} onOpenChange={setNoResponseDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" data-testid="button-no-response">
+                    <PhoneOff className="w-4 h-4 mr-1.5" />
+                    No Response
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-sm">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      <PhoneOff className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                      No Response
+                    </DialogTitle>
+                  </DialogHeader>
+                  <p className="text-sm text-muted-foreground">Report that the customer did not respond. This ticket will be sent to admin for review.</p>
+                  <Textarea
+                    placeholder="Enter reason (e.g. Customer unreachable after 3 call attempts)"
+                    value={noResponseReason}
+                    onChange={(e) => setNoResponseReason(e.target.value)}
+                    className="min-h-[80px]"
+                    data-testid="input-no-response-reason-detail"
+                  />
+                  <DialogFooter className="gap-2">
+                    <Button variant="outline" onClick={() => { setNoResponseDialogOpen(false); setNoResponseReason(""); }}>Cancel</Button>
+                    <Button
+                      onClick={() => {
+                        if (!noResponseReason.trim()) return;
+                        noResponse({ id: ticketId, rejectionReason: noResponseReason.trim() }, {
+                          onSuccess: () => { setNoResponseDialogOpen(false); setNoResponseReason(""); },
+                        });
+                      }}
+                      disabled={!noResponseReason.trim() || isReportingNoResponse}
+                      data-testid="button-confirm-no-response-detail"
+                    >
+                      {isReportingNoResponse ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : "Submit"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
 
               {ticket.status === 'in_progress' && (
                 <Dialog open={closeDialogOpen} onOpenChange={setCloseDialogOpen}>
@@ -618,7 +689,7 @@ export default function TicketDetail() {
                       )}
                     </div>
                   )}
-                  {canManage && ticket.assignees.length < 2 && ticket.status !== 'closed' && (
+                  {canManage && ticket.assignees.length < 2 && !['closed', 'rejected', 'pending_rejection'].includes(ticket.status) && (
                     <div className="space-y-1">
                       <p className="text-xs text-muted-foreground">Only technicians without active tickets are shown:</p>
                       {freeTechnicians && freeTechnicians.filter((tech: any) => !ticket.assignees.some((a: any) => a.id === tech.id)).length > 0 ? (
@@ -640,7 +711,7 @@ export default function TicketDetail() {
                     </div>
                   )}
                 </div>
-              ) : canManage && ticket.status !== 'closed' ? (
+              ) : canManage && !['closed', 'rejected', 'pending_rejection'].includes(ticket.status) ? (
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/50 p-2.5 rounded-md">
                     <AlertOctagon className="w-4 h-4 shrink-0" />

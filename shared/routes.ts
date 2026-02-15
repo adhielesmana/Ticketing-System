@@ -197,6 +197,23 @@ export const api = {
         200: z.custom<typeof tickets.$inferSelect>(),
       },
     },
+    noResponse: {
+      method: 'POST' as const,
+      path: '/api/tickets/:id/no-response' as const,
+      input: z.object({
+        rejectionReason: z.string().min(1, "Reason is required"),
+      }),
+      responses: {
+        200: z.custom<typeof tickets.$inferSelect>(),
+      },
+    },
+    reject: {
+      method: 'POST' as const,
+      path: '/api/tickets/:id/reject' as const,
+      responses: {
+        200: z.custom<typeof tickets.$inferSelect>(),
+      },
+    },
   },
   dashboard: {
     stats: {

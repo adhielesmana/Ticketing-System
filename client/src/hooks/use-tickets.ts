@@ -232,6 +232,59 @@ export function useCloseTicket() {
   });
 }
 
+export function useNoResponseTicket() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, rejectionReason }: { id: number; rejectionReason: string }) => {
+      const url = buildUrl(api.tickets.noResponse.path, { id });
+      const res = await fetch(url, {
+        method: api.tickets.noResponse.method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rejectionReason }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Failed" }));
+        throw new Error(err.message || "Failed to report no response");
+      }
+      return res.json();
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: [api.tickets.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.tickets.get.path, variables.id] });
+      toast({ title: "Reported", description: "Ticket sent for admin review" });
+    },
+  });
+}
+
+export function useRejectTicket() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const url = buildUrl(api.tickets.reject.path, { id });
+      const res = await fetch(url, {
+        method: api.tickets.reject.method,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Failed" }));
+        throw new Error(err.message || "Failed to reject ticket");
+      }
+      return res.json();
+    },
+    onSuccess: (_data, id) => {
+      queryClient.invalidateQueries({ queryKey: [api.tickets.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.tickets.get.path, id] });
+      queryClient.invalidateQueries({ queryKey: [api.dashboard.stats.path] });
+      toast({ title: "Rejected", description: "Ticket has been rejected" });
+    },
+  });
+}
+
 export function useDashboardStats() {
   return useQuery({
     queryKey: [api.dashboard.stats.path],

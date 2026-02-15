@@ -374,6 +374,79 @@ export async function registerRoutes(
     res.json(ticket);
   });
 
+  // === NO RESPONSE (Technician reports customer no response) ===
+  app.post(api.tickets.noResponse.path, async (req, res) => {
+    try {
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+
+      const user = await storage.getUser(userId);
+      if (!user || user.role !== UserRole.TECHNICIAN) {
+        return res.status(403).json({ message: "Only technicians can report no response" });
+      }
+
+      const ticketId = Number(req.params.id);
+      const existingTicket = await storage.getTicket(ticketId);
+      if (!existingTicket) return res.status(404).json({ message: "Ticket not found" });
+
+      if (!['assigned', 'in_progress'].includes(existingTicket.status)) {
+        return res.status(400).json({ message: "Ticket must be assigned or in progress" });
+      }
+
+      const { rejectionReason } = req.body;
+      if (!rejectionReason || rejectionReason.trim() === "") {
+        return res.status(400).json({ message: "Reason is required" });
+      }
+
+      const ticket = await storage.updateTicket(ticketId, {
+        status: TicketStatus.PENDING_REJECTION,
+        rejectionReason: rejectionReason.trim(),
+      });
+
+      res.json(ticket);
+    } catch (err) {
+      console.error("No response error:", err);
+      res.status(500).json({ message: "Failed to update ticket" });
+    }
+  });
+
+  // === REJECT (Admin/Helpdesk confirms rejection) ===
+  app.post(api.tickets.reject.path, async (req, res) => {
+    try {
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+
+      const user = await storage.getUser(userId);
+      if (!user || ![UserRole.ADMIN, UserRole.SUPERADMIN, UserRole.HELPDESK].includes(user.role as any)) {
+        return res.status(403).json({ message: "Only admin, superadmin or helpdesk can confirm rejection" });
+      }
+
+      const ticketId = Number(req.params.id);
+      const existingTicket = await storage.getTicket(ticketId);
+      if (!existingTicket) return res.status(404).json({ message: "Ticket not found" });
+
+      if (existingTicket.status !== TicketStatus.PENDING_REJECTION) {
+        return res.status(400).json({ message: "Ticket must be pending rejection" });
+      }
+
+      const now = new Date();
+      const durationMinutes = Math.floor((now.getTime() - existingTicket.createdAt.getTime()) / 60000);
+
+      const ticket = await storage.updateTicket(ticketId, {
+        status: TicketStatus.REJECTED,
+        closedAt: now,
+        durationMinutes,
+        performStatus: "not_perform",
+        bonus: "0",
+      });
+
+      res.json(ticket);
+    } catch (err) {
+      console.error("Reject error:", err);
+      res.status(500).json({ message: "Failed to reject ticket" });
+    }
+  });
+
   // === DASHBOARD ===
   app.get(api.dashboard.stats.path, async (req, res) => {
     const stats = await storage.getDashboardStats();

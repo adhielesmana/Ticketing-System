@@ -71,6 +71,8 @@ const statusColors: Record<string, string> = {
   in_progress: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
   closed: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
   overdue: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300",
+  pending_rejection: "bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300",
+  rejected: "bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300",
 };
 
 export default function TicketsPage() {
@@ -327,7 +329,7 @@ export default function TicketsPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        {ticket.status !== "closed" && (
+                        {!["closed", "rejected"].includes(ticket.status) && (
                           <SLAIndicator
                             deadline={ticket.slaDeadline}
                             createdAt={ticket.createdAt}
@@ -345,7 +347,7 @@ export default function TicketsPage() {
                               <Eye className="w-3.5 h-3.5" />
                             </Button>
                           </Link>
-                          {canAssign && (!ticket.assignees || ticket.assignees.length < 2) && ticket.status !== "closed" && (
+                          {canAssign && (!ticket.assignees || ticket.assignees.length < 2) && !["closed", "rejected", "pending_rejection"].includes(ticket.status) && (
                             <Button
                               size="icon"
                               variant="ghost"

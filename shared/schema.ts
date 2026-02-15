@@ -29,6 +29,8 @@ export const TicketStatus = {
   IN_PROGRESS: "in_progress",
   CLOSED: "closed",
   OVERDUE: "overdue",
+  PENDING_REJECTION: "pending_rejection",
+  REJECTED: "rejected",
 } as const;
 
 export const PerformStatus = {
@@ -86,6 +88,7 @@ export const tickets = pgTable("tickets", {
   closedNote: text("closed_note"),
   performStatus: text("perform_status"),
   bonus: numeric("bonus", { precision: 12, scale: 2 }).default("0"),
+  rejectionReason: text("rejection_reason"),
 });
 
 export const ticketAssignments = pgTable("ticket_assignments", {

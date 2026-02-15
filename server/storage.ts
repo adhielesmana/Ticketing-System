@@ -22,7 +22,7 @@ export interface IStorage {
   getTicket(id: number): Promise<Ticket | undefined>;
   getTicketByNumber(ticketNumber: string): Promise<Ticket | undefined>;
   createTicket(ticket: InsertTicket): Promise<Ticket>;
-  updateTicket(id: number, ticket: Partial<InsertTicket>): Promise<Ticket>;
+  updateTicket(id: number, ticket: Partial<Ticket>): Promise<Ticket>;
   getAllTickets(filters?: any): Promise<Ticket[]>;
   getTicketsByAssignee(userId: number): Promise<Ticket[]>;
   deleteTicket(id: number): Promise<void>;
@@ -138,7 +138,7 @@ export class DatabaseStorage implements IStorage {
     return ticket;
   }
 
-  async updateTicket(id: number, updates: Partial<InsertTicket>): Promise<Ticket> {
+  async updateTicket(id: number, updates: Partial<Ticket>): Promise<Ticket> {
     const [ticket] = await db
       .update(tickets)
       .set(updates)
