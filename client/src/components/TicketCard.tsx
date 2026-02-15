@@ -42,9 +42,9 @@ const statusVariant: Record<string, string> = {
   rejected: "bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300",
 };
 
-function toUpperName(name: string): string {
+function toCapName(name: string): string {
   if (!name) return "";
-  return name.toUpperCase();
+  return name.replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function toTitleCase(str: string): string {
@@ -87,7 +87,7 @@ export function TicketCard({ ticket, compact = false }: TicketCardProps) {
             </div>
             <p className="text-sm font-medium truncate">{toTitleCase(ticket.title)}</p>
             <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-              <span>{toUpperName(ticket.customerName)}</span>
+              <span>{toCapName(ticket.customerName)}</span>
               <span className={isOverdue ? "text-red-600 dark:text-red-400 font-medium" : ""}>
                 {formatDistanceToNow(slaDate, { addSuffix: true })}
               </span>
@@ -127,7 +127,7 @@ export function TicketCard({ ticket, compact = false }: TicketCardProps) {
           <div className="flex flex-col gap-1.5 text-sm text-muted-foreground">
             <div className="flex items-center gap-2">
               <User className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate font-medium">{toUpperName(ticket.customerName)}</span>
+              <span className="truncate font-medium">{toCapName(ticket.customerName)}</span>
             </div>
             {ticket.customerLocationUrl && (
               <div className="flex items-center gap-2">
@@ -157,7 +157,7 @@ export function TicketCard({ ticket, compact = false }: TicketCardProps) {
                     {ticket.assignee.name.charAt(0).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
-                <span className="text-xs text-muted-foreground font-medium">{toUpperName(ticket.assignee.name)}</span>
+                <span className="text-xs text-muted-foreground font-medium">{toCapName(ticket.assignee.name)}</span>
               </div>
             ) : (
               <span className="text-xs text-muted-foreground italic">Unassigned</span>

@@ -75,11 +75,11 @@ const statusColors: Record<string, string> = {
   rejected: "bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300",
 };
 
-function toUpperName(name: string, maxLen = 0): string {
+function toCapName(name: string, maxLen = 0): string {
   if (!name) return "";
-  const upper = name.toUpperCase();
-  if (maxLen > 0 && upper.length > maxLen) return upper.slice(0, maxLen) + "...";
-  return upper;
+  const capitalized = name.replace(/\b\w/g, c => c.toUpperCase());
+  if (maxLen > 0 && capitalized.length > maxLen) return capitalized.slice(0, maxLen) + "...";
+  return capitalized;
 }
 
 function toTitleCase(str: string): string {
@@ -313,7 +313,7 @@ export default function TicketsPage() {
                           {ticket.status.replace(/_/g, " ")}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-sm font-medium whitespace-nowrap" title={toUpperName(ticket.customerName)}>{toUpperName(ticket.customerName, 30)}</TableCell>
+                      <TableCell className="text-sm font-medium whitespace-nowrap" title={toCapName(ticket.customerName)}>{toCapName(ticket.customerName, 30)}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{ticket.area || "—"}</TableCell>
                       <TableCell>
                         {ticket.assignees && ticket.assignees.length > 0 ? (
@@ -325,7 +325,7 @@ export default function TicketsPage() {
                                     {a.name.charAt(0).toUpperCase()}
                                   </AvatarFallback>
                                 </Avatar>
-                                <span className="text-sm font-medium whitespace-nowrap" title={toUpperName(a.name)}>{toUpperName(a.name, 30)}</span>
+                                <span className="text-sm font-medium whitespace-nowrap" title={toCapName(a.name)}>{toCapName(a.name, 30)}</span>
                               </div>
                             ))}
                           </div>
@@ -336,7 +336,7 @@ export default function TicketsPage() {
                                 {ticket.assignee.name.charAt(0).toUpperCase()}
                               </AvatarFallback>
                             </Avatar>
-                            <span className="text-sm font-medium whitespace-nowrap" title={toUpperName(ticket.assignee.name)}>{toUpperName(ticket.assignee.name, 30)}</span>
+                            <span className="text-sm font-medium whitespace-nowrap" title={toCapName(ticket.assignee.name)}>{toCapName(ticket.assignee.name, 30)}</span>
                           </div>
                         ) : (
                           <span className="text-xs text-muted-foreground italic">Unassigned</span>

@@ -60,9 +60,9 @@ const statusColors: Record<string, string> = {
   rejected: "bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300",
 };
 
-function toUpperName(name: string): string {
+function toCapName(name: string): string {
   if (!name) return "";
-  return name.toUpperCase();
+  return name.replace(/\b\w/g, c => c.toUpperCase());
 }
 
 function toTitleCase(str: string): string {
@@ -611,7 +611,7 @@ export default function TicketDetail() {
             <CardContent className="space-y-3">
               <div className="flex items-center gap-2.5">
                 <User className="w-4 h-4 text-muted-foreground shrink-0" />
-                <span className="text-sm font-medium">{toUpperName(ticket.customerName)}</span>
+                <span className="text-sm font-medium">{toCapName(ticket.customerName)}</span>
               </div>
               <div className="flex items-center gap-2.5">
                 <Phone className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -693,7 +693,7 @@ export default function TicketDetail() {
                           </AvatarFallback>
                         </Avatar>
                         <div>
-                          <p className="text-sm font-medium">{toUpperName(assignee.name)}</p>
+                          <p className="text-sm font-medium">{toCapName(assignee.name)}</p>
                           <p className="text-xs text-muted-foreground capitalize">
                             {idx === 0 ? "Lead Technician" : "Partner"}
                           </p>
