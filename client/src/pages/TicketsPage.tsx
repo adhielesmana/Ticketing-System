@@ -313,7 +313,7 @@ export default function TicketsPage() {
                           {ticket.status.replace(/_/g, " ")}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-sm font-medium" title={toUpperName(ticket.customerName)}>{toUpperName(ticket.customerName, 30)}</TableCell>
+                      <TableCell className="text-sm font-medium whitespace-nowrap" title={toUpperName(ticket.customerName)}>{toUpperName(ticket.customerName, 30)}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{ticket.area || "—"}</TableCell>
                       <TableCell>
                         {ticket.assignees && ticket.assignees.length > 0 ? (
@@ -325,7 +325,7 @@ export default function TicketsPage() {
                                     {a.name.charAt(0).toUpperCase()}
                                   </AvatarFallback>
                                 </Avatar>
-                                <span className="text-sm font-medium" title={toUpperName(a.name)}>{toUpperName(a.name, 30)}</span>
+                                <span className="text-sm font-medium whitespace-nowrap" title={toUpperName(a.name)}>{toUpperName(a.name, 30)}</span>
                               </div>
                             ))}
                           </div>
@@ -336,7 +336,7 @@ export default function TicketsPage() {
                                 {ticket.assignee.name.charAt(0).toUpperCase()}
                               </AvatarFallback>
                             </Avatar>
-                            <span className="text-sm font-medium" title={toUpperName(ticket.assignee.name)}>{toUpperName(ticket.assignee.name, 30)}</span>
+                            <span className="text-sm font-medium whitespace-nowrap" title={toUpperName(ticket.assignee.name)}>{toUpperName(ticket.assignee.name, 30)}</span>
                           </div>
                         ) : (
                           <span className="text-xs text-muted-foreground italic">Unassigned</span>
