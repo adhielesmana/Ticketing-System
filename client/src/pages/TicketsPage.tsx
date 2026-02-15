@@ -87,6 +87,22 @@ function toTitleCase(str: string): string {
   return str.replace(/\b\w/g, c => c.toUpperCase());
 }
 
+const attentionStatuses = new Set(["pending_rejection", "overdue", "open"]);
+
+const attentionDotColors: Record<string, string> = {
+  pending_rejection: "bg-orange-500",
+  overdue: "bg-red-500",
+  open: "bg-blue-500",
+};
+
+function AttentionDot({ status }: { status: string }) {
+  if (!attentionStatuses.has(status)) return null;
+  const color = attentionDotColors[status] || "bg-red-500";
+  return (
+    <span className={`inline-block w-2 h-2 rounded-full ${color} attention-dot`} data-testid={`attention-dot-${status}`} />
+  );
+}
+
 export default function TicketsPage() {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
@@ -309,9 +325,12 @@ export default function TicketsPage() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge className={`${statusColors[ticket.status] || ""} capitalize text-[10px]`}>
-                          {ticket.status.replace(/_/g, " ")}
-                        </Badge>
+                        <div className="flex items-center gap-1.5">
+                          <AttentionDot status={ticket.status} />
+                          <Badge className={`${statusColors[ticket.status] || ""} capitalize text-[10px]`}>
+                            {ticket.status.replace(/_/g, " ")}
+                          </Badge>
+                        </div>
                       </TableCell>
                       <TableCell className="text-sm font-medium whitespace-nowrap" title={toCapName(ticket.customerName)}>{toCapName(ticket.customerName, 30)}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{ticket.area || "—"}</TableCell>

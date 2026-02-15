@@ -75,6 +75,7 @@ export default function AdminDashboard() {
           bgColor="bg-orange-50 dark:bg-orange-950/50"
           alert={true}
           alertColor="text-orange-600 dark:text-orange-400"
+          dotColor="bg-orange-500"
         />
         <StatCard
           title="SLA Breaches"
@@ -84,6 +85,7 @@ export default function AdminDashboard() {
           color="text-red-600 dark:text-red-400"
           bgColor="bg-red-50 dark:bg-red-950/50"
           alert={true}
+          dotColor="bg-red-500"
         />
         <StatCard
           title="Resolved"
@@ -166,14 +168,20 @@ export default function AdminDashboard() {
   );
 }
 
-function StatCard({ title, value, icon, loading, color, bgColor, alert, alertColor }: any) {
+function StatCard({ title, value, icon, loading, color, bgColor, alert, alertColor, dotColor }: any) {
   const alertClass = alert && value > 0 ? (alertColor || 'text-red-600 dark:text-red-400') : '';
+  const showDot = alert && value > 0;
   return (
     <Card data-testid={`stat-card-${title.toLowerCase().replace(/\s+/g, '-')}`}>
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-2">
           <div className="space-y-1">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{title}</p>
+            <div className="flex items-center gap-1.5">
+              {showDot && (
+                <span className={`inline-block w-2 h-2 rounded-full ${dotColor || 'bg-red-500'} attention-dot`} />
+              )}
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{title}</p>
+            </div>
             {loading ? (
               <Skeleton className="h-8 w-14 mt-1" />
             ) : (

@@ -52,6 +52,22 @@ function toTitleCase(str: string): string {
   return str.replace(/\b\w/g, c => c.toUpperCase());
 }
 
+const attentionStatuses = new Set(["pending_rejection", "overdue", "open"]);
+
+const attentionDotColors: Record<string, string> = {
+  pending_rejection: "bg-orange-500",
+  overdue: "bg-red-500",
+  open: "bg-blue-500",
+};
+
+function AttentionDot({ status }: { status: string }) {
+  if (!attentionStatuses.has(status)) return null;
+  const color = attentionDotColors[status] || "bg-red-500";
+  return (
+    <span className={`inline-block w-2 h-2 rounded-full ${color} attention-dot`} />
+  );
+}
+
 export function TicketCard({ ticket, compact = false }: TicketCardProps) {
   const { user } = useAuth();
   const { mutate: startTicket, isPending: isStarting } = useStartTicket();
@@ -93,9 +109,12 @@ export function TicketCard({ ticket, compact = false }: TicketCardProps) {
               </span>
             </div>
           </div>
-          <Badge className={`${statusVariant[ticket.status] || ""} text-[10px] shrink-0`}>
-            {ticket.status.replace(/_/g, ' ')}
-          </Badge>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <AttentionDot status={ticket.status} />
+            <Badge className={`${statusVariant[ticket.status] || ""} text-[10px] shrink-0`}>
+              {ticket.status.replace(/_/g, ' ')}
+            </Badge>
+          </div>
         </div>
       </Link>
     );
@@ -117,9 +136,12 @@ export function TicketCard({ ticket, compact = false }: TicketCardProps) {
                 <span className="font-semibold text-base leading-tight cursor-pointer">{toTitleCase(ticket.title)}</span>
               </Link>
             </div>
-            <Badge className={`${statusVariant[ticket.status] || ""} text-[10px] shrink-0`}>
-              {ticket.status.replace(/_/g, ' ')}
-            </Badge>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <AttentionDot status={ticket.status} />
+              <Badge className={`${statusVariant[ticket.status] || ""} text-[10px] shrink-0`}>
+                {ticket.status.replace(/_/g, ' ')}
+              </Badge>
+            </div>
           </div>
 
           <p className="text-sm text-muted-foreground line-clamp-2">{ticket.description}</p>

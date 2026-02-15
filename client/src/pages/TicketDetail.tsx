@@ -71,6 +71,18 @@ function toTitleCase(str: string): string {
   return str.replace(/\b\w/g, c => c.toUpperCase());
 }
 
+const attentionStatuses = new Set(["pending_rejection", "overdue", "open"]);
+const attentionDotColors: Record<string, string> = {
+  pending_rejection: "bg-orange-500",
+  overdue: "bg-red-500",
+  open: "bg-blue-500",
+};
+function AttentionDot({ status }: { status: string }) {
+  if (!attentionStatuses.has(status)) return null;
+  const color = attentionDotColors[status] || "bg-red-500";
+  return <span className={`inline-block w-2 h-2 rounded-full ${color} attention-dot`} />;
+}
+
 function extractCoordinates(url: string): { lat: number; lng: number } | null {
   if (!url) return null;
   const patterns = [
@@ -257,6 +269,7 @@ export default function TicketDetail() {
             <Badge className={`${priorityColors[ticket.priority] || ""} text-[10px] capitalize`}>
               {ticket.priority}
             </Badge>
+            <AttentionDot status={ticket.status} />
             <Badge className={`${statusColors[ticket.status] || ""} text-[10px] capitalize`}>
               {ticket.status.replace(/_/g, ' ')}
             </Badge>
