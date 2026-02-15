@@ -57,9 +57,9 @@ export default function TechnicianDashboard() {
     ['assigned', 'in_progress'].includes(t.status)
   ) || []).sort((a: any, b: any) => (priorityOrder[a.priority] ?? 99) - (priorityOrder[b.priority] ?? 99));
 
-  const historyTickets = (tickets?.filter((t: any) =>
+  const historyTickets = tickets?.filter((t: any) =>
     ['closed'].includes(t.status)
-  ) || []).sort((a: any, b: any) => (priorityOrder[a.priority] ?? 99) - (priorityOrder[b.priority] ?? 99));
+  ) || [];
 
   const hasActiveTicket = activeTickets.length > 0;
 
