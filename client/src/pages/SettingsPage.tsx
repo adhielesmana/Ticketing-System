@@ -16,6 +16,7 @@ import {
   Save,
   Loader2,
   MapPin,
+  Type,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -51,6 +52,7 @@ export default function SettingsPage() {
   const { toast } = useToast();
   const { mutate: updateSetting, isPending } = useUpdateSetting();
   const [isBackfilling, setIsBackfilling] = useState(false);
+  const [isBackfillingNames, setIsBackfillingNames] = useState(false);
 
   const { data: homeSetting } = useSetting("bonus_home_maintenance");
   const { data: backboneSetting } = useSetting("bonus_backbone_maintenance");
@@ -225,6 +227,55 @@ export default function SettingsPage() {
                     <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Processing...</>
                   ) : (
                     "Run Backfill"
+                  )}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-md bg-indigo-500 flex items-center justify-center shrink-0">
+                <Type className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 space-y-2">
+                <div>
+                  <h3 className="font-semibold text-sm">Format Names (Title Case)</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Convert all customer names and technician names in the database to title case (first letter of each word capitalized). New entries are automatically formatted.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isBackfillingNames}
+                  data-testid="button-backfill-names"
+                  onClick={async () => {
+                    setIsBackfillingNames(true);
+                    try {
+                      const res = await apiRequest("POST", "/api/backfill-names");
+                      const data = await res.json();
+                      toast({
+                        title: "Names Formatted",
+                        description: `${data.usersUpdated || 0} user(s) and ${data.ticketsUpdated || 0} ticket(s) updated.`,
+                      });
+                    } catch (err: any) {
+                      toast({
+                        title: "Format Failed",
+                        description: err.message || "Something went wrong",
+                        variant: "destructive",
+                      });
+                    } finally {
+                      setIsBackfillingNames(false);
+                    }
+                  }}
+                >
+                  {isBackfillingNames ? (
+                    <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Processing...</>
+                  ) : (
+                    "Format Names"
                   )}
                 </Button>
               </div>

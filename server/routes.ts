@@ -10,6 +10,10 @@ import { hash, compare } from "bcryptjs";
 import path from "path";
 import fs from "fs";
 
+function toTitleCase(str: string): string {
+  return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase());
+}
+
 function extractCoordsFromUrl(url: string): { lat: number; lng: number } | null {
   if (!url) return null;
   const patterns = [
@@ -18,6 +22,8 @@ function extractCoordsFromUrl(url: string): { lat: number; lng: number } | null 
     /place\/([-\d.]+),([-\d.]+)/,
     /ll=([-\d.]+),([-\d.]+)/,
     /center=([-\d.]+),([-\d.]+)/,
+    /!3d([-\d.]+)!4d([-\d.]+)/,
+    /\/([-\d.]+),([-\d.]+)/,
   ];
   for (const p of patterns) {
     const m = url.match(p);
@@ -27,6 +33,35 @@ function extractCoordsFromUrl(url: string): { lat: number; lng: number } | null 
       if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
         return { lat, lng };
       }
+    }
+  }
+  return null;
+}
+
+async function resolveShortUrl(url: string): Promise<string> {
+  try {
+    const res = await fetch(url, { method: "HEAD", redirect: "follow" });
+    return res.url || url;
+  } catch {
+    try {
+      const res = await fetch(url, { redirect: "follow" });
+      return res.url || url;
+    } catch {
+      return url;
+    }
+  }
+}
+
+async function extractCoordsWithResolve(url: string): Promise<{ lat: number; lng: number } | null> {
+  if (!url) return null;
+  let coords = extractCoordsFromUrl(url);
+  if (coords) return coords;
+  
+  if (url.includes("goo.gl") || url.includes("maps.app") || url.includes("bit.ly") || url.includes("shorturl")) {
+    const resolved = await resolveShortUrl(url);
+    if (resolved !== url) {
+      coords = extractCoordsFromUrl(resolved);
+      if (coords) return coords;
     }
   }
   return null;
@@ -133,6 +168,7 @@ export async function registerRoutes(
     try {
       const input = api.users.create.input.parse(req.body);
       const hashedPassword = await hash(input.password, 10);
+      if (input.name) input.name = toTitleCase(input.name);
       const user = await storage.createUser({ ...input, password: hashedPassword });
       res.status(201).json(user);
     } catch (err) {
@@ -152,6 +188,7 @@ export async function registerRoutes(
       if (input.password) {
         input.password = await hash(input.password, 10);
       }
+      if (input.name) input.name = toTitleCase(input.name);
       const user = await storage.updateUser(Number(req.params.id), input);
       if (!user) return res.status(404).json({ message: "User not found" });
       res.json(user);
@@ -208,6 +245,8 @@ export async function registerRoutes(
     try {
       const input = req.body;
       
+      if (input.customerName) input.customerName = toTitleCase(input.customerName);
+
       const now = new Date();
       let slaHours = 24;
       if (input.type === TicketType.INSTALLATION) slaHours = 72;
@@ -221,7 +260,7 @@ export async function registerRoutes(
 
       let area: string | null = null;
       const locationUrl = input.customerLocationUrl || "";
-      const coords = extractCoordsFromUrl(locationUrl);
+      const coords = await extractCoordsWithResolve(locationUrl);
       if (coords) {
         area = await reverseGeocodeArea(coords.lat, coords.lng);
       }
@@ -252,6 +291,7 @@ export async function registerRoutes(
   app.patch(api.tickets.update.path, async (req, res) => {
     try {
       const input = api.tickets.update.input.parse(req.body);
+      if (input.customerName) input.customerName = toTitleCase(input.customerName);
       const ticket = await storage.updateTicket(Number(req.params.id), input);
       res.json(ticket);
     } catch (err) {
@@ -511,22 +551,57 @@ export async function registerRoutes(
       }
 
       let processed = 0;
+      const errors: string[] = [];
       for (const ticket of ticketsWithoutArea) {
-        const coords = extractCoordsFromUrl(ticket.customerLocationUrl);
-        if (coords) {
-          const area = await reverseGeocodeArea(coords.lat, coords.lng);
-          if (area) {
-            await storage.updateTicket(ticket.id, { area });
-            processed++;
+        try {
+          const coords = await extractCoordsWithResolve(ticket.customerLocationUrl);
+          if (coords) {
+            const area = await reverseGeocodeArea(coords.lat, coords.lng);
+            if (area) {
+              await storage.updateTicket(ticket.id, { area });
+              processed++;
+            } else {
+              errors.push(`Ticket ${ticket.id}: geocode returned null for ${coords.lat},${coords.lng}`);
+            }
+          } else {
+            errors.push(`Ticket ${ticket.id}: no coords found in URL: ${ticket.customerLocationUrl}`);
           }
+        } catch (e: any) {
+          errors.push(`Ticket ${ticket.id}: ${e.message}`);
         }
         await new Promise(r => setTimeout(r, 1100));
       }
 
-      res.json({ message: `Area backfill complete`, processed, total: ticketsWithoutArea.length });
+      res.json({ message: `Area backfill complete`, processed, total: ticketsWithoutArea.length, errors: errors.length > 0 ? errors : undefined });
     } catch (err) {
       console.error("Backfill areas error:", err);
       res.status(500).json({ message: "Failed to backfill areas" });
+    }
+  });
+
+  // === BACKFILL NAMES (admin trigger) ===
+  app.post("/api/backfill-names", async (req, res) => {
+    try {
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const user = await storage.getUser(userId);
+      if (!user || !["superadmin", "admin"].includes(user.role)) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const { db } = await import("./db");
+      const { sql: dsql } = await import("drizzle-orm");
+      const userResult = await db.execute(dsql`UPDATE users SET name = INITCAP(name) WHERE name != INITCAP(name)`);
+      const ticketResult = await db.execute(dsql`UPDATE tickets SET customer_name = INITCAP(customer_name) WHERE customer_name != INITCAP(customer_name)`);
+
+      res.json({
+        message: "Name formatting complete",
+        usersUpdated: userResult.rowCount || 0,
+        ticketsUpdated: ticketResult.rowCount || 0,
+      });
+    } catch (err) {
+      console.error("Backfill names error:", err);
+      res.status(500).json({ message: "Failed to format names" });
     }
   });
 
@@ -821,12 +896,21 @@ export async function backfillTicketAreas() {
     if (ticketsWithoutArea.length === 0) return;
     console.log(`Backfilling area for ${ticketsWithoutArea.length} tickets...`);
     for (const ticket of ticketsWithoutArea) {
-      const coords = extractCoordsFromUrl(ticket.customerLocationUrl);
-      if (coords) {
-        const area = await reverseGeocodeArea(coords.lat, coords.lng);
-        if (area) {
-          await storage.updateTicket(ticket.id, { area });
+      try {
+        const coords = await extractCoordsWithResolve(ticket.customerLocationUrl);
+        if (coords) {
+          const area = await reverseGeocodeArea(coords.lat, coords.lng);
+          if (area) {
+            await storage.updateTicket(ticket.id, { area });
+            console.log(`  Ticket ${ticket.id}: area set to "${area}"`);
+          } else {
+            console.log(`  Ticket ${ticket.id}: geocode returned null for ${coords.lat},${coords.lng}`);
+          }
+        } else {
+          console.log(`  Ticket ${ticket.id}: no coords from URL: ${ticket.customerLocationUrl}`);
         }
+      } catch (e: any) {
+        console.log(`  Ticket ${ticket.id}: error - ${e.message}`);
       }
       await new Promise(r => setTimeout(r, 1100));
     }
