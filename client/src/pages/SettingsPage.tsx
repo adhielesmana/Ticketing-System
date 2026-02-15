@@ -15,7 +15,9 @@ import {
   Wrench,
   Save,
   Loader2,
+  MapPin,
 } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 
 const bonusConfigs = [
   {
@@ -48,6 +50,7 @@ export default function SettingsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const { mutate: updateSetting, isPending } = useUpdateSetting();
+  const [isBackfilling, setIsBackfilling] = useState(false);
 
   const { data: homeSetting } = useSetting("bonus_home_maintenance");
   const { data: backboneSetting } = useSetting("bonus_backbone_maintenance");
@@ -173,6 +176,61 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         ))}
+      </div>
+
+      <div className="space-y-4 mt-8 pt-6 border-t">
+        <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+          <MapPin className="w-4 h-4" />
+          Data Maintenance
+        </div>
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-md bg-teal-500 flex items-center justify-center shrink-0">
+                <MapPin className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 space-y-2">
+                <div>
+                  <h3 className="font-semibold text-sm">Backfill Ticket Areas</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Extract area names from Google Maps URLs for existing tickets that don't have area data yet. This uses free reverse geocoding and may take a moment.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isBackfilling}
+                  data-testid="button-backfill-areas"
+                  onClick={async () => {
+                    setIsBackfilling(true);
+                    try {
+                      const res = await apiRequest("POST", "/api/tickets/backfill-areas");
+                      const data = await res.json();
+                      toast({
+                        title: "Backfill Complete",
+                        description: `${data.processed || 0} ticket(s) updated with area data.`,
+                      });
+                    } catch (err: any) {
+                      toast({
+                        title: "Backfill Failed",
+                        description: err.message || "Something went wrong",
+                        variant: "destructive",
+                      });
+                    } finally {
+                      setIsBackfilling(false);
+                    }
+                  }}
+                >
+                  {isBackfilling ? (
+                    <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Processing...</>
+                  ) : (
+                    "Run Backfill"
+                  )}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

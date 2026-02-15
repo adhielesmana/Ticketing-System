@@ -494,6 +494,42 @@ export async function registerRoutes(
     }
   });
 
+  // === BACKFILL AREAS (admin trigger) ===
+  app.post("/api/tickets/backfill-areas", async (req, res) => {
+    try {
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const user = await storage.getUser(userId);
+      if (!user || !["superadmin", "admin"].includes(user.role)) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const allTickets = await storage.getAllTickets({});
+      const ticketsWithoutArea = allTickets.filter((t: any) => !t.area && t.customerLocationUrl);
+      if (ticketsWithoutArea.length === 0) {
+        return res.json({ message: "No tickets need area backfill", processed: 0 });
+      }
+
+      let processed = 0;
+      for (const ticket of ticketsWithoutArea) {
+        const coords = extractCoordsFromUrl(ticket.customerLocationUrl);
+        if (coords) {
+          const area = await reverseGeocodeArea(coords.lat, coords.lng);
+          if (area) {
+            await storage.updateTicket(ticket.id, { area });
+            processed++;
+          }
+        }
+        await new Promise(r => setTimeout(r, 1100));
+      }
+
+      res.json({ message: `Area backfill complete`, processed, total: ticketsWithoutArea.length });
+    } catch (err) {
+      console.error("Backfill areas error:", err);
+      res.status(500).json({ message: "Failed to backfill areas" });
+    }
+  });
+
   // === DASHBOARD ===
   app.get(api.dashboard.stats.path, async (req, res) => {
     const stats = await storage.getDashboardStats();
