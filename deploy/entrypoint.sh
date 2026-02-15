@@ -1,8 +1,8 @@
 #!/bin/bash
 
-DB_USER="${DB_USER:-m4xnetPlus}"
-DB_NAME="${DB_NAME:-netguard_db}"
-DB_PASS="${DB_PASS:-m4xnetPlus2026#!}"
+DB_USER="m4xnetPlus"
+DB_NAME="m4xnetPlus"
+DB_PASS='m4xnetPlus2026!'
 RUN_MIGRATIONS="${RUN_MIGRATIONS:-auto}"
 
 export PGDATA="/var/lib/postgresql/data"
@@ -12,39 +12,54 @@ echo "  NetGuard ISP - Container Starting"
 echo "  Timezone: $(date +%Z) ($(date +%z))"
 echo "=============================================="
 
+mkdir -p /var/log
+touch /var/log/postgresql.log
+chown postgres:postgres /var/log/postgresql.log
+
 FIRST_BOOT=false
 
 if [ ! -f "$PGDATA/PG_VERSION" ]; then
     FIRST_BOOT=true
-    echo "[INFO] Initializing PostgreSQL database..."
+    echo "[STEP 1] No existing data — fresh PostgreSQL init..."
+
+    pkill postgres 2>/dev/null || true
+    sleep 1
+
+    rm -rf "$PGDATA"/*
+    mkdir -p "$PGDATA"
+    chown -R postgres:postgres "$PGDATA"
+
+    echo "[STEP 3] Running initdb..."
     if ! su-exec postgres initdb -D "$PGDATA" --encoding=UTF8 --locale=C; then
         echo "[ERROR] initdb failed!"
         exit 1
     fi
-    echo "[OK] PostgreSQL initialized"
-fi
 
-echo "[INFO] Writing pg_hba.conf..."
-cat > "$PGDATA/pg_hba.conf" <<HBAEOF
+    cat > "$PGDATA/pg_hba.conf" <<HBAEOF
 local   all       all                   trust
 host    all       all   127.0.0.1/32    md5
 host    all       all   ::1/128         md5
 HBAEOF
 
-if ! grep -q "^timezone = 'Asia/Jakarta'" "$PGDATA/postgresql.conf" 2>/dev/null; then
     cat >> "$PGDATA/postgresql.conf" <<EOF
-listen_addresses = '127.0.0.1'
+listen_addresses = 'localhost'
 port = 5432
 timezone = 'Asia/Jakarta'
 log_timezone = 'Asia/Jakarta'
 max_connections = 50
 shared_buffers = 128MB
 EOF
-fi
 
-mkdir -p /var/log
-touch /var/log/postgresql.log
-chown postgres:postgres /var/log/postgresql.log
+    echo "[OK] PostgreSQL initialized"
+else
+    echo "[OK] PostgreSQL data directory exists"
+
+    cat > "$PGDATA/pg_hba.conf" <<HBAEOF
+local   all       all                   trust
+host    all       all   127.0.0.1/32    md5
+host    all       all   ::1/128         md5
+HBAEOF
+fi
 
 if [ -f "$PGDATA/postmaster.pid" ]; then
     echo "[WARN] Stale postmaster.pid found, cleaning up..."
@@ -57,13 +72,7 @@ if [ -f "$PGDATA/postmaster.pid" ]; then
     echo "[OK] Stale PID cleaned"
 fi
 
-echo "[INFO] Bootstrapping 'postgres' superuser via single-user mode..."
-su-exec postgres postgres --single -D "$PGDATA" template1 <<SQL 2>/dev/null
-CREATE ROLE postgres WITH SUPERUSER LOGIN;
-SQL
-echo "[OK] Bootstrap complete (role created or already exists)"
-
-echo "[INFO] Starting PostgreSQL..."
+echo "[STEP 4] Starting PostgreSQL..."
 if ! su-exec postgres pg_ctl -D "$PGDATA" -l /var/log/postgresql.log start -w -t 30; then
     echo "[ERROR] PostgreSQL failed to start!"
     tail -30 /var/log/postgresql.log
@@ -71,63 +80,63 @@ if ! su-exec postgres pg_ctl -D "$PGDATA" -l /var/log/postgresql.log start -w -t
 fi
 echo "[OK] PostgreSQL started"
 
-echo "[INFO] Configuring app database user '${DB_USER}'..."
-su-exec postgres psql -d template1 -c "
+echo "[STEP 5] Creating role and database..."
+su-exec postgres psql -d template1 <<SQL
 DO \$\$
 BEGIN
     IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = '${DB_USER}') THEN
-        CREATE ROLE ${DB_USER} WITH LOGIN PASSWORD '${DB_PASS}' CREATEDB;
+        CREATE ROLE "${DB_USER}" WITH LOGIN PASSWORD '${DB_PASS}';
         RAISE NOTICE 'Role ${DB_USER} created';
     ELSE
-        ALTER ROLE ${DB_USER} WITH LOGIN PASSWORD '${DB_PASS}' CREATEDB;
+        ALTER ROLE "${DB_USER}" WITH LOGIN PASSWORD '${DB_PASS}';
         RAISE NOTICE 'Role ${DB_USER} updated';
     END IF;
 END
 \$\$;
-" 2>&1 || true
-echo "[OK] Role '${DB_USER}' ready"
+SQL
 
 DB_EXISTS=$(su-exec postgres psql -d template1 -tAc "SELECT 1 FROM pg_database WHERE datname='${DB_NAME}';" 2>/dev/null || echo "0")
 DB_EXISTS=$(echo "$DB_EXISTS" | tr -d ' \n')
 if [ "$DB_EXISTS" != "1" ]; then
     echo "[INFO] Creating database '${DB_NAME}'..."
-    su-exec postgres createdb -O "${DB_USER}" "${DB_NAME}" 2>/dev/null || true
+    su-exec postgres createdb -O "${DB_USER}" "${DB_NAME}"
 else
     echo "[OK] Database '${DB_NAME}' already exists"
 fi
 
-su-exec postgres psql -d template1 -c "GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};" 2>/dev/null || true
-su-exec postgres psql -d "${DB_NAME}" -c "GRANT ALL ON SCHEMA public TO ${DB_USER};" 2>/dev/null || true
+su-exec postgres psql -d template1 -c "GRANT ALL PRIVILEGES ON DATABASE \"${DB_NAME}\" TO \"${DB_USER}\";" 2>/dev/null || true
+su-exec postgres psql -d "${DB_NAME}" -c "GRANT ALL ON SCHEMA public TO \"${DB_USER}\";" 2>/dev/null || true
+echo "[OK] Role and database ready"
 
-echo "[INFO] Verifying TCP auth for app user..."
-if PGPASSWORD="${DB_PASS}" psql -h 127.0.0.1 -U "${DB_USER}" -d "${DB_NAME}" -c "SELECT 1;" &>/dev/null; then
-    echo "[OK] Database ready — TCP md5 auth verified"
+echo "[STEP 6] Setting DATABASE_URL..."
+export DATABASE_URL="postgresql://${DB_USER}:m4xnetPlus2026%21@localhost:5432/${DB_NAME}"
+echo "[OK] DATABASE_URL configured"
+
+echo "[INFO] Verifying TCP connection..."
+if PGPASSWORD="${DB_PASS}" psql -h localhost -U "${DB_USER}" -d "${DB_NAME}" -c "SELECT 1;" &>/dev/null; then
+    echo "[OK] TCP md5 auth verified — database is ready"
 else
     echo "[WARN] TCP auth failed, resetting password..."
-    su-exec postgres psql -d template1 -c "ALTER ROLE ${DB_USER} WITH PASSWORD '${DB_PASS}';" 2>/dev/null || true
+    su-exec postgres psql -d template1 -c "ALTER ROLE \"${DB_USER}\" WITH PASSWORD '${DB_PASS}';" 2>/dev/null || true
     sleep 1
-    if PGPASSWORD="${DB_PASS}" psql -h 127.0.0.1 -U "${DB_USER}" -d "${DB_NAME}" -c "SELECT 1;" &>/dev/null; then
+    if PGPASSWORD="${DB_PASS}" psql -h localhost -U "${DB_USER}" -d "${DB_NAME}" -c "SELECT 1;" &>/dev/null; then
         echo "[OK] TCP auth working after password reset"
     else
-        echo "[WARN] TCP auth still failing, using socket connection for DATABASE_URL"
-        export DATABASE_URL="postgresql://${DB_USER}:${DB_PASS}@/var/run/postgresql/${DB_NAME}"
+        echo "[WARN] TCP auth still failing, check logs"
+        tail -10 /var/log/postgresql.log
     fi
 fi
 
-if [ -z "$DATABASE_URL" ]; then
-    export DATABASE_URL="postgresql://${DB_USER}:${DB_PASS}@127.0.0.1:5432/${DB_NAME}"
-fi
-echo "[OK] DATABASE_URL configured"
-
+echo "[STEP 7] Running database migration..."
 if [ "$FIRST_BOOT" = true ] || [ "$RUN_MIGRATIONS" = "true" ]; then
-    echo "[INFO] Pushing database schema (first boot or forced)..."
+    echo "[INFO] Pushing schema (first boot or forced)..."
     npx drizzle-kit push --force 2>&1 | tail -10 || true
     echo "[OK] Schema push complete"
 elif [ "$RUN_MIGRATIONS" = "auto" ]; then
-    TABLES=$(PGPASSWORD="${DB_PASS}" psql -h 127.0.0.1 -U "${DB_USER}" -d "${DB_NAME}" -tAc "SELECT COUNT(*) FROM pg_tables WHERE schemaname='public';" 2>/dev/null || echo "0")
+    TABLES=$(PGPASSWORD="${DB_PASS}" psql -h localhost -U "${DB_USER}" -d "${DB_NAME}" -tAc "SELECT COUNT(*) FROM pg_tables WHERE schemaname='public';" 2>/dev/null || echo "0")
     TABLES=$(echo "$TABLES" | tr -d ' \n')
     if [ "$TABLES" -lt 3 ] 2>/dev/null; then
-        echo "[INFO] Pushing database schema (only ${TABLES} tables found)..."
+        echo "[INFO] Pushing schema (only ${TABLES} tables found)..."
         npx drizzle-kit push --force 2>&1 | tail -10 || true
         echo "[OK] Schema push complete"
     else
@@ -135,11 +144,11 @@ elif [ "$RUN_MIGRATIONS" = "auto" ]; then
     fi
 fi
 
-TABLES=$(PGPASSWORD="${DB_PASS}" psql -h 127.0.0.1 -U "${DB_USER}" -d "${DB_NAME}" -tAc "SELECT COUNT(*) FROM pg_tables WHERE schemaname='public';" 2>/dev/null || echo "0")
+TABLES=$(PGPASSWORD="${DB_PASS}" psql -h localhost -U "${DB_USER}" -d "${DB_NAME}" -tAc "SELECT COUNT(*) FROM pg_tables WHERE schemaname='public';" 2>/dev/null || echo "0")
 echo "[OK] Found $(echo $TABLES | tr -d ' \n') table(s) in database"
 
-echo "[INFO] Starting NetGuard application..."
-echo "[INFO] Database: ${DB_NAME} | User: ${DB_USER} | Host: 127.0.0.1"
+echo "[STEP 8] Starting NetGuard application..."
+echo "[INFO] Database: ${DB_NAME} | User: ${DB_USER} | Host: localhost:5432"
 echo "=============================================="
 
 shutdown_handler() {

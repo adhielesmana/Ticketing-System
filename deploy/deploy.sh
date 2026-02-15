@@ -69,9 +69,9 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 DOMAIN="${DOMAIN:-tickets.yourdomain.com}"
 APP_NAME="${APP_NAME:-netguard}"
 APP_PORT="${APP_PORT:-3100}"
-DB_NAME="netguard_db"
+DB_NAME="m4xnetPlus"
 DB_USER="m4xnetPlus"
-DB_PASS='m4xnetPlus2026#!'
+DB_PASS='m4xnetPlus2026!'
 SSL_EMAIL="${SSL_EMAIL:-admin@yourdomain.com}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/netguard}"
 
@@ -252,10 +252,12 @@ step_done 5 "Build Docker image (app + database)"
 #====================================================================
 step_start 6 "Start NetGuard container"
 
-if ! docker volume inspect "$PGDATA_VOLUME" &>/dev/null; then
-    docker volume create "$PGDATA_VOLUME"
-    log_ok "Created PostgreSQL data volume"
+if docker volume inspect "$PGDATA_VOLUME" &>/dev/null; then
+    log_warn "Existing PostgreSQL data volume found — removing for fresh install..."
+    docker volume rm "$PGDATA_VOLUME" 2>/dev/null || true
 fi
+docker volume create "$PGDATA_VOLUME"
+log_ok "Created fresh PostgreSQL data volume"
 
 if ! docker volume inspect "$UPLOADS_VOLUME" &>/dev/null; then
     docker volume create "$UPLOADS_VOLUME"

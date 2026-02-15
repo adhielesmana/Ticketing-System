@@ -69,9 +69,9 @@ APP_PORT="${APP_PORT:-3100}"
 PGDATA_VOLUME="${PGDATA_VOLUME:-netguard_pgdata}"
 UPLOADS_VOLUME="${UPLOADS_VOLUME:-netguard_uploads}"
 
-DB_NAME="netguard_db"
+DB_NAME="m4xnetPlus"
 DB_USER="m4xnetPlus"
-DB_PASS='m4xnetPlus2026#!'
+DB_PASS='m4xnetPlus2026!'
 
 if [ -f "${INSTALL_DIR}/.credentials" ]; then
     eval "$(grep -E '^SESSION_SECRET=' "${INSTALL_DIR}/.credentials")"
