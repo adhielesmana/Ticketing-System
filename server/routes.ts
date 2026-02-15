@@ -10,6 +10,45 @@ import { hash, compare } from "bcryptjs";
 import path from "path";
 import fs from "fs";
 
+function extractCoordsFromUrl(url: string): { lat: number; lng: number } | null {
+  if (!url) return null;
+  const patterns = [
+    /[?&]q=([-\d.]+),([-\d.]+)/,
+    /@([-\d.]+),([-\d.]+)/,
+    /place\/([-\d.]+),([-\d.]+)/,
+    /ll=([-\d.]+),([-\d.]+)/,
+    /center=([-\d.]+),([-\d.]+)/,
+  ];
+  for (const p of patterns) {
+    const m = url.match(p);
+    if (m) {
+      const lat = parseFloat(m[1]);
+      const lng = parseFloat(m[2]);
+      if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        return { lat, lng };
+      }
+    }
+  }
+  return null;
+}
+
+async function reverseGeocodeArea(lat: number, lng: number): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=16&addressdetails=1`,
+      { headers: { "User-Agent": "NetGuard-ISP-Ticketing/1.0" } }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    const addr = data.address;
+    if (!addr) return null;
+    return addr.village || addr.suburb || addr.neighbourhood || addr.quarter ||
+           addr.city_district || addr.town || addr.city || addr.county || null;
+  } catch {
+    return null;
+  }
+}
+
 const s3Client = new S3Client({
   region: "us-east-1",
   endpoint: process.env.S3_ENDPOINT,
@@ -180,12 +219,20 @@ export async function registerRoutes(
       const bonusSetting = await storage.getSetting(bonusSettingKey);
       const bonus = bonusSetting?.value || "0";
 
+      let area: string | null = null;
+      const locationUrl = input.customerLocationUrl || "";
+      const coords = extractCoordsFromUrl(locationUrl);
+      if (coords) {
+        area = await reverseGeocodeArea(coords.lat, coords.lng);
+      }
+
       const ticket = await storage.createTicket({
         ...input,
         ticketNumber,
         slaDeadline,
         status: TicketStatus.OPEN,
-        customerLocationUrl: input.customerLocationUrl || "",
+        customerLocationUrl: locationUrl,
+        area,
         bonus,
       });
 
@@ -729,4 +776,26 @@ async function seedDatabase() {
   });
 
   console.log("Seeding complete.");
+}
+
+export async function backfillTicketAreas() {
+  try {
+    const allTickets = await storage.getAllTickets({});
+    const ticketsWithoutArea = allTickets.filter((t: any) => !t.area && t.customerLocationUrl);
+    if (ticketsWithoutArea.length === 0) return;
+    console.log(`Backfilling area for ${ticketsWithoutArea.length} tickets...`);
+    for (const ticket of ticketsWithoutArea) {
+      const coords = extractCoordsFromUrl(ticket.customerLocationUrl);
+      if (coords) {
+        const area = await reverseGeocodeArea(coords.lat, coords.lng);
+        if (area) {
+          await storage.updateTicket(ticket.id, { area });
+        }
+      }
+      await new Promise(r => setTimeout(r, 1100));
+    }
+    console.log("Area backfill complete.");
+  } catch (err) {
+    console.error("Area backfill error:", err);
+  }
 }

@@ -75,6 +75,16 @@ const statusColors: Record<string, string> = {
   rejected: "bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300",
 };
 
+function toUpperName(name: string): string {
+  if (!name) return "";
+  return name.toUpperCase();
+}
+
+function toTitleCase(str: string): string {
+  if (!str) return "";
+  return str.replace(/\b\w/g, c => c.toUpperCase());
+}
+
 export default function TicketsPage() {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
@@ -251,6 +261,7 @@ export default function TicketsPage() {
                   <TableHead className="w-[90px]">Priority</TableHead>
                   <TableHead className="w-[110px]">Status</TableHead>
                   <TableHead>Customer</TableHead>
+                  <TableHead className="w-[120px]">Area</TableHead>
                   <TableHead>Assignee</TableHead>
                   <TableHead className="w-[140px]">SLA</TableHead>
                   <TableHead className="w-[100px]">Created</TableHead>
@@ -261,14 +272,14 @@ export default function TicketsPage() {
                 {isLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      {Array.from({ length: 10 }).map((_, j) => (
+                      {Array.from({ length: 11 }).map((_, j) => (
                         <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                       ))}
                     </TableRow>
                   ))
                 ) : tickets?.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-12">
+                    <TableCell colSpan={11} className="text-center py-12">
                       <div className="flex flex-col items-center gap-2 text-muted-foreground">
                         <Ticket className="w-8 h-8 opacity-30" />
                         <p className="text-sm font-medium">No tickets found</p>
@@ -282,7 +293,7 @@ export default function TicketsPage() {
                       <TableCell className="font-mono text-xs text-muted-foreground">{ticket.ticketIdCustom || ticket.ticketNumber}</TableCell>
                       <TableCell>
                         <Link href={`/tickets/${ticket.id}`}>
-                          <span className="text-sm font-medium cursor-pointer">{ticket.title}</span>
+                          <span className="text-sm font-medium cursor-pointer">{toTitleCase(ticket.title)}</span>
                         </Link>
                       </TableCell>
                       <TableCell>
@@ -300,7 +311,8 @@ export default function TicketsPage() {
                           {ticket.status.replace(/_/g, " ")}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-sm">{ticket.customerName}</TableCell>
+                      <TableCell className="text-sm font-medium">{toUpperName(ticket.customerName)}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{ticket.area || "—"}</TableCell>
                       <TableCell>
                         {ticket.assignees && ticket.assignees.length > 0 ? (
                           <div className="space-y-1">
@@ -308,10 +320,10 @@ export default function TicketsPage() {
                               <div key={a.id} className="flex items-center gap-1.5">
                                 <Avatar className="h-5 w-5">
                                   <AvatarFallback className="text-[9px] bg-muted font-medium">
-                                    {a.name.charAt(0)}
+                                    {a.name.charAt(0).toUpperCase()}
                                   </AvatarFallback>
                                 </Avatar>
-                                <span className="text-sm">{a.name}</span>
+                                <span className="text-sm font-medium">{toUpperName(a.name)}</span>
                               </div>
                             ))}
                           </div>
@@ -319,10 +331,10 @@ export default function TicketsPage() {
                           <div className="flex items-center gap-1.5">
                             <Avatar className="h-5 w-5">
                               <AvatarFallback className="text-[9px] bg-muted font-medium">
-                                {ticket.assignee.name.charAt(0)}
+                                {ticket.assignee.name.charAt(0).toUpperCase()}
                               </AvatarFallback>
                             </Avatar>
-                            <span className="text-sm">{ticket.assignee.name}</span>
+                            <span className="text-sm font-medium">{toUpperName(ticket.assignee.name)}</span>
                           </div>
                         ) : (
                           <span className="text-xs text-muted-foreground italic">Unassigned</span>

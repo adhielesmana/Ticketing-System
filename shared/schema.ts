@@ -67,6 +67,7 @@ export const tickets = pgTable("tickets", {
   customerPhone: text("customer_phone").notNull(),
   customerEmail: text("customer_email"),
   customerLocationUrl: text("customer_location_url").notNull(),
+  area: text("area"),
   odpInfo: text("odp_info"),
   odpLocation: text("odp_location"),
   ticketIdCustom: text("ticket_id_custom"),

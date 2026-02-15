@@ -60,6 +60,16 @@ const statusColors: Record<string, string> = {
   rejected: "bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300",
 };
 
+function toUpperName(name: string): string {
+  if (!name) return "";
+  return name.toUpperCase();
+}
+
+function toTitleCase(str: string): string {
+  if (!str) return "";
+  return str.replace(/\b\w/g, c => c.toUpperCase());
+}
+
 function extractCoordinates(url: string): { lat: number; lng: number } | null {
   if (!url) return null;
   const patterns = [
@@ -249,7 +259,7 @@ export default function TicketDetail() {
               {ticket.type.replace(/_/g, ' ')}
             </Badge>
           </div>
-          <h1 className="text-xl font-bold font-display mt-1" data-testid="text-ticket-title">{ticket.title}</h1>
+          <h1 className="text-xl font-bold font-display mt-1" data-testid="text-ticket-title">{toTitleCase(ticket.title)}</h1>
         </div>
       </div>
 
@@ -601,7 +611,7 @@ export default function TicketDetail() {
             <CardContent className="space-y-3">
               <div className="flex items-center gap-2.5">
                 <User className="w-4 h-4 text-muted-foreground shrink-0" />
-                <span className="text-sm font-medium">{ticket.customerName}</span>
+                <span className="text-sm font-medium">{toUpperName(ticket.customerName)}</span>
               </div>
               <div className="flex items-center gap-2.5">
                 <Phone className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -616,15 +626,26 @@ export default function TicketDetail() {
               {ticket.customerLocationUrl && (
                 <div className="flex items-center gap-2.5">
                   <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <a
-                    href={ticket.customerLocationUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-sm text-primary inline-flex items-center gap-1"
-                  >
-                    <ExternalLink className="w-3 h-3" />
-                    Open in Maps
-                  </a>
+                  <div className="flex flex-col">
+                    <a
+                      href={ticket.customerLocationUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm text-primary inline-flex items-center gap-1"
+                    >
+                      <ExternalLink className="w-3 h-3" />
+                      Open in Maps
+                    </a>
+                    {ticket.area && (
+                      <span className="text-xs text-muted-foreground mt-0.5" data-testid="text-ticket-area">{ticket.area}</span>
+                    )}
+                  </div>
+                </div>
+              )}
+              {!ticket.customerLocationUrl && ticket.area && (
+                <div className="flex items-center gap-2.5">
+                  <MapPin className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <span className="text-sm" data-testid="text-ticket-area">{ticket.area}</span>
                 </div>
               )}
               {(ticket.odpInfo || ticket.odpLocation) && (
@@ -672,7 +693,7 @@ export default function TicketDetail() {
                           </AvatarFallback>
                         </Avatar>
                         <div>
-                          <p className="text-sm font-medium">{assignee.name}</p>
+                          <p className="text-sm font-medium">{toUpperName(assignee.name)}</p>
                           <p className="text-xs text-muted-foreground capitalize">
                             {idx === 0 ? "Lead Technician" : "Partner"}
                           </p>
