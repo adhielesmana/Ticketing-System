@@ -549,7 +549,7 @@ export async function registerRoutes(
     }
   });
 
-  // === REJECT (Admin/Helpdesk confirms rejection) ===
+  // === REJECT (Admin/Helpdesk confirms rejection with reason) ===
   app.post(api.tickets.reject.path, async (req, res) => {
     try {
       const userId = (req as any).session.userId;
@@ -558,6 +558,11 @@ export async function registerRoutes(
       const user = await storage.getUser(userId);
       if (!user || ![UserRole.ADMIN, UserRole.SUPERADMIN, UserRole.HELPDESK].includes(user.role as any)) {
         return res.status(403).json({ message: "Only admin, superadmin or helpdesk can confirm rejection" });
+      }
+
+      const { reason } = req.body;
+      if (!reason || reason.trim() === "") {
+        return res.status(400).json({ message: "Reason is required" });
       }
 
       const ticketId = Number(req.params.id);
@@ -577,12 +582,103 @@ export async function registerRoutes(
         durationMinutes,
         performStatus: "not_perform",
         bonus: "0",
+        ticketFee: "0",
+        transportFee: "0",
+        rejectionReason: `${existingTicket.rejectionReason || ""}\n[Confirmed] ${reason.trim()}`.trim(),
       });
 
       res.json(ticket);
     } catch (err) {
       console.error("Reject error:", err);
       res.status(500).json({ message: "Failed to reject ticket" });
+    }
+  });
+
+  // === CANCEL REJECT (Admin/Helpdesk reopens ticket to assigned) ===
+  app.post(api.tickets.cancelReject.path, async (req, res) => {
+    try {
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+
+      const user = await storage.getUser(userId);
+      if (!user || ![UserRole.ADMIN, UserRole.SUPERADMIN, UserRole.HELPDESK].includes(user.role as any)) {
+        return res.status(403).json({ message: "Only admin, superadmin or helpdesk can cancel rejection" });
+      }
+
+      const ticketId = Number(req.params.id);
+      const existingTicket = await storage.getTicket(ticketId);
+      if (!existingTicket) return res.status(404).json({ message: "Ticket not found" });
+
+      if (existingTicket.status !== TicketStatus.PENDING_REJECTION) {
+        return res.status(400).json({ message: "Ticket must be pending rejection" });
+      }
+
+      const ticket = await storage.updateTicket(ticketId, {
+        status: TicketStatus.ASSIGNED,
+        rejectionReason: null,
+      });
+
+      res.json(ticket);
+    } catch (err) {
+      console.error("Cancel reject error:", err);
+      res.status(500).json({ message: "Failed to cancel rejection" });
+    }
+  });
+
+  // === CLOSE BY HELPDESK (Admin/Helpdesk closes pending_rejection ticket with reason) ===
+  app.post(api.tickets.closeByHelpdesk.path, async (req, res) => {
+    try {
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+
+      const user = await storage.getUser(userId);
+      if (!user || ![UserRole.ADMIN, UserRole.SUPERADMIN, UserRole.HELPDESK].includes(user.role as any)) {
+        return res.status(403).json({ message: "Only admin, superadmin or helpdesk can close this ticket" });
+      }
+
+      const { reason } = req.body;
+      if (!reason || reason.trim() === "") {
+        return res.status(400).json({ message: "Reason is required" });
+      }
+
+      const ticketId = Number(req.params.id);
+      const existingTicket = await storage.getTicket(ticketId);
+      if (!existingTicket) return res.status(404).json({ message: "Ticket not found" });
+
+      if (existingTicket.status !== TicketStatus.PENDING_REJECTION) {
+        return res.status(400).json({ message: "Ticket must be pending rejection" });
+      }
+
+      const now = new Date();
+      const durationMinutes = Math.floor((now.getTime() - existingTicket.createdAt.getTime()) / 60000);
+      const isWithinSLA = existingTicket.slaDeadline > now;
+
+      const ticket = await storage.updateTicket(ticketId, {
+        status: TicketStatus.CLOSED,
+        closedAt: now,
+        durationMinutes,
+        performStatus: isWithinSLA ? "perform" : "not_perform",
+        bonus: isWithinSLA ? existingTicket.bonus : "0",
+        ticketFee: isWithinSLA ? existingTicket.ticketFee : "0",
+        transportFee: isWithinSLA ? existingTicket.transportFee : "0",
+        rejectionReason: `${existingTicket.rejectionReason || ""}\n[Closed by helpdesk] ${reason.trim()}`.trim(),
+      });
+
+      const allAssignees = await storage.getAssigneesForTicket(ticketId);
+      for (const assignee of allAssignees) {
+        await storage.logPerformance({
+          userId: assignee.id,
+          ticketId: ticket.id,
+          result: ticket.performStatus as "perform" | "not_perform",
+          completedWithinSLA: ticket.performStatus === "perform",
+          durationMinutes,
+        });
+      }
+
+      res.json(ticket);
+    } catch (err) {
+      console.error("Close by helpdesk error:", err);
+      res.status(500).json({ message: "Failed to close ticket" });
     }
   });
 

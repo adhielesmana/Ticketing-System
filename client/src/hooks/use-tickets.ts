@@ -294,11 +294,13 @@ export function useRejectTicket() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (id: number) => {
+    mutationFn: async ({ id, reason }: { id: number; reason: string }) => {
       const url = buildUrl(api.tickets.reject.path, { id });
       const res = await fetch(url, {
         method: api.tickets.reject.method,
         credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({ message: "Failed" }));
@@ -306,11 +308,65 @@ export function useRejectTicket() {
       }
       return res.json();
     },
+    onSuccess: (_data, { id }) => {
+      queryClient.invalidateQueries({ queryKey: [api.tickets.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.tickets.get.path, id] });
+      queryClient.invalidateQueries({ queryKey: [api.dashboard.stats.path] });
+      toast({ title: "Rejected", description: "Ticket has been rejected and closed" });
+    },
+  });
+}
+
+export function useCancelReject() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const url = buildUrl(api.tickets.cancelReject.path, { id });
+      const res = await fetch(url, {
+        method: api.tickets.cancelReject.method,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Failed" }));
+        throw new Error(err.message || "Failed to cancel rejection");
+      }
+      return res.json();
+    },
     onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: [api.tickets.list.path] });
       queryClient.invalidateQueries({ queryKey: [api.tickets.get.path, id] });
       queryClient.invalidateQueries({ queryKey: [api.dashboard.stats.path] });
-      toast({ title: "Rejected", description: "Ticket has been rejected" });
+      toast({ title: "Reopened", description: "Ticket has been reopened and assigned back to technician" });
+    },
+  });
+}
+
+export function useCloseByHelpdesk() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, reason }: { id: number; reason: string }) => {
+      const url = buildUrl(api.tickets.closeByHelpdesk.path, { id });
+      const res = await fetch(url, {
+        method: api.tickets.closeByHelpdesk.method,
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Failed" }));
+        throw new Error(err.message || "Failed to close ticket");
+      }
+      return res.json();
+    },
+    onSuccess: (_data, { id }) => {
+      queryClient.invalidateQueries({ queryKey: [api.tickets.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.tickets.get.path, id] });
+      queryClient.invalidateQueries({ queryKey: [api.dashboard.stats.path] });
+      toast({ title: "Closed", description: "Ticket has been closed by helpdesk" });
     },
   });
 }

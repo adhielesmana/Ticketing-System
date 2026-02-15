@@ -210,6 +210,26 @@ export const api = {
     reject: {
       method: 'POST' as const,
       path: '/api/tickets/:id/reject' as const,
+      input: z.object({
+        reason: z.string().min(1, "Reason is required"),
+      }),
+      responses: {
+        200: z.custom<typeof tickets.$inferSelect>(),
+      },
+    },
+    cancelReject: {
+      method: 'POST' as const,
+      path: '/api/tickets/:id/cancel-reject' as const,
+      responses: {
+        200: z.custom<typeof tickets.$inferSelect>(),
+      },
+    },
+    closeByHelpdesk: {
+      method: 'POST' as const,
+      path: '/api/tickets/:id/close-by-helpdesk' as const,
+      input: z.object({
+        reason: z.string().min(1, "Reason is required"),
+      }),
       responses: {
         200: z.custom<typeof tickets.$inferSelect>(),
       },

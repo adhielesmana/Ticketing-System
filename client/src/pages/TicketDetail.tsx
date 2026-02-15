@@ -1,4 +1,4 @@
-import { useTicket, useCloseTicket, useStartTicket, useAssignTicket, useReassignTicket, useUploadFile, useUploadImages, useFreeTechnicians, useNoResponseTicket, useRejectTicket } from "@/hooks/use-tickets";
+import { useTicket, useCloseTicket, useStartTicket, useAssignTicket, useReassignTicket, useUploadFile, useUploadImages, useFreeTechnicians, useNoResponseTicket, useRejectTicket, useCancelReject, useCloseByHelpdesk } from "@/hooks/use-tickets";
 import { useUsers } from "@/hooks/use-users";
 import { useAuth } from "@/hooks/use-auth";
 import { useParams, Link } from "wouter";
@@ -157,6 +157,8 @@ export default function TicketDetail() {
   const { mutate: closeTicket } = useCloseTicket();
   const { mutate: noResponse, isPending: isReportingNoResponse } = useNoResponseTicket();
   const { mutate: rejectTicket, isPending: isRejecting } = useRejectTicket();
+  const { mutate: cancelReject, isPending: isCancellingReject } = useCancelReject();
+  const { mutate: closeByHelpdesk, isPending: isClosingByHelpdesk } = useCloseByHelpdesk();
 
   const { mutateAsync: uploadFile, isPending: isUploadingFile } = useUploadFile();
   const { mutateAsync: uploadMultiple, isPending: isUploadingMultiple } = useUploadImages();
@@ -165,6 +167,10 @@ export default function TicketDetail() {
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
   const [noResponseDialogOpen, setNoResponseDialogOpen] = useState(false);
   const [noResponseReason, setNoResponseReason] = useState("");
+  const [rejectReasonDialogOpen, setRejectReasonDialogOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [helpdeskCloseDialogOpen, setHelpdeskCloseDialogOpen] = useState(false);
+  const [helpdeskCloseReason, setHelpdeskCloseReason] = useState("");
   const [reassignDialogOpen, setReassignDialogOpen] = useState(false);
   const [reassignTech1, setReassignTech1] = useState<string>("");
   const [reassignTech2, setReassignTech2] = useState<string>("");
@@ -419,23 +425,100 @@ export default function TicketDetail() {
 
           {['pending_rejection', 'rejected'].includes(ticket.status) && ticket.rejectionReason && (
             <Card>
-              <CardContent className="p-4 space-y-2">
+              <CardContent className="p-4 space-y-3">
                 <div className="flex items-center gap-2">
                   <PhoneOff className="w-4 h-4 text-orange-600 dark:text-orange-400" />
                   <p className="text-sm font-medium text-orange-700 dark:text-orange-300">
                     {ticket.status === 'rejected' ? 'Ticket Rejected - Customer No Response' : 'Customer No Response (Pending Review)'}
                   </p>
                 </div>
-                <p className="text-sm text-muted-foreground">{ticket.rejectionReason}</p>
+                <p className="text-sm text-muted-foreground whitespace-pre-line">{ticket.rejectionReason}</p>
                 {canManage && ticket.status === 'pending_rejection' && (
-                  <Button
-                    variant="destructive"
-                    onClick={() => rejectTicket(ticketId)}
-                    disabled={isRejecting}
-                    data-testid="button-confirm-reject"
-                  >
-                    {isRejecting ? <><Loader2 className="w-4 h-4 animate-spin" /> Rejecting...</> : "Confirm Reject"}
-                  </Button>
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <Dialog open={rejectReasonDialogOpen} onOpenChange={setRejectReasonDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button variant="destructive" size="sm" data-testid="button-confirm-reject">
+                          Confirm Reject & Close
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-sm">
+                        <DialogHeader>
+                          <DialogTitle className="flex items-center gap-2">
+                            <PhoneOff className="w-5 h-5 text-red-600 dark:text-red-400" />
+                            Confirm Reject & Close
+                          </DialogTitle>
+                        </DialogHeader>
+                        <p className="text-sm text-muted-foreground">
+                          This will permanently reject the ticket with zero bonus. Please provide a reason.
+                        </p>
+                        <Textarea
+                          placeholder="Enter rejection reason..."
+                          value={rejectReason}
+                          onChange={(e) => setRejectReason(e.target.value)}
+                          data-testid="input-reject-reason"
+                        />
+                        <Button
+                          variant="destructive"
+                          disabled={!rejectReason.trim() || isRejecting}
+                          data-testid="button-submit-reject"
+                          onClick={() => {
+                            rejectTicket({ id: ticketId, reason: rejectReason.trim() });
+                            setRejectReasonDialogOpen(false);
+                            setRejectReason("");
+                          }}
+                        >
+                          {isRejecting ? <><Loader2 className="w-4 h-4 animate-spin" /> Rejecting...</> : "Confirm Reject"}
+                        </Button>
+                      </DialogContent>
+                    </Dialog>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => cancelReject(ticketId)}
+                      disabled={isCancellingReject}
+                      data-testid="button-cancel-reject"
+                    >
+                      {isCancellingReject ? <><Loader2 className="w-4 h-4 animate-spin" /> Reopening...</> : <><RefreshCw className="w-3.5 h-3.5 mr-1" /> Cancel Reject (Reopen)</>}
+                    </Button>
+
+                    <Dialog open={helpdeskCloseDialogOpen} onOpenChange={setHelpdeskCloseDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button variant="secondary" size="sm" data-testid="button-close-by-helpdesk">
+                          <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                          Close Ticket
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-sm">
+                        <DialogHeader>
+                          <DialogTitle className="flex items-center gap-2">
+                            <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                            Close Ticket by Helpdesk
+                          </DialogTitle>
+                        </DialogHeader>
+                        <p className="text-sm text-muted-foreground">
+                          Close this ticket with normal bonus calculation. Please provide a reason why helpdesk is closing it.
+                        </p>
+                        <Textarea
+                          placeholder="Enter reason for closing..."
+                          value={helpdeskCloseReason}
+                          onChange={(e) => setHelpdeskCloseReason(e.target.value)}
+                          data-testid="input-helpdesk-close-reason"
+                        />
+                        <Button
+                          disabled={!helpdeskCloseReason.trim() || isClosingByHelpdesk}
+                          data-testid="button-submit-helpdesk-close"
+                          onClick={() => {
+                            closeByHelpdesk({ id: ticketId, reason: helpdeskCloseReason.trim() });
+                            setHelpdeskCloseDialogOpen(false);
+                            setHelpdeskCloseReason("");
+                          }}
+                        >
+                          {isClosingByHelpdesk ? <><Loader2 className="w-4 h-4 animate-spin" /> Closing...</> : "Close Ticket"}
+                        </Button>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
                 )}
               </CardContent>
             </Card>
