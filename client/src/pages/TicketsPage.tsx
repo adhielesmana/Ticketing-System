@@ -97,6 +97,7 @@ export default function TicketsPage() {
   const [assignDialogTicket, setAssignDialogTicket] = useState<any>(null);
 
   const canManage = user?.role === UserRole.SUPERADMIN || user?.role === UserRole.ADMIN;
+  const canAssign = canManage || user?.role === UserRole.HELPDESK;
   const canCreate = canManage || user?.role === UserRole.HELPDESK;
 
   const editForm = useForm({
@@ -292,7 +293,7 @@ export default function TicketsPage() {
                               <Eye className="w-3.5 h-3.5" />
                             </Button>
                           </Link>
-                          {canManage && !ticket.assignee && ticket.status === "open" && (
+                          {canAssign && !ticket.assignee && (ticket.status === "open" || ticket.status === "waiting_assignment") && (
                             <Button
                               size="icon"
                               variant="ghost"
