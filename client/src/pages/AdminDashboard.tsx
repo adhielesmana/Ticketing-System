@@ -147,7 +147,7 @@ export default function AdminDashboard() {
           </CardHeader>
           <CardContent className="flex-1 p-0 overflow-hidden">
             <ScrollArea className="h-[300px] px-4">
-              <div className="space-y-3 pb-4">
+              <div className="space-y-3 py-4">
                 {ticketsLoading ? (
                   [1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full" />)
                 ) : recentTickets?.length === 0 ? (
