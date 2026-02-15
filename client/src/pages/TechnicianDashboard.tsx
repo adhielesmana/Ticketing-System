@@ -51,13 +51,15 @@ export default function TechnicianDashboard() {
   const { mutate: autoAssign, isPending: isAutoAssigning } = useAutoAssignTicket();
   const { data: freeTechnicians, isLoading: loadingFreeTechs } = useFreeTechnicians(user?.id);
 
-  const activeTickets = tickets?.filter((t: any) =>
-    ['assigned', 'in_progress'].includes(t.status)
-  ) || [];
+  const priorityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
-  const historyTickets = tickets?.filter((t: any) =>
+  const activeTickets = (tickets?.filter((t: any) =>
+    ['assigned', 'in_progress'].includes(t.status)
+  ) || []).sort((a: any, b: any) => (priorityOrder[a.priority] ?? 99) - (priorityOrder[b.priority] ?? 99));
+
+  const historyTickets = (tickets?.filter((t: any) =>
     ['closed'].includes(t.status)
-  ) || [];
+  ) || []).sort((a: any, b: any) => (priorityOrder[a.priority] ?? 99) - (priorityOrder[b.priority] ?? 99));
 
   const hasActiveTicket = activeTickets.length > 0;
 
