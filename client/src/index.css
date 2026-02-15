@@ -51,16 +51,16 @@
   --chart-4: 38 92% 50%;
   --chart-5: 0 72% 51%;
 
-  --sidebar: 224 30% 14%;
-  --sidebar-foreground: 220 14% 94%;
-  --sidebar-border: 224 25% 20%;
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 224 30% 14%;
+  --sidebar-border: 220 13% 91%;
   --sidebar-ring: 221 83% 53%;
   --sidebar-primary: 221 83% 53%;
   --sidebar-primary-foreground: 0 0% 100%;
   --sidebar-primary-border: 221 83% 46%;
-  --sidebar-accent: 224 25% 20%;
-  --sidebar-accent-foreground: 220 14% 94%;
-  --sidebar-accent-border: 224 25% 26%;
+  --sidebar-accent: 220 14% 96%;
+  --sidebar-accent-foreground: 224 30% 14%;
+  --sidebar-accent-border: 220 13% 91%;
 
   --sla-safe: 142 76% 36%;
   --sla-warning: 38 92% 50%;
