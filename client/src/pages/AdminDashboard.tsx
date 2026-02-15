@@ -24,6 +24,7 @@ import {
   CheckCircle2,
   UserCheck,
   TrendingUp,
+  PhoneOff,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -34,6 +35,7 @@ export default function AdminDashboard() {
   const chartData = [
     { name: 'Open', value: stats?.totalOpen || 0, fill: 'hsl(221 83% 53%)' },
     { name: 'Assigned', value: stats?.totalAssigned || 0, fill: 'hsl(199 89% 48%)' },
+    { name: 'No Response', value: stats?.pendingRejection || 0, fill: 'hsl(25 95% 53%)' },
     { name: 'Closed', value: stats?.totalClosed || 0, fill: 'hsl(142 76% 36%)' },
   ];
 
@@ -47,7 +49,7 @@ export default function AdminDashboard() {
         <CreateTicketDialog />
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
           title="Open Tickets"
           value={stats?.totalOpen}
@@ -63,6 +65,16 @@ export default function AdminDashboard() {
           loading={statsLoading}
           color="text-violet-600 dark:text-violet-400"
           bgColor="bg-violet-50 dark:bg-violet-950/50"
+        />
+        <StatCard
+          title="No Response"
+          value={stats?.pendingRejection}
+          icon={<PhoneOff className="w-4 h-4" />}
+          loading={statsLoading}
+          color="text-orange-600 dark:text-orange-400"
+          bgColor="bg-orange-50 dark:bg-orange-950/50"
+          alert={true}
+          alertColor="text-orange-600 dark:text-orange-400"
         />
         <StatCard
           title="SLA Breaches"
@@ -154,7 +166,8 @@ export default function AdminDashboard() {
   );
 }
 
-function StatCard({ title, value, icon, loading, color, bgColor, alert }: any) {
+function StatCard({ title, value, icon, loading, color, bgColor, alert, alertColor }: any) {
+  const alertClass = alert && value > 0 ? (alertColor || 'text-red-600 dark:text-red-400') : '';
   return (
     <Card data-testid={`stat-card-${title.toLowerCase().replace(/\s+/g, '-')}`}>
       <CardContent className="p-4">
@@ -164,7 +177,7 @@ function StatCard({ title, value, icon, loading, color, bgColor, alert }: any) {
             {loading ? (
               <Skeleton className="h-8 w-14 mt-1" />
             ) : (
-              <p className={`text-2xl font-bold tabular-nums ${alert && value > 0 ? 'text-red-600 dark:text-red-400' : ''}`}>
+              <p className={`text-2xl font-bold tabular-nums ${alertClass}`}>
                 {value ?? 0}
               </p>
             )}

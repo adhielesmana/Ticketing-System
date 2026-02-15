@@ -62,6 +62,7 @@ export interface IStorage {
     totalAssigned: number;
     totalClosed: number;
     slaBreachCount: number;
+    pendingRejection: number;
   }>;
 }
 
@@ -624,12 +625,14 @@ export class DatabaseStorage implements IStorage {
     totalAssigned: number;
     totalClosed: number;
     slaBreachCount: number;
+    pendingRejection: number;
   }> {
     const [stats] = await db.select({
       totalOpen: sql<number>`count(case when ${tickets.status} = ${TicketStatus.OPEN} then 1 end)`,
       totalAssigned: sql<number>`count(case when ${tickets.status} IN (${TicketStatus.ASSIGNED}, ${TicketStatus.IN_PROGRESS}) then 1 end)`,
       totalClosed: sql<number>`count(case when ${tickets.status} = ${TicketStatus.CLOSED} then 1 end)`,
       slaBreachCount: sql<number>`count(case when ${tickets.status} = ${TicketStatus.OVERDUE} OR (${tickets.slaDeadline} < NOW() AND ${tickets.status} != ${TicketStatus.CLOSED}) then 1 end)`,
+      pendingRejection: sql<number>`count(case when ${tickets.status} = 'pending_rejection' then 1 end)`,
     }).from(tickets);
     
     return {
@@ -637,6 +640,7 @@ export class DatabaseStorage implements IStorage {
       totalAssigned: Number(stats.totalAssigned),
       totalClosed: Number(stats.totalClosed),
       slaBreachCount: Number(stats.slaBreachCount),
+      pendingRejection: Number(stats.pendingRejection),
     };
   }
 }
