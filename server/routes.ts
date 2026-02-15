@@ -262,6 +262,9 @@ export async function registerRoutes(
   });
 
   // === AUTO-ASSIGN (Technician presses "Get Ticket") ===
+  // Smart assignment with 4:2 maintenance:installation ratio
+  // Priority: 1) Nearest location from last same-day job, 2) Highest priority, 3) Random among same priority
+  // Fallback: If no preferred type available, try the other type
   app.post(api.tickets.autoAssign.path, async (req, res) => {
     try {
       const userId = (req as any).session.userId;
@@ -292,7 +295,32 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Selected partner already has an active ticket" });
       }
 
-      const ticket = await storage.getOldestOpenTicket(user.isBackboneSpecialist);
+      // Determine preferred type based on 4:2 ratio (maintenance:installation)
+      let preferredType: "maintenance" | "installation" = "maintenance";
+
+      if (!user.isBackboneSpecialist) {
+        const counts = await storage.getCompletedTicketsTodayByUser(userId);
+        const totalDone = counts.maintenanceCount + counts.installationCount;
+        // 4:2 ratio = in every cycle of 6 tickets, 4 should be maintenance, 2 installation
+        // Check position in current cycle
+        const cyclePosition = totalDone % 6;
+        if (cyclePosition < 4) {
+          preferredType = "maintenance";
+        } else {
+          preferredType = "installation";
+        }
+      }
+
+      // Get last completed ticket today for location proximity
+      const lastTicket = await storage.getLastCompletedTicketToday(userId);
+      const lastLocation = lastTicket?.customerLocationUrl || null;
+
+      const ticket = await storage.getSmartOpenTicket({
+        isBackboneSpecialist: user.isBackboneSpecialist ?? false,
+        preferredType,
+        lastTicketLocation: lastLocation,
+      });
+
       if (!ticket) {
         return res.status(404).json({ message: "No open tickets available" });
       }

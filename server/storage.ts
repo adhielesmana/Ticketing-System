@@ -36,6 +36,13 @@ export interface IStorage {
   getActiveTicketForUser(userId: number): Promise<Ticket | undefined>;
   getOldestOpenTicket(isBackboneSpecialist?: boolean): Promise<Ticket | undefined>;
   getFreeTechnicians(excludeUserId?: number): Promise<User[]>;
+  getCompletedTicketsTodayByUser(userId: number): Promise<{ maintenanceCount: number; installationCount: number }>;
+  getLastCompletedTicketToday(userId: number): Promise<Ticket | undefined>;
+  getSmartOpenTicket(options: {
+    isBackboneSpecialist: boolean;
+    preferredType: "maintenance" | "installation";
+    lastTicketLocation?: string | null;
+  }): Promise<Ticket | undefined>;
 
   logPerformance(log: InsertPerformanceLog): Promise<PerformanceLog>;
   getTechnicianPerformance(userId: number): Promise<TechnicianPerformance>;
@@ -316,6 +323,142 @@ export class DatabaseStorage implements IStorage {
     return allTechs;
   }
 
+  async getCompletedTicketsTodayByUser(userId: number): Promise<{ maintenanceCount: number; installationCount: number }> {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const result = await db
+      .select({
+        type: tickets.type,
+        count: sql<number>`count(*)`,
+      })
+      .from(tickets)
+      .innerJoin(ticketAssignments, eq(tickets.id, ticketAssignments.ticketId))
+      .where(and(
+        eq(ticketAssignments.userId, userId),
+        eq(tickets.status, TicketStatus.CLOSED),
+        sql`${tickets.closedAt} >= ${todayStart.toISOString()}`
+      ))
+      .groupBy(tickets.type);
+
+    let maintenanceCount = 0;
+    let installationCount = 0;
+    for (const row of result) {
+      if (row.type === "home_maintenance") {
+        maintenanceCount += Number(row.count);
+      } else if (row.type === "installation") {
+        installationCount += Number(row.count);
+      }
+    }
+    return { maintenanceCount, installationCount };
+  }
+
+  async getLastCompletedTicketToday(userId: number): Promise<Ticket | undefined> {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const [result] = await db
+      .select({ ticket: tickets })
+      .from(tickets)
+      .innerJoin(ticketAssignments, eq(tickets.id, ticketAssignments.ticketId))
+      .where(and(
+        eq(ticketAssignments.userId, userId),
+        eq(tickets.status, TicketStatus.CLOSED),
+        sql`${tickets.closedAt} >= ${todayStart.toISOString()}`
+      ))
+      .orderBy(desc(tickets.closedAt))
+      .limit(1);
+
+    return result?.ticket;
+  }
+
+  async getSmartOpenTicket(options: {
+    isBackboneSpecialist: boolean;
+    preferredType: "maintenance" | "installation";
+    lastTicketLocation?: string | null;
+  }): Promise<Ticket | undefined> {
+    const { isBackboneSpecialist, preferredType, lastTicketLocation } = options;
+
+    // Backbone specialists only get backbone_maintenance tickets
+    if (isBackboneSpecialist) {
+      const candidates = await db.select().from(tickets)
+        .where(and(eq(tickets.status, TicketStatus.OPEN), eq(tickets.type, "backbone_maintenance")))
+        .orderBy(asc(tickets.createdAt));
+      if (candidates.length === 0) return undefined;
+      return this.pickBestCandidate(candidates, lastTicketLocation);
+    }
+
+    // Non-backbone: try preferred type first, then fallback
+    // maintenance = home_maintenance only (non-backbone techs don't get backbone tickets)
+    const preferredCondition = preferredType === "installation"
+      ? and(eq(tickets.status, TicketStatus.OPEN), eq(tickets.type, "installation"))
+      : and(eq(tickets.status, TicketStatus.OPEN), eq(tickets.type, "home_maintenance"));
+
+    const fallbackCondition = preferredType === "installation"
+      ? and(eq(tickets.status, TicketStatus.OPEN), eq(tickets.type, "home_maintenance"))
+      : and(eq(tickets.status, TicketStatus.OPEN), eq(tickets.type, "installation"));
+
+    // Try preferred type first
+    let candidates = await db.select().from(tickets)
+      .where(preferredCondition)
+      .orderBy(asc(tickets.createdAt));
+
+    // Fallback: if no preferred type available, try the other type
+    if (candidates.length === 0) {
+      candidates = await db.select().from(tickets)
+        .where(fallbackCondition)
+        .orderBy(asc(tickets.createdAt));
+    }
+
+    if (candidates.length === 0) return undefined;
+    return this.pickBestCandidate(candidates, lastTicketLocation);
+  }
+
+  private pickBestCandidate(candidates: Ticket[], lastTicketLocation?: string | null): Ticket {
+    const lastCoords = lastTicketLocation ? parseGoogleMapsCoords(lastTicketLocation) : null;
+
+    // Rule 1: If same day has a last job, find the nearest location (within 10km)
+    if (lastCoords) {
+      const withDistance = candidates.map(t => {
+        const ticketCoords = parseGoogleMapsCoords(t.customerLocationUrl);
+        const dist = ticketCoords
+          ? haversineDistance(lastCoords.lat, lastCoords.lng, ticketCoords.lat, ticketCoords.lng)
+          : Infinity;
+        return { ticket: t, distance: dist };
+      });
+
+      const nearbyThreshold = 10; // km
+      const nearby = withDistance.filter(w => w.distance <= nearbyThreshold);
+
+      if (nearby.length > 0) {
+        // Nearest first (proximity takes priority over ticket priority)
+        nearby.sort((a, b) => a.distance - b.distance);
+        return nearby[0].ticket;
+      }
+      // No nearby tickets found — fall through to rule 2
+    }
+
+    // Rule 2: Find the most prioritized level
+    const priorityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
+    candidates.sort((a, b) => {
+      const pa = priorityOrder[a.priority] ?? 99;
+      const pb = priorityOrder[b.priority] ?? 99;
+      return pa - pb;
+    });
+
+    const highestPriority = priorityOrder[candidates[0].priority] ?? 99;
+    const samePriority = candidates.filter(
+      t => (priorityOrder[t.priority] ?? 99) === highestPriority
+    );
+
+    // Rule 3: Random ticket among same-priority tickets
+    if (samePriority.length > 1) {
+      return samePriority[Math.floor(Math.random() * samePriority.length)];
+    }
+
+    return samePriority[0];
+  }
+
   async logPerformance(log: InsertPerformanceLog): Promise<PerformanceLog> {
     const [entry] = await db.insert(performanceLogs).values(log).returning();
     return entry;
@@ -492,3 +635,41 @@ export class DatabaseStorage implements IStorage {
 }
 
 export const storage = new DatabaseStorage();
+
+function parseGoogleMapsCoords(url: string | null | undefined): { lat: number; lng: number } | null {
+  if (!url) return null;
+  try {
+    const patterns = [
+      /[?&]q=(-?\d+\.?\d*),(-?\d+\.?\d*)/,
+      /@(-?\d+\.?\d*),(-?\d+\.?\d*)/,
+      /place\/[^/]*\/(-?\d+\.?\d*),(-?\d+\.?\d*)/,
+      /ll=(-?\d+\.?\d*),(-?\d+\.?\d*)/,
+      /(-?\d+\.\d{4,}),\s*(-?\d+\.\d{4,})/,
+    ];
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match) {
+        const lat = parseFloat(match[1]);
+        const lng = parseFloat(match[2]);
+        if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+          return { lat, lng };
+        }
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
