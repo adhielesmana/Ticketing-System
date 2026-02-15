@@ -142,6 +142,36 @@ export function useAssignTicket() {
   });
 }
 
+export function useReassignTicket() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, technicianIds }: { id: number; technicianIds: number[] }) => {
+      const res = await fetch(`/api/tickets/${id}/reassign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ technicianIds }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || "Failed to reassign ticket");
+      }
+      return res.json();
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [api.tickets.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.tickets.get.path, variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/technicians/free"] });
+      toast({ title: "Success", description: "Ticket reassigned successfully" });
+    },
+    onError: (error) => {
+      toast({ title: "Reassign Failed", description: error.message, variant: "destructive" });
+    },
+  });
+}
+
 export function useAutoAssignTicket() {
   const queryClient = useQueryClient();
   const { toast } = useToast();

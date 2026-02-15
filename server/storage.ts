@@ -29,6 +29,7 @@ export interface IStorage {
 
   assignTicket(ticketId: number, userId: number, assignmentType?: string): Promise<TicketAssignment>;
   assignTicketWithPartner(ticketId: number, userId: number, partnerId: number, assignmentType?: string): Promise<void>;
+  removeAllAssignments(ticketId: number): Promise<void>;
   getTicketAssignment(ticketId: number): Promise<TicketAssignment | undefined>;
   getTicketAssignments(ticketId: number): Promise<TicketAssignment[]>;
   getAssigneeForTicket(ticketId: number): Promise<User | undefined>;
@@ -204,6 +205,12 @@ export class DatabaseStorage implements IStorage {
       .returning();
       
     return assignment;
+  }
+
+  async removeAllAssignments(ticketId: number): Promise<void> {
+    await db.update(ticketAssignments)
+      .set({ active: false })
+      .where(eq(ticketAssignments.ticketId, ticketId));
   }
 
   async assignTicketWithPartner(ticketId: number, userId: number, partnerId: number, assignmentType: string = "auto"): Promise<void> {

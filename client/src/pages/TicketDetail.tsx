@@ -1,4 +1,4 @@
-import { useTicket, useCloseTicket, useStartTicket, useAssignTicket, useUploadFile, useUploadImages, useFreeTechnicians, useNoResponseTicket, useRejectTicket } from "@/hooks/use-tickets";
+import { useTicket, useCloseTicket, useStartTicket, useAssignTicket, useReassignTicket, useUploadFile, useUploadImages, useFreeTechnicians, useNoResponseTicket, useRejectTicket } from "@/hooks/use-tickets";
 import { useUsers } from "@/hooks/use-users";
 import { useAuth } from "@/hooks/use-auth";
 import { useParams, Link } from "wouter";
@@ -35,6 +35,7 @@ import {
   Camera,
   Network,
   PhoneOff,
+  RefreshCw,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useState, useRef } from "react";
@@ -139,6 +140,7 @@ export default function TicketDetail() {
   );
 
   const { mutate: assignTicket } = useAssignTicket();
+  const { mutate: reassignTicket, isPending: isReassigning } = useReassignTicket();
   const { mutate: startTicket } = useStartTicket();
   const { mutate: closeTicket } = useCloseTicket();
   const { mutate: noResponse, isPending: isReportingNoResponse } = useNoResponseTicket();
@@ -151,6 +153,9 @@ export default function TicketDetail() {
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
   const [noResponseDialogOpen, setNoResponseDialogOpen] = useState(false);
   const [noResponseReason, setNoResponseReason] = useState("");
+  const [reassignDialogOpen, setReassignDialogOpen] = useState(false);
+  const [reassignTech1, setReassignTech1] = useState<string>("");
+  const [reassignTech2, setReassignTech2] = useState<string>("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [closeData, setCloseData] = useState({
     actionDescription: "",
@@ -730,6 +735,80 @@ export default function TicketDetail() {
                         <p className="text-xs text-muted-foreground italic">No free technicians available.</p>
                       )}
                     </div>
+                  )}
+                  {canManage && !['closed', 'rejected'].includes(ticket.status) && (
+                    <Dialog open={reassignDialogOpen} onOpenChange={(open) => {
+                      setReassignDialogOpen(open);
+                      if (!open) { setReassignTech1(""); setReassignTech2(""); }
+                    }}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" size="sm" data-testid="button-reassign">
+                          <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+                          Reassign
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Reassign Ticket</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-4 py-2">
+                          <p className="text-sm text-muted-foreground">
+                            Select new technician(s) to replace the current assignment. This will remove all existing assignees.
+                          </p>
+                          <div className="space-y-2">
+                            <Label>Lead Technician *</Label>
+                            <Select value={reassignTech1} onValueChange={setReassignTech1}>
+                              <SelectTrigger data-testid="select-reassign-tech1">
+                                <SelectValue placeholder="Select lead technician..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {technicians?.filter((t: any) => t.role === 'technician').map((tech: any) => (
+                                  <SelectItem key={tech.id} value={String(tech.id)} disabled={String(tech.id) === reassignTech2}>
+                                    {toCapName(tech.name)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label>Partner (optional)</Label>
+                            <Select value={reassignTech2} onValueChange={setReassignTech2}>
+                              <SelectTrigger data-testid="select-reassign-tech2">
+                                <SelectValue placeholder="Select partner..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">No partner</SelectItem>
+                                {technicians?.filter((t: any) => t.role === 'technician').map((tech: any) => (
+                                  <SelectItem key={tech.id} value={String(tech.id)} disabled={String(tech.id) === reassignTech1}>
+                                    {toCapName(tech.name)}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <DialogFooter>
+                          <Button variant="outline" onClick={() => setReassignDialogOpen(false)}>Cancel</Button>
+                          <Button
+                            disabled={!reassignTech1 || isReassigning}
+                            data-testid="button-confirm-reassign"
+                            onClick={() => {
+                              const ids = [Number(reassignTech1)];
+                              if (reassignTech2 && reassignTech2 !== "none") ids.push(Number(reassignTech2));
+                              reassignTicket({ id: ticketId, technicianIds: ids }, {
+                                onSuccess: () => {
+                                  setReassignDialogOpen(false);
+                                  setReassignTech1("");
+                                  setReassignTech2("");
+                                }
+                              });
+                            }}
+                          >
+                            {isReassigning ? <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Reassigning...</> : "Confirm Reassign"}
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
                   )}
                 </div>
               ) : canManage && !['closed', 'rejected', 'pending_rejection'].includes(ticket.status) ? (

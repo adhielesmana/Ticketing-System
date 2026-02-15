@@ -333,6 +333,52 @@ export async function registerRoutes(
     }
   });
 
+  // === REASSIGN TICKET ===
+  app.post("/api/tickets/:id/reassign", async (req, res) => {
+    try {
+      const ticketId = Number(req.params.id);
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const user = await storage.getUser(userId);
+      if (!user || ![UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.HELPDESK].includes(user.role as any)) {
+        return res.status(403).json({ message: "Only superadmin, admin, or helpdesk can reassign tickets" });
+      }
+
+      const ticket = await storage.getTicket(ticketId);
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+      if (['closed', 'rejected'].includes(ticket.status)) {
+        return res.status(400).json({ message: "Cannot reassign a closed or rejected ticket" });
+      }
+
+      const { technicianIds } = req.body;
+      if (!technicianIds || !Array.isArray(technicianIds) || technicianIds.length === 0 || technicianIds.length > 2) {
+        return res.status(400).json({ message: "Provide 1 or 2 technician IDs" });
+      }
+
+      await storage.removeAllAssignments(ticketId);
+
+      for (const techId of technicianIds) {
+        await storage.assignTicket(ticketId, Number(techId), "manual");
+      }
+
+      let newStatus = ticket.status;
+      if (ticket.status === 'open' || ticket.status === 'waiting_assignment') {
+        newStatus = TicketStatus.ASSIGNED;
+      }
+      if (ticket.status === 'in_progress') {
+        newStatus = TicketStatus.ASSIGNED;
+      }
+      await storage.updateTicket(ticketId, { status: newStatus });
+
+      const updated = await storage.getTicket(ticketId);
+      const assignees = await storage.getAssigneesForTicket(ticketId);
+      res.json({ ...updated, assignee: assignees[0], assignees });
+    } catch (err: any) {
+      console.error("Reassign error:", err);
+      res.status(500).json({ message: err.message || "Failed to reassign ticket" });
+    }
+  });
+
   // === FREE TECHNICIANS (no active/in-progress tickets) ===
   app.get("/api/technicians/free", async (req, res) => {
     try {
