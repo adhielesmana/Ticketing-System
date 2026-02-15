@@ -126,7 +126,7 @@ docker run -d \
     -e DB_NAME="$DB_NAME" \
     -e DB_PASS="$DB_PASS" \
     -e SESSION_SECRET="$SESSION_SECRET" \
-    -e RUN_MIGRATIONS=auto \
+    -e RUN_MIGRATIONS=true \
     -e NODE_ENV=production \
     -e TZ=Asia/Jakarta \
     -p "127.0.0.1:${APP_PORT}:3000" \

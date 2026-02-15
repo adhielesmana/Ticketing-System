@@ -128,20 +128,12 @@ else
 fi
 
 echo "[STEP 7] Running database migration..."
-if [ "$FIRST_BOOT" = true ] || [ "$RUN_MIGRATIONS" = "true" ]; then
-    echo "[INFO] Pushing schema (first boot or forced)..."
+if [ "$RUN_MIGRATIONS" = "skip" ]; then
+    echo "[INFO] Skipping schema push (RUN_MIGRATIONS=skip)"
+else
+    echo "[INFO] Pushing schema to sync any new columns/tables..."
     npx drizzle-kit push --force 2>&1 | tail -10 || true
     echo "[OK] Schema push complete"
-elif [ "$RUN_MIGRATIONS" = "auto" ]; then
-    TABLES=$(PGPASSWORD="${DB_PASS}" psql -h localhost -U "${DB_USER}" -d "${DB_NAME}" -tAc "SELECT COUNT(*) FROM pg_tables WHERE schemaname='public';" 2>/dev/null || echo "0")
-    TABLES=$(echo "$TABLES" | tr -d ' \n')
-    if [ "$TABLES" -lt 3 ] 2>/dev/null; then
-        echo "[INFO] Pushing schema (only ${TABLES} tables found)..."
-        npx drizzle-kit push --force 2>&1 | tail -10 || true
-        echo "[OK] Schema push complete"
-    else
-        echo "[OK] Schema already exists (${TABLES} tables), skipping push"
-    fi
 fi
 
 TABLES=$(PGPASSWORD="${DB_PASS}" psql -h localhost -U "${DB_USER}" -d "${DB_NAME}" -tAc "SELECT COUNT(*) FROM pg_tables WHERE schemaname='public';" 2>/dev/null || echo "0")
