@@ -5,7 +5,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2 } from "lucide-react";
-import { Navigation } from "@/components/Navigation";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/app-sidebar";
 
 import Login from "@/pages/Login";
 import LandingPage from "@/pages/LandingPage";
@@ -18,7 +19,7 @@ import SettingsPage from "@/pages/SettingsPage";
 import ReportsPage from "@/pages/ReportsPage";
 import NotFound from "@/pages/not-found";
 
-function ProtectedRoute({ component: Component, ...rest }: any) {
+function ProtectedLayout({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
 
   if (isLoading) {
@@ -33,11 +34,33 @@ function ProtectedRoute({ component: Component, ...rest }: any) {
     return <Redirect to="/login" />;
   }
 
+  const style = {
+    "--sidebar-width": "15rem",
+    "--sidebar-width-icon": "3rem",
+  };
+
   return (
-    <>
-      <Navigation />
+    <SidebarProvider style={style as React.CSSProperties}>
+      <div className="flex h-screen w-full">
+        <AppSidebar />
+        <div className="flex flex-col flex-1 min-w-0">
+          <header className="flex items-center gap-2 p-2 border-b border-border sticky top-0 z-50 bg-background" data-testid="navigation-header">
+            <SidebarTrigger data-testid="button-sidebar-toggle" />
+          </header>
+          <main className="flex-1 overflow-auto">
+            {children}
+          </main>
+        </div>
+      </div>
+    </SidebarProvider>
+  );
+}
+
+function ProtectedRoute({ component: Component, ...rest }: any) {
+  return (
+    <ProtectedLayout>
       <Component {...rest} />
-    </>
+    </ProtectedLayout>
   );
 }
 
