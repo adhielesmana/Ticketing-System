@@ -322,22 +322,22 @@ export default function TicketsPage() {
                   paginatedTickets.map((ticket: any) => (
                     <TableRow key={ticket.id} data-testid={`row-ticket-${ticket.id}`} className="group">
                       <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap">{ticket.ticketIdCustom || ticket.ticketNumber}</TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap">
                         <Link href={`/tickets/${ticket.id}`}>
                           <span className="text-sm font-normal cursor-pointer">{toTitleCase(ticket.title)}</span>
                         </Link>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap">
                         <Badge variant="outline" className="capitalize text-[10px] font-normal">
                           {ticket.type.replace(/_/g, " ")}
                         </Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap">
                         <Badge className={`${priorityColors[ticket.priority] || ""} capitalize text-[10px]`}>
                           {ticket.priority}
                         </Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
                           <AttentionDot status={ticket.status} />
                           <Badge className={`${statusColors[ticket.status] || ""} capitalize text-[10px]`}>
@@ -346,7 +346,7 @@ export default function TicketsPage() {
                         </div>
                       </TableCell>
                       <TableCell className="text-sm font-normal whitespace-nowrap" title={toCapName(ticket.customerName)}>{toCapName(ticket.customerName, 30)}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{ticket.area || "—"}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{ticket.area || "—"}</TableCell>
                       <TableCell>
                         {ticket.assignees && ticket.assignees.length > 0 ? (
                           <div className="space-y-1">
@@ -374,7 +374,7 @@ export default function TicketsPage() {
                           <span className="text-xs text-muted-foreground italic">Unassigned</span>
                         )}
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="whitespace-nowrap">
                         {!["closed", "rejected"].includes(ticket.status) && (
                           <SLAIndicator
                             deadline={ticket.slaDeadline}
@@ -383,7 +383,7 @@ export default function TicketsPage() {
                           />
                         )}
                       </TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
+                      <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
                         {format(new Date(ticket.createdAt), "MMM d")}
                       </TableCell>
                       <TableCell>
