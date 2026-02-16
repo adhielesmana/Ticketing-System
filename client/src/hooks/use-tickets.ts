@@ -371,6 +371,38 @@ export function useCloseByHelpdesk() {
   });
 }
 
+export function useReopenTicket() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, reason, technicianIds }: { id: number; reason: string; technicianIds: number[] }) => {
+      const url = buildUrl(api.tickets.reopen.path, { id });
+      const res = await fetch(url, {
+        method: api.tickets.reopen.method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason, technicianIds }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Failed" }));
+        throw new Error(err.message || "Failed to reopen ticket");
+      }
+      return res.json();
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: [api.tickets.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.tickets.get.path, variables.id] });
+      queryClient.invalidateQueries({ queryKey: [api.dashboard.stats.path] });
+      queryClient.invalidateQueries({ queryKey: ["/api/technicians/free"] });
+      toast({ title: "Reopened", description: "Ticket has been reopened and reassigned" });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: error.message, variant: "destructive" });
+    },
+  });
+}
+
 export function useDashboardStats() {
   return useQuery({
     queryKey: [api.dashboard.stats.path],

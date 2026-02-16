@@ -1,4 +1,4 @@
-import { useTicket, useCloseTicket, useStartTicket, useAssignTicket, useReassignTicket, useUploadFile, useUploadImages, useFreeTechnicians, useNoResponseTicket, useRejectTicket, useCancelReject, useCloseByHelpdesk, useUpdateTicket } from "@/hooks/use-tickets";
+import { useTicket, useCloseTicket, useStartTicket, useAssignTicket, useReassignTicket, useUploadFile, useUploadImages, useFreeTechnicians, useNoResponseTicket, useRejectTicket, useCancelReject, useCloseByHelpdesk, useUpdateTicket, useReopenTicket } from "@/hooks/use-tickets";
 import { useUsers } from "@/hooks/use-users";
 import { useAuth } from "@/hooks/use-auth";
 import { useParams, Link } from "wouter";
@@ -36,6 +36,7 @@ import {
   Network,
   PhoneOff,
   RefreshCw,
+  RotateCcw,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useState, useRef } from "react";
@@ -160,6 +161,7 @@ export default function TicketDetail() {
   const { mutate: cancelReject, isPending: isCancellingReject } = useCancelReject();
   const { mutate: closeByHelpdesk, isPending: isClosingByHelpdesk } = useCloseByHelpdesk();
   const { mutate: updateTicket, isPending: isUpdatingTicket } = useUpdateTicket();
+  const { mutate: reopenTicket, isPending: isReopening } = useReopenTicket();
 
   const { mutateAsync: uploadFile, isPending: isUploadingFile } = useUploadFile();
   const { mutateAsync: uploadMultiple, isPending: isUploadingMultiple } = useUploadImages();
@@ -175,6 +177,10 @@ export default function TicketDetail() {
   const [reassignDialogOpen, setReassignDialogOpen] = useState(false);
   const [reassignTech1, setReassignTech1] = useState<string>("");
   const [reassignTech2, setReassignTech2] = useState<string>("");
+  const [reopenDialogOpen, setReopenDialogOpen] = useState(false);
+  const [reopenReason, setReopenReason] = useState("");
+  const [reopenTech1, setReopenTech1] = useState<string>("");
+  const [reopenTech2, setReopenTech2] = useState<string>("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [closeData, setCloseData] = useState({
     actionDescription: "",
@@ -441,6 +447,94 @@ export default function TicketDetail() {
                   <div>
                     <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Notes</p>
                     <p className="text-sm">{ticket.closedNote}</p>
+                  </div>
+                )}
+                {ticket.reopenReason && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Reopen History</p>
+                    <p className="text-sm whitespace-pre-line">{ticket.reopenReason}</p>
+                  </div>
+                )}
+                {canManage && (
+                  <div className="pt-2">
+                    <Dialog open={reopenDialogOpen} onOpenChange={(open) => {
+                      setReopenDialogOpen(open);
+                      if (!open) { setReopenReason(""); setReopenTech1(""); setReopenTech2(""); }
+                    }}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" size="sm" className="gap-1.5" data-testid="button-reopen-ticket">
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          Reopen & Reassign
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-sm">
+                        <DialogHeader>
+                          <DialogTitle>Reopen Ticket</DialogTitle>
+                        </DialogHeader>
+                        <div className="space-y-3">
+                          <div className="space-y-1.5">
+                            <Label className="text-sm">Reason for Reopening</Label>
+                            <Textarea
+                              value={reopenReason}
+                              onChange={(e) => setReopenReason(e.target.value)}
+                              placeholder="Why is this ticket being reopened?"
+                              className="text-sm"
+                              data-testid="input-reopen-reason"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-sm">Lead Technician</Label>
+                            <Select value={reopenTech1} onValueChange={setReopenTech1}>
+                              <SelectTrigger data-testid="select-reopen-tech1">
+                                <SelectValue placeholder="Select technician..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {freeTechnicians?.map((tech: any) => (
+                                  <SelectItem key={tech.id} value={String(tech.id)} disabled={String(tech.id) === reopenTech2}>
+                                    {tech.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-sm">Partner (Optional)</Label>
+                            <Select value={reopenTech2} onValueChange={setReopenTech2}>
+                              <SelectTrigger data-testid="select-reopen-tech2">
+                                <SelectValue placeholder="Select partner..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="none">No partner</SelectItem>
+                                {freeTechnicians?.map((tech: any) => (
+                                  <SelectItem key={tech.id} value={String(tech.id)} disabled={String(tech.id) === reopenTech1}>
+                                    {tech.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <DialogFooter>
+                          <Button
+                            onClick={() => {
+                              if (!reopenReason.trim()) return toast({ title: "Error", description: "Please provide a reason", variant: "destructive" });
+                              if (!reopenTech1) return toast({ title: "Error", description: "Please select a technician", variant: "destructive" });
+                              const techIds = [Number(reopenTech1)];
+                              if (reopenTech2 && reopenTech2 !== "none") techIds.push(Number(reopenTech2));
+                              reopenTicket({ id: ticketId, reason: reopenReason.trim(), technicianIds: techIds });
+                              setReopenDialogOpen(false);
+                              setReopenReason("");
+                              setReopenTech1("");
+                              setReopenTech2("");
+                            }}
+                            disabled={isReopening || !reopenReason.trim() || !reopenTech1}
+                            data-testid="button-confirm-reopen"
+                          >
+                            {isReopening ? <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Reopening...</> : "Reopen Ticket"}
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
                   </div>
                 )}
               </CardContent>

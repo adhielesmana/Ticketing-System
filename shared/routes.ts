@@ -234,6 +234,17 @@ export const api = {
         200: z.custom<typeof tickets.$inferSelect>(),
       },
     },
+    reopen: {
+      method: 'POST' as const,
+      path: '/api/tickets/:id/reopen' as const,
+      input: z.object({
+        reason: z.string().min(1, "Reason is required"),
+        technicianIds: z.array(z.number()).min(1).max(2),
+      }),
+      responses: {
+        200: z.custom<typeof tickets.$inferSelect>(),
+      },
+    },
   },
   dashboard: {
     stats: {

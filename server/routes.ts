@@ -709,6 +709,75 @@ export async function registerRoutes(
     }
   });
 
+  // === REOPEN TICKET (Admin/Helpdesk/Superadmin reopens a closed ticket and reassigns) ===
+  app.post(api.tickets.reopen.path, async (req, res) => {
+    try {
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+
+      const user = await storage.getUser(userId);
+      if (!user || ![UserRole.ADMIN, UserRole.SUPERADMIN, UserRole.HELPDESK].includes(user.role as any)) {
+        return res.status(403).json({ message: "Only admin, superadmin or helpdesk can reopen tickets" });
+      }
+
+      const ticketId = Number(req.params.id);
+      const existingTicket = await storage.getTicket(ticketId);
+      if (!existingTicket) return res.status(404).json({ message: "Ticket not found" });
+
+      if (existingTicket.status !== TicketStatus.CLOSED) {
+        return res.status(400).json({ message: "Only closed tickets can be reopened" });
+      }
+
+      const { reason, technicianIds } = req.body;
+      if (!reason || reason.trim() === "") {
+        return res.status(400).json({ message: "Reason for reopening is required" });
+      }
+      if (!technicianIds || !Array.isArray(technicianIds) || technicianIds.length === 0 || technicianIds.length > 2) {
+        return res.status(400).json({ message: "Provide 1 or 2 technician IDs" });
+      }
+
+      await storage.removeAllAssignments(ticketId);
+
+      for (const techId of technicianIds) {
+        await storage.assignTicket(ticketId, Number(techId), "manual");
+      }
+
+      const now = new Date();
+      const slaHoursSetting = await storage.getSetting(`sla_hours_${existingTicket.type}`);
+      const slaHours = slaHoursSetting?.value ? parseInt(slaHoursSetting.value) : (existingTicket.type === 'installation' ? 72 : 24);
+      const newSlaDeadline = new Date(now.getTime() + slaHours * 60 * 60 * 1000);
+
+      const ticketFeeSetting = await storage.getSetting(`ticket_fee_${existingTicket.type}`);
+      const transportFeeSetting = await storage.getSetting(`transport_fee_${existingTicket.type}`);
+      const ticketFee = ticketFeeSetting?.value || "0";
+      const transportFee = transportFeeSetting?.value || "0";
+
+      const ticket = await storage.updateTicket(ticketId, {
+        status: TicketStatus.ASSIGNED,
+        closedAt: null,
+        durationMinutes: null,
+        performStatus: null,
+        bonus: "0",
+        ticketFee,
+        transportFee,
+        actionDescription: null,
+        speedtestResult: null,
+        speedtestImageUrl: null,
+        proofImageUrl: null,
+        proofImageUrls: [],
+        closedNote: null,
+        slaDeadline: newSlaDeadline,
+        reopenReason: `${existingTicket.reopenReason ? existingTicket.reopenReason + "\n" : ""}[Reopened ${now.toISOString().slice(0,16).replace('T',' ')}] ${reason.trim()}`,
+      });
+
+      const assignees = await storage.getAssigneesForTicket(ticketId);
+      res.json({ ...ticket, assignee: assignees[0], assignees });
+    } catch (err: any) {
+      console.error("Reopen error:", err);
+      res.status(500).json({ message: err.message || "Failed to reopen ticket" });
+    }
+  });
+
   // === BACKFILL AREAS (admin trigger) ===
   app.post("/api/tickets/backfill-areas", async (req, res) => {
     try {

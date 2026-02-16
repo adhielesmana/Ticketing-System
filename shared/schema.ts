@@ -92,6 +92,7 @@ export const tickets = pgTable("tickets", {
   ticketFee: numeric("ticket_fee", { precision: 12, scale: 2 }).default("0"),
   transportFee: numeric("transport_fee", { precision: 12, scale: 2 }).default("0"),
   rejectionReason: text("rejection_reason"),
+  reopenReason: text("reopen_reason"),
 });
 
 export const ticketAssignments = pgTable("ticket_assignments", {
