@@ -324,7 +324,7 @@ export default function TicketsPage() {
                       <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap">{ticket.ticketIdCustom || ticket.ticketNumber}</TableCell>
                       <TableCell className="whitespace-nowrap">
                         <Link href={`/tickets/${ticket.id}`}>
-                          <span className="text-sm font-normal cursor-pointer">{toTitleCase(ticket.title)}</span>
+                          <span className="text-sm font-normal cursor-pointer" title={toTitleCase(ticket.title)}>{toTitleCase(ticket.title).length > 30 ? toTitleCase(ticket.title).slice(0, 30) + "…" : toTitleCase(ticket.title)}</span>
                         </Link>
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
