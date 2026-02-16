@@ -397,8 +397,22 @@ export class DatabaseStorage implements IStorage {
       return this.pickBestCandidate(candidates, lastTicketLocation);
     }
 
-    // Non-backbone: try preferred type first, then fallback
-    // maintenance = home_maintenance only (non-backbone techs don't get backbone tickets)
+    // Non-backbone: first check for overdue tickets across ALL eligible types
+    const now = new Date();
+    const allEligible = await db.select().from(tickets)
+      .where(and(
+        eq(tickets.status, TicketStatus.OPEN),
+        sql`${tickets.type} != 'backbone_maintenance'`
+      ))
+      .orderBy(asc(tickets.createdAt));
+
+    const overdueTickets = allEligible.filter(t => t.slaDeadline && new Date(t.slaDeadline) < now);
+    if (overdueTickets.length > 0) {
+      overdueTickets.sort((a, b) => new Date(a.slaDeadline).getTime() - new Date(b.slaDeadline).getTime());
+      return overdueTickets[0];
+    }
+
+    // No overdue tickets — apply type preference with 4:2 ratio
     const preferredCondition = preferredType === "installation"
       ? and(eq(tickets.status, TicketStatus.OPEN), eq(tickets.type, "installation"))
       : and(eq(tickets.status, TicketStatus.OPEN), eq(tickets.type, "home_maintenance"));
@@ -407,12 +421,10 @@ export class DatabaseStorage implements IStorage {
       ? and(eq(tickets.status, TicketStatus.OPEN), eq(tickets.type, "home_maintenance"))
       : and(eq(tickets.status, TicketStatus.OPEN), eq(tickets.type, "installation"));
 
-    // Try preferred type first
     let candidates = await db.select().from(tickets)
       .where(preferredCondition)
       .orderBy(asc(tickets.createdAt));
 
-    // Fallback: if no preferred type available, try the other type
     if (candidates.length === 0) {
       candidates = await db.select().from(tickets)
         .where(fallbackCondition)

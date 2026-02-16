@@ -109,6 +109,7 @@ export default function TicketsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [slaFilter, setSlaFilter] = useState<string>("all");
   const { data: tickets, isLoading } = useTickets(
     Object.fromEntries(
       Object.entries({
@@ -140,11 +141,17 @@ export default function TicketsPage() {
   const pageSize = 15;
 
   const closedStatuses = new Set(["closed", "rejected"]);
-  const sortedTickets = tickets ? [...tickets].sort((a: any, b: any) => {
+  const filteredTickets = tickets ? [...tickets].filter((t: any) => {
+    if (slaFilter === "all") return true;
+    if (closedStatuses.has(t.status)) return slaFilter === "all";
+    const isOverdue = new Date(t.slaDeadline) < new Date();
+    return slaFilter === "overdue" ? isOverdue : !isOverdue;
+  }) : [];
+  const sortedTickets = filteredTickets.sort((a: any, b: any) => {
     const aIsClosed = closedStatuses.has(a.status) ? 1 : 0;
     const bIsClosed = closedStatuses.has(b.status) ? 1 : 0;
     return aIsClosed - bIsClosed;
-  }) : [];
+  });
 
   const totalPages = Math.max(1, Math.ceil(sortedTickets.length / pageSize));
   const paginatedTickets = sortedTickets.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -277,6 +284,16 @@ export default function TicketsPage() {
                 {toTitleCase(t.replace(/_/g, " "))}
               </SelectItem>
             ))}
+          </SelectContent>
+        </Select>
+        <Select value={slaFilter} onValueChange={(v) => { setSlaFilter(v); setCurrentPage(1); }}>
+          <SelectTrigger className="w-[140px]" data-testid="select-sla-filter">
+            <SelectValue placeholder="SLA" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All SLA</SelectItem>
+            <SelectItem value="ontime">On Time</SelectItem>
+            <SelectItem value="overdue">Overdue</SelectItem>
           </SelectContent>
         </Select>
       </div>
