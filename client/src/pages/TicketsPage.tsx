@@ -321,10 +321,10 @@ export default function TicketsPage() {
                 ) : (
                   paginatedTickets.map((ticket: any) => (
                     <TableRow key={ticket.id} data-testid={`row-ticket-${ticket.id}`} className="group">
-                      <TableCell className="font-mono text-xs text-muted-foreground">{ticket.ticketIdCustom || ticket.ticketNumber}</TableCell>
+                      <TableCell className="font-mono text-xs text-muted-foreground whitespace-nowrap">{ticket.ticketIdCustom || ticket.ticketNumber}</TableCell>
                       <TableCell>
                         <Link href={`/tickets/${ticket.id}`}>
-                          <span className="text-sm font-medium cursor-pointer">{toTitleCase(ticket.title)}</span>
+                          <span className="text-sm font-normal cursor-pointer">{toTitleCase(ticket.title)}</span>
                         </Link>
                       </TableCell>
                       <TableCell>
@@ -345,7 +345,7 @@ export default function TicketsPage() {
                           </Badge>
                         </div>
                       </TableCell>
-                      <TableCell className="text-sm font-medium whitespace-nowrap" title={toCapName(ticket.customerName)}>{toCapName(ticket.customerName, 30)}</TableCell>
+                      <TableCell className="text-sm font-normal whitespace-nowrap" title={toCapName(ticket.customerName)}>{toCapName(ticket.customerName, 30)}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{ticket.area || "—"}</TableCell>
                       <TableCell>
                         {ticket.assignees && ticket.assignees.length > 0 ? (
@@ -357,7 +357,7 @@ export default function TicketsPage() {
                                     {a.name.charAt(0).toUpperCase()}
                                   </AvatarFallback>
                                 </Avatar>
-                                <span className="text-sm font-medium whitespace-nowrap" title={toCapName(a.name)}>{toCapName(a.name, 30)}</span>
+                                <span className="text-sm font-normal whitespace-nowrap" title={toCapName(a.name)}>{toCapName(a.name, 30)}</span>
                               </div>
                             ))}
                           </div>
@@ -368,7 +368,7 @@ export default function TicketsPage() {
                                 {ticket.assignee.name.charAt(0).toUpperCase()}
                               </AvatarFallback>
                             </Avatar>
-                            <span className="text-sm font-medium whitespace-nowrap" title={toCapName(ticket.assignee.name)}>{toCapName(ticket.assignee.name, 30)}</span>
+                            <span className="text-sm font-normal whitespace-nowrap" title={toCapName(ticket.assignee.name)}>{toCapName(ticket.assignee.name, 30)}</span>
                           </div>
                         ) : (
                           <span className="text-xs text-muted-foreground italic">Unassigned</span>
