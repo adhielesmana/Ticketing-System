@@ -270,8 +270,7 @@ export class DatabaseStorage implements IStorage {
         eq(ticketAssignments.active, true),
         or(
           eq(tickets.status, TicketStatus.ASSIGNED),
-          eq(tickets.status, TicketStatus.IN_PROGRESS),
-          eq(tickets.status, TicketStatus.OVERDUE)
+          eq(tickets.status, TicketStatus.IN_PROGRESS)
         )
       ));
       
@@ -311,8 +310,7 @@ export class DatabaseStorage implements IStorage {
           eq(ticketAssignments.active, true),
           or(
             eq(tickets.status, TicketStatus.ASSIGNED),
-            eq(tickets.status, TicketStatus.IN_PROGRESS),
-            eq(tickets.status, TicketStatus.OVERDUE)
+            eq(tickets.status, TicketStatus.IN_PROGRESS)
           )
         )
       );
@@ -678,7 +676,7 @@ export class DatabaseStorage implements IStorage {
       totalOpen: sql<number>`count(case when ${tickets.status} = ${TicketStatus.OPEN} then 1 end)`,
       totalAssigned: sql<number>`count(case when ${tickets.status} IN (${TicketStatus.ASSIGNED}, ${TicketStatus.IN_PROGRESS}) then 1 end)`,
       totalClosed: sql<number>`count(case when ${tickets.status} = ${TicketStatus.CLOSED} then 1 end)`,
-      slaBreachCount: sql<number>`count(case when ${tickets.status} = ${TicketStatus.OVERDUE} OR (${tickets.slaDeadline} < NOW() AND ${tickets.status} != ${TicketStatus.CLOSED}) then 1 end)`,
+      slaBreachCount: sql<number>`count(case when ${tickets.slaDeadline} < NOW() AND ${tickets.status} NOT IN (${TicketStatus.CLOSED}, 'rejected') then 1 end)`,
       pendingRejection: sql<number>`count(case when ${tickets.status} = 'pending_rejection' then 1 end)`,
     }).from(tickets);
     

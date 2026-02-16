@@ -185,7 +185,6 @@ export default function ReportsPage() {
                       <SelectItem value="assigned">Assigned</SelectItem>
                       <SelectItem value="in_progress">In Progress</SelectItem>
                       <SelectItem value="closed">Closed</SelectItem>
-                      <SelectItem value="overdue">Overdue</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

@@ -70,7 +70,6 @@ const statusColors: Record<string, string> = {
   assigned: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
   in_progress: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
   closed: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
-  overdue: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300",
   pending_rejection: "bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300",
   rejected: "bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300",
 };
@@ -87,15 +86,17 @@ function toTitleCase(str: string): string {
   return str.replace(/\b\w/g, c => c.toUpperCase());
 }
 
-const attentionStatuses = new Set(["pending_rejection", "overdue", "open"]);
+const attentionStatuses = new Set(["pending_rejection", "open"]);
 
 const attentionDotColors: Record<string, string> = {
   pending_rejection: "bg-orange-500",
-  overdue: "bg-red-500",
   open: "bg-blue-500",
 };
 
-function AttentionDot({ status }: { status: string }) {
+function AttentionDot({ status, slaOverdue }: { status: string; slaOverdue?: boolean }) {
+  if (slaOverdue) {
+    return <span className="inline-block w-2 h-2 rounded-full bg-red-500 attention-dot" data-testid="attention-dot-overdue" />;
+  }
   if (!attentionStatuses.has(status)) return null;
   const color = attentionDotColors[status] || "bg-red-500";
   return (
@@ -294,7 +295,8 @@ export default function TicketsPage() {
                   <TableHead>Customer</TableHead>
                   <TableHead className="w-[120px]">Area</TableHead>
                   <TableHead>Assignee</TableHead>
-                  <TableHead className="w-[140px]">SLA</TableHead>
+                  <TableHead className="w-[85px]">SLA</TableHead>
+                  <TableHead className="w-[140px]">Time</TableHead>
                   <TableHead className="w-[100px]">Created</TableHead>
                   <TableHead className="text-right w-[120px]">Actions</TableHead>
                 </TableRow>
@@ -303,14 +305,14 @@ export default function TicketsPage() {
                 {isLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
-                      {Array.from({ length: 11 }).map((_, j) => (
+                      {Array.from({ length: 12 }).map((_, j) => (
                         <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                       ))}
                     </TableRow>
                   ))
                 ) : paginatedTickets.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="text-center py-12">
+                    <TableCell colSpan={12} className="text-center py-12">
                       <div className="flex flex-col items-center gap-2 text-muted-foreground">
                         <Ticket className="w-8 h-8 opacity-30" />
                         <p className="text-sm font-medium">No tickets found</p>
@@ -339,7 +341,7 @@ export default function TicketsPage() {
                       </TableCell>
                       <TableCell className="whitespace-nowrap">
                         <div className="flex items-center gap-1.5">
-                          <AttentionDot status={ticket.status} />
+                          <AttentionDot status={ticket.status} slaOverdue={!["closed", "rejected"].includes(ticket.status) && new Date(ticket.slaDeadline) < new Date()} />
                           <Badge className={`${statusColors[ticket.status] || ""} capitalize text-[10px]`}>
                             {ticket.status.replace(/_/g, " ")}
                           </Badge>
@@ -372,6 +374,21 @@ export default function TicketsPage() {
                           </div>
                         ) : (
                           <span className="text-xs text-muted-foreground italic">Unassigned</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {!["closed", "rejected"].includes(ticket.status) ? (
+                          new Date(ticket.slaDeadline) < new Date() ? (
+                            <Badge className="bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300 text-[10px]" data-testid={`badge-sla-${ticket.id}`}>
+                              Overdue
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 text-[10px]" data-testid={`badge-sla-${ticket.id}`}>
+                              On Time
+                            </Badge>
+                          )
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </TableCell>
                       <TableCell className="whitespace-nowrap">

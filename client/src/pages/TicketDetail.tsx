@@ -57,7 +57,6 @@ const statusColors: Record<string, string> = {
   assigned: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
   in_progress: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
   closed: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
-  overdue: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300",
   pending_rejection: "bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300",
   rejected: "bg-rose-50 text-rose-700 dark:bg-rose-950 dark:text-rose-300",
 };
@@ -72,13 +71,15 @@ function toTitleCase(str: string): string {
   return str.replace(/\b\w/g, c => c.toUpperCase());
 }
 
-const attentionStatuses = new Set(["pending_rejection", "overdue", "open"]);
+const attentionStatuses = new Set(["pending_rejection", "open"]);
 const attentionDotColors: Record<string, string> = {
   pending_rejection: "bg-orange-500",
-  overdue: "bg-red-500",
   open: "bg-blue-500",
 };
-function AttentionDot({ status }: { status: string }) {
+function AttentionDot({ status, slaOverdue }: { status: string; slaOverdue?: boolean }) {
+  if (slaOverdue) {
+    return <span className="inline-block w-2 h-2 rounded-full bg-red-500 attention-dot" />;
+  }
   if (!attentionStatuses.has(status)) return null;
   const color = attentionDotColors[status] || "bg-red-500";
   return <span className={`inline-block w-2 h-2 rounded-full ${color} attention-dot`} />;
@@ -282,10 +283,21 @@ export default function TicketDetail() {
             <Badge className={`${priorityColors[ticket.priority] || ""} text-[10px] capitalize`}>
               {ticket.priority}
             </Badge>
-            <AttentionDot status={ticket.status} />
+            <AttentionDot status={ticket.status} slaOverdue={!['closed', 'rejected'].includes(ticket.status) && new Date(ticket.slaDeadline) < new Date()} />
             <Badge className={`${statusColors[ticket.status] || ""} text-[10px] capitalize`}>
               {ticket.status.replace(/_/g, ' ')}
             </Badge>
+            {!['closed', 'rejected'].includes(ticket.status) && (
+              new Date(ticket.slaDeadline) < new Date() ? (
+                <Badge className="bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300 text-[10px]">
+                  Overdue
+                </Badge>
+              ) : (
+                <Badge className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 text-[10px]">
+                  On Time
+                </Badge>
+              )
+            )}
             {canManage && !['closed', 'rejected'].includes(ticket.status) ? (
               <Select
                 value={ticket.type}
@@ -649,9 +661,9 @@ export default function TicketDetail() {
             </Card>
           )}
 
-          {isAssignedToMe && ['assigned', 'in_progress', 'overdue'].includes(ticket.status) && (
+          {isAssignedToMe && (ticket.status === 'assigned' || ticket.status === 'in_progress') && (
             <div className="flex flex-wrap gap-3">
-              {(ticket.status === 'assigned' || ticket.status === 'overdue') && (
+              {ticket.status === 'assigned' && (
                 <Button onClick={() => startTicket(ticketId)} data-testid="button-start-work">
                   Start Work
                 </Button>
@@ -697,7 +709,7 @@ export default function TicketDetail() {
                 </DialogContent>
               </Dialog>
 
-              {(ticket.status === 'in_progress' || ticket.status === 'overdue') && (
+              {ticket.status === 'in_progress' && (
                 <Dialog open={closeDialogOpen} onOpenChange={setCloseDialogOpen}>
                   <DialogTrigger asChild>
                     <Button data-testid="button-complete-close">

@@ -28,7 +28,6 @@ export const TicketStatus = {
   ASSIGNED: "assigned",
   IN_PROGRESS: "in_progress",
   CLOSED: "closed",
-  OVERDUE: "overdue",
   PENDING_REJECTION: "pending_rejection",
   REJECTED: "rejected",
 } as const;
