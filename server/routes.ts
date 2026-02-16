@@ -488,14 +488,17 @@ export async function registerRoutes(
     const durationMinutes = Math.floor((now.getTime() - existingTicket.createdAt.getTime()) / 60000);
 
     const isWithinSLA = existingTicket.slaDeadline > now;
+    const ticketFee = isWithinSLA ? existingTicket.ticketFee : "0";
+    const transportFee = isWithinSLA ? existingTicket.transportFee : "0";
+    const bonus = (parseFloat(ticketFee || "0") + parseFloat(transportFee || "0")).toFixed(2);
     const ticket = await storage.updateTicket(ticketId, {
       status: TicketStatus.CLOSED,
       closedAt: now,
       durationMinutes,
       performStatus: isWithinSLA ? "perform" : "not_perform",
-      bonus: isWithinSLA ? existingTicket.bonus : "0",
-      ticketFee: isWithinSLA ? existingTicket.ticketFee : "0",
-      transportFee: isWithinSLA ? existingTicket.transportFee : "0",
+      bonus,
+      ticketFee,
+      transportFee,
       ...input
     });
 
@@ -653,14 +656,18 @@ export async function registerRoutes(
       const durationMinutes = Math.floor((now.getTime() - existingTicket.createdAt.getTime()) / 60000);
       const isWithinSLA = existingTicket.slaDeadline > now;
 
+      const closeFee = isWithinSLA ? existingTicket.ticketFee : "0";
+      const closeTransport = isWithinSLA ? existingTicket.transportFee : "0";
+      const closeBonus = (parseFloat(closeFee || "0") + parseFloat(closeTransport || "0")).toFixed(2);
+
       const ticket = await storage.updateTicket(ticketId, {
         status: TicketStatus.CLOSED,
         closedAt: now,
         durationMinutes,
         performStatus: isWithinSLA ? "perform" : "not_perform",
-        bonus: isWithinSLA ? existingTicket.bonus : "0",
-        ticketFee: isWithinSLA ? existingTicket.ticketFee : "0",
-        transportFee: isWithinSLA ? existingTicket.transportFee : "0",
+        bonus: closeBonus,
+        ticketFee: closeFee,
+        transportFee: closeTransport,
         rejectionReason: `${existingTicket.rejectionReason || ""}\n[Closed by helpdesk] ${reason.trim()}`.trim(),
       });
 

@@ -563,6 +563,9 @@ export class DatabaseStorage implements IStorage {
       const assignees = await this.getAssigneesForTicket(ticket.id);
       const assigneeList = assignees.map(a => ({ id: a.id, name: a.name }));
       for (const tech of assigneeList) {
+        const tf = parseFloat(ticket.ticketFee || "0");
+        const trp = parseFloat(ticket.transportFee || "0");
+        const calculatedBonus = (tf + trp).toFixed(2);
         result.push({
           ticketId: ticket.id,
           ticketNumber: ticket.ticketNumber,
@@ -576,9 +579,9 @@ export class DatabaseStorage implements IStorage {
           technicianName: tech.name,
           ticketFee: ticket.ticketFee || "0",
           transportFee: ticket.transportFee || "0",
-          bonus: ticket.bonus || "0",
+          bonus: calculatedBonus,
           assigneeCount: assigneeList.length,
-          totalTicketCost: (parseFloat(ticket.bonus || "0") * assigneeList.length).toFixed(2),
+          totalTicketCost: (parseFloat(calculatedBonus) * assigneeList.length).toFixed(2),
         });
       }
     }
@@ -610,13 +613,14 @@ export class DatabaseStorage implements IStorage {
       if (filters.dateTo) bonusConditions.push(sql`${tickets.closedAt} <= ${filters.dateTo}::timestamp + interval '1 day'`);
 
       const [bonusResult] = await db.select({
-        totalBonus: sql<number>`coalesce(sum(${tickets.bonus}::numeric), 0)`,
         totalTicketFee: sql<number>`coalesce(sum(${tickets.ticketFee}::numeric), 0)`,
         totalTransportFee: sql<number>`coalesce(sum(${tickets.transportFee}::numeric), 0)`,
       }).from(tickets).where(and(...bonusConditions));
 
       const totalCompleted = Number(stats.totalCompleted) || 0;
       const slaComplianceCount = Number(stats.slaComplianceCount) || 0;
+      const totalTicketFee = Number(bonusResult.totalTicketFee) || 0;
+      const totalTransportFee = Number(bonusResult.totalTransportFee) || 0;
 
       result.push({
         technicianId: tech.id,
@@ -625,9 +629,9 @@ export class DatabaseStorage implements IStorage {
         slaComplianceRate: totalCompleted > 0 ? Math.round((slaComplianceCount / totalCompleted) * 100) : 100,
         avgResolutionMinutes: Math.round(Number(stats.avgResolutionMinutes) || 0),
         totalOverdue: Number(stats.totalOverdue) || 0,
-        totalBonus: Number(bonusResult.totalBonus) || 0,
-        totalTicketFee: Number(bonusResult.totalTicketFee) || 0,
-        totalTransportFee: Number(bonusResult.totalTransportFee) || 0,
+        totalBonus: totalTicketFee + totalTransportFee,
+        totalTicketFee,
+        totalTransportFee,
       });
     }
     return result;
@@ -635,7 +639,6 @@ export class DatabaseStorage implements IStorage {
 
   async getTechnicianBonusTotal(userId: number): Promise<{ totalBonus: number; ticketCount: number; totalTicketFee: number; totalTransportFee: number }> {
     const [result] = await db.select({
-      totalBonus: sql<number>`coalesce(sum(${tickets.bonus}::numeric), 0)`,
       totalTicketFee: sql<number>`coalesce(sum(${tickets.ticketFee}::numeric), 0)`,
       totalTransportFee: sql<number>`coalesce(sum(${tickets.transportFee}::numeric), 0)`,
       ticketCount: sql<number>`count(*)`,
@@ -647,11 +650,13 @@ export class DatabaseStorage implements IStorage {
         eq(tickets.status, TicketStatus.CLOSED)
       ));
 
+    const totalTicketFee = Number(result.totalTicketFee) || 0;
+    const totalTransportFee = Number(result.totalTransportFee) || 0;
     return {
-      totalBonus: Number(result.totalBonus) || 0,
+      totalBonus: totalTicketFee + totalTransportFee,
       ticketCount: Number(result.ticketCount) || 0,
-      totalTicketFee: Number(result.totalTicketFee) || 0,
-      totalTransportFee: Number(result.totalTransportFee) || 0,
+      totalTicketFee,
+      totalTransportFee,
     };
   }
 
