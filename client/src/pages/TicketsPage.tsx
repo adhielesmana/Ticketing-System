@@ -253,27 +253,27 @@ export default function TicketsPage() {
           />
         </div>
         <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
-          <SelectTrigger className="w-[150px]" data-testid="select-status-filter">
+          <SelectTrigger className="w-[150px] capitalize" data-testid="select-status-filter">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
             {TicketStatusValues.map((s) => (
-              <SelectItem key={s} value={s} className="capitalize">
-                {s.replace(/_/g, " ")}
+              <SelectItem key={s} value={s}>
+                {toTitleCase(s.replace(/_/g, " "))}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
         <Select value={typeFilter} onValueChange={(v) => { setTypeFilter(v); setCurrentPage(1); }}>
-          <SelectTrigger className="w-[170px]" data-testid="select-type-filter">
+          <SelectTrigger className="w-[170px] capitalize" data-testid="select-type-filter">
             <SelectValue placeholder="Type" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Types</SelectItem>
             {TicketTypeValues.map((t) => (
-              <SelectItem key={t} value={t} className="capitalize">
-                {t.replace(/_/g, " ")}
+              <SelectItem key={t} value={t}>
+                {toTitleCase(t.replace(/_/g, " "))}
               </SelectItem>
             ))}
           </SelectContent>
@@ -494,10 +494,10 @@ export default function TicketsPage() {
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Type</label>
                 <Select value={editForm.watch("type")} onValueChange={(v) => editForm.setValue("type", v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="capitalize"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {TicketTypeValues.map((t) => (
-                      <SelectItem key={t} value={t} className="capitalize">{t.replace(/_/g, " ")}</SelectItem>
+                      <SelectItem key={t} value={t}>{toTitleCase(t.replace(/_/g, " "))}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -505,10 +505,10 @@ export default function TicketsPage() {
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Priority</label>
                 <Select value={editForm.watch("priority")} onValueChange={(v) => editForm.setValue("priority", v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="capitalize"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {TicketPriorityValues.map((p) => (
-                      <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>
+                      <SelectItem key={p} value={p}>{toTitleCase(p)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

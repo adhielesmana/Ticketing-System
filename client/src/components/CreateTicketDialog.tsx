@@ -172,14 +172,14 @@ export function CreateTicketDialog() {
                     <FormLabel>Ticket Type</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
-                        <SelectTrigger data-testid="select-ticket-type">
+                        <SelectTrigger className="capitalize" data-testid="select-ticket-type">
                           <SelectValue placeholder="Select type" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
                         {TicketTypeValues.map((t) => (
                           <SelectItem key={t} value={t} className="capitalize">
-                            {t.replace('_', ' ')}
+                            {t.replace(/_/g, ' ')}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -197,7 +197,7 @@ export function CreateTicketDialog() {
                     <FormLabel>Priority</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
-                        <SelectTrigger data-testid="select-ticket-priority">
+                        <SelectTrigger className="capitalize" data-testid="select-ticket-priority">
                           <SelectValue placeholder="Select priority" />
                         </SelectTrigger>
                       </FormControl>

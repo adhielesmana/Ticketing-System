@@ -162,7 +162,7 @@ export default function ReportsPage() {
                 <div className="space-y-1">
                   <Label className="text-xs">Type</Label>
                   <Select value={ticketFilters.type} onValueChange={(v) => setTicketFilters(p => ({ ...p, type: v === "all" ? "" : v }))}>
-                    <SelectTrigger data-testid="select-ticket-type-filter">
+                    <SelectTrigger className="capitalize" data-testid="select-ticket-type-filter">
                       <SelectValue placeholder="All Types" />
                     </SelectTrigger>
                     <SelectContent>
@@ -176,7 +176,7 @@ export default function ReportsPage() {
                 <div className="space-y-1">
                   <Label className="text-xs">Status</Label>
                   <Select value={ticketFilters.status} onValueChange={(v) => setTicketFilters(p => ({ ...p, status: v === "all" ? "" : v }))}>
-                    <SelectTrigger data-testid="select-ticket-status-filter">
+                    <SelectTrigger className="capitalize" data-testid="select-ticket-status-filter">
                       <SelectValue placeholder="All Statuses" />
                     </SelectTrigger>
                     <SelectContent>

@@ -220,7 +220,7 @@ export default function UsersPage() {
                       <FormLabel>Role</FormLabel>
                       <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
-                          <SelectTrigger data-testid="select-user-role">
+                          <SelectTrigger className="capitalize" data-testid="select-user-role">
                             <SelectValue placeholder="Select role" />
                           </SelectTrigger>
                         </FormControl>
@@ -388,7 +388,7 @@ export default function UsersPage() {
                 value={editForm.watch("role")}
                 onValueChange={(val) => editForm.setValue("role", val)}
               >
-                <SelectTrigger data-testid="select-edit-role">
+                <SelectTrigger className="capitalize" data-testid="select-edit-role">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
