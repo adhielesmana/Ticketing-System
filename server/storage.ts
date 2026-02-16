@@ -437,55 +437,50 @@ export class DatabaseStorage implements IStorage {
 
   private pickBestCandidate(candidates: Ticket[], lastTicketLocation?: string | null): Ticket {
     const now = new Date();
+    const priorityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
 
-    // Rule 0: Overdue tickets (past SLA deadline) get absolute highest priority
-    const overdue = candidates.filter(t => t.slaDeadline && new Date(t.slaDeadline) < now);
-    const notOverdue = candidates.filter(t => !t.slaDeadline || new Date(t.slaDeadline) >= now);
+    const overdue = candidates
+      .filter(t => t.slaDeadline && new Date(t.slaDeadline) < now)
+      .sort((a, b) => new Date(a.slaDeadline).getTime() - new Date(b.slaDeadline).getTime());
+    const nonOverdue = candidates.filter(t => !t.slaDeadline || new Date(t.slaDeadline) >= now);
 
-    // If there are overdue tickets, pick from them first (most overdue = earliest deadline)
-    if (overdue.length > 0) {
-      overdue.sort((a, b) => new Date(a.slaDeadline).getTime() - new Date(b.slaDeadline).getTime());
-      return overdue[0];
-    }
+    // --- STEP 1: Overdue tickets ALWAYS get absolute priority (no matter what) ---
+    // Most overdue first (earliest SLA deadline), regardless of distance
+    if (overdue.length > 0) return overdue[0];
 
+    // --- From here, all candidates are non-overdue ---
     const lastCoords = lastTicketLocation ? parseGoogleMapsCoords(lastTicketLocation) : null;
 
-    // Rule 1: If same day has a last job, find the nearest location (within 10km)
-    if (lastCoords) {
-      const withDistance = notOverdue.map(t => {
-        const ticketCoords = parseGoogleMapsCoords(t.customerLocationUrl);
-        const dist = ticketCoords
-          ? haversineDistance(lastCoords.lat, lastCoords.lng, ticketCoords.lat, ticketCoords.lng)
-          : Infinity;
-        return { ticket: t, distance: dist };
-      });
-
-      const nearbyThreshold = 10; // km
-      const nearby = withDistance.filter(w => w.distance <= nearbyThreshold);
-
-      if (nearby.length > 0) {
-        nearby.sort((a, b) => a.distance - b.distance);
-        return nearby[0].ticket;
-      }
+    // --- STEP 2: First ticket of the day (no last location) ---
+    // Pick the oldest ticket
+    if (!lastCoords) {
+      nonOverdue.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      return nonOverdue[0] || candidates[0];
     }
 
-    // Rule 2: Find the most prioritized level
-    const priorityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
-    notOverdue.sort((a, b) => {
+    // --- STEP 3: Has last location — proximity-based selection (2km) ---
+    const proximityThreshold = 2; // km
+
+    const computeDistance = (t: Ticket): number => {
+      const coords = parseGoogleMapsCoords(t.customerLocationUrl);
+      return coords ? haversineDistance(lastCoords.lat, lastCoords.lng, coords.lat, coords.lng) : Infinity;
+    };
+
+    // 3a: Oldest non-overdue tickets within 2km
+    const nearby = nonOverdue
+      .filter(t => computeDistance(t) <= proximityThreshold)
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    if (nearby.length > 0) return nearby[0];
+
+    // --- STEP 4: Priority level + oldest in any condition (beyond 2km) ---
+    nonOverdue.sort((a, b) => {
       const pa = priorityOrder[a.priority] ?? 99;
       const pb = priorityOrder[b.priority] ?? 99;
-      return pa - pb;
+      if (pa !== pb) return pa - pb;
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
     });
 
-    const target = notOverdue.length > 0 ? notOverdue : candidates;
-    const highestPriority = priorityOrder[target[0].priority] ?? 99;
-    const samePriority = target.filter(
-      t => (priorityOrder[t.priority] ?? 99) === highestPriority
-    );
-
-    // Rule 3: Oldest ticket among same-priority tickets (earliest createdAt)
-    samePriority.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-    return samePriority[0];
+    return nonOverdue[0] || candidates[0];
   }
 
   async logPerformance(log: InsertPerformanceLog): Promise<PerformanceLog> {
