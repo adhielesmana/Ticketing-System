@@ -483,11 +483,8 @@ export class DatabaseStorage implements IStorage {
       t => (priorityOrder[t.priority] ?? 99) === highestPriority
     );
 
-    // Rule 3: Random ticket among same-priority tickets
-    if (samePriority.length > 1) {
-      return samePriority[Math.floor(Math.random() * samePriority.length)];
-    }
-
+    // Rule 3: Oldest ticket among same-priority tickets (earliest createdAt)
+    samePriority.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     return samePriority[0];
   }
 
