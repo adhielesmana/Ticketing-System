@@ -270,7 +270,8 @@ export class DatabaseStorage implements IStorage {
         eq(ticketAssignments.active, true),
         or(
           eq(tickets.status, TicketStatus.ASSIGNED),
-          eq(tickets.status, TicketStatus.IN_PROGRESS)
+          eq(tickets.status, TicketStatus.IN_PROGRESS),
+          eq(tickets.status, TicketStatus.OVERDUE)
         )
       ));
       
@@ -310,7 +311,8 @@ export class DatabaseStorage implements IStorage {
           eq(ticketAssignments.active, true),
           or(
             eq(tickets.status, TicketStatus.ASSIGNED),
-            eq(tickets.status, TicketStatus.IN_PROGRESS)
+            eq(tickets.status, TicketStatus.IN_PROGRESS),
+            eq(tickets.status, TicketStatus.OVERDUE)
           )
         )
       );

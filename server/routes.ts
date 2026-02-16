@@ -551,8 +551,8 @@ export async function registerRoutes(
       const existingTicket = await storage.getTicket(ticketId);
       if (!existingTicket) return res.status(404).json({ message: "Ticket not found" });
 
-      if (!['assigned', 'in_progress'].includes(existingTicket.status)) {
-        return res.status(400).json({ message: "Ticket must be assigned or in progress" });
+      if (!['assigned', 'in_progress', 'overdue'].includes(existingTicket.status)) {
+        return res.status(400).json({ message: "Ticket must be assigned, in progress, or overdue" });
       }
 
       const { rejectionReason } = req.body;
@@ -1089,7 +1089,7 @@ export async function registerRoutes(
 
       const now = new Date();
       for (const ticket of openTickets) {
-        if (ticket.status !== TicketStatus.CLOSED && ticket.status !== TicketStatus.OVERDUE) {
+        if (!['closed', 'overdue', 'rejected', 'pending_rejection'].includes(ticket.status)) {
           if (ticket.slaDeadline < now) {
             await storage.updateTicket(ticket.id, { status: TicketStatus.OVERDUE });
             console.log(`Ticket ${ticket.ticketNumber} marked as OVERDUE`);

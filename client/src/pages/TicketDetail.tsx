@@ -649,9 +649,9 @@ export default function TicketDetail() {
             </Card>
           )}
 
-          {isAssignedToMe && (ticket.status === 'assigned' || ticket.status === 'in_progress') && (
+          {isAssignedToMe && ['assigned', 'in_progress', 'overdue'].includes(ticket.status) && (
             <div className="flex flex-wrap gap-3">
-              {ticket.status === 'assigned' && (
+              {(ticket.status === 'assigned' || ticket.status === 'overdue') && (
                 <Button onClick={() => startTicket(ticketId)} data-testid="button-start-work">
                   Start Work
                 </Button>
@@ -697,7 +697,7 @@ export default function TicketDetail() {
                 </DialogContent>
               </Dialog>
 
-              {ticket.status === 'in_progress' && (
+              {(ticket.status === 'in_progress' || ticket.status === 'overdue') && (
                 <Dialog open={closeDialogOpen} onOpenChange={setCloseDialogOpen}>
                   <DialogTrigger asChild>
                     <Button data-testid="button-complete-close">

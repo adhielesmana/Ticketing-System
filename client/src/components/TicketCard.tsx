@@ -192,7 +192,7 @@ export function TicketCard({ ticket, compact = false }: TicketCardProps) {
                   Details
                 </Button>
               </Link>
-              {ticket.status === 'assigned' && (
+              {(ticket.status === 'assigned' || ticket.status === 'overdue') && (
                 <Button
                   size="sm"
                   onClick={() => startTicket(ticket.id)}
@@ -202,7 +202,7 @@ export function TicketCard({ ticket, compact = false }: TicketCardProps) {
                   Start
                 </Button>
               )}
-              {isAssignedToMe && ['assigned', 'in_progress'].includes(ticket.status) && (
+              {isAssignedToMe && ['assigned', 'in_progress', 'overdue'].includes(ticket.status) && (
                 <Button
                   variant="outline"
                   size="sm"
