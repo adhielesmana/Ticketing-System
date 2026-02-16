@@ -1187,6 +1187,22 @@ async function seedDatabase() {
   console.log("Seeding complete.");
 }
 
+export async function fixLegacyOverdueStatus() {
+  try {
+    const allTickets = await storage.getAllTickets({});
+    const overdueTickets = allTickets.filter((t: any) => t.status === 'overdue');
+    if (overdueTickets.length === 0) return;
+    console.log(`Fixing ${overdueTickets.length} tickets with legacy 'overdue' status...`);
+    for (const ticket of overdueTickets) {
+      await storage.updateTicket(ticket.id, { status: 'assigned' });
+      console.log(`  Ticket ${ticket.id}: status changed from 'overdue' to 'assigned'`);
+    }
+    console.log("Legacy overdue status fix complete.");
+  } catch (err) {
+    console.error("Fix legacy overdue status error:", err);
+  }
+}
+
 export async function backfillTicketAreas() {
   try {
     const allTickets = await storage.getAllTickets({});

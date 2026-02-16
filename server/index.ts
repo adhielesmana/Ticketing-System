@@ -1,7 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import MemoryStore from "memorystore";
-import { registerRoutes, backfillTicketAreas } from "./routes";
+import { registerRoutes, backfillTicketAreas, fixLegacyOverdueStatus } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 
@@ -115,6 +115,7 @@ app.use((req, res, next) => {
     () => {
       log(`serving on port ${port}`);
       backfillTicketAreas().catch(err => console.error("Backfill error:", err));
+      fixLegacyOverdueStatus().catch(err => console.error("Fix overdue status error:", err));
     },
   );
 })();
