@@ -55,7 +55,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useForm } from "react-hook-form";
 import { insertTicketSchema, TicketTypeValues, TicketPriorityValues, TicketStatusValues, UserRole } from "@shared/schema";
 import { format } from "date-fns";
-import { Search, Eye, Pencil, Trash2, UserPlus, Ticket, Check, Loader2 } from "lucide-react";
+import { Search, Eye, Pencil, Trash2, UserPlus, Ticket, Check, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 
 const priorityColors: Record<string, string> = {
   low: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
@@ -134,6 +134,19 @@ export default function TicketsPage() {
   const canManage = user?.role === UserRole.SUPERADMIN || user?.role === UserRole.ADMIN;
   const canAssign = canManage || user?.role === UserRole.HELPDESK;
   const canCreate = canManage || user?.role === UserRole.HELPDESK;
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 15;
+
+  const closedStatuses = new Set(["closed", "rejected"]);
+  const sortedTickets = tickets ? [...tickets].sort((a: any, b: any) => {
+    const aIsClosed = closedStatuses.has(a.status) ? 1 : 0;
+    const bIsClosed = closedStatuses.has(b.status) ? 1 : 0;
+    return aIsClosed - bIsClosed;
+  }) : [];
+
+  const totalPages = Math.max(1, Math.ceil(sortedTickets.length / pageSize));
+  const paginatedTickets = sortedTickets.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const editForm = useForm({
     defaultValues: {
@@ -234,12 +247,12 @@ export default function TicketsPage() {
           <Input
             placeholder="Search by title, customer, or ticket number..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
             className="pl-9"
             data-testid="input-search-tickets"
           />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+        <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
           <SelectTrigger className="w-[150px]" data-testid="select-status-filter">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
@@ -252,7 +265,7 @@ export default function TicketsPage() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
+        <Select value={typeFilter} onValueChange={(v) => { setTypeFilter(v); setCurrentPage(1); }}>
           <SelectTrigger className="w-[170px]" data-testid="select-type-filter">
             <SelectValue placeholder="Type" />
           </SelectTrigger>
@@ -295,7 +308,7 @@ export default function TicketsPage() {
                       ))}
                     </TableRow>
                   ))
-                ) : tickets?.length === 0 ? (
+                ) : paginatedTickets.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={11} className="text-center py-12">
                       <div className="flex flex-col items-center gap-2 text-muted-foreground">
@@ -306,7 +319,7 @@ export default function TicketsPage() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  tickets?.map((ticket: any) => (
+                  paginatedTickets.map((ticket: any) => (
                     <TableRow key={ticket.id} data-testid={`row-ticket-${ticket.id}`} className="group">
                       <TableCell className="font-mono text-xs text-muted-foreground">{ticket.ticketIdCustom || ticket.ticketNumber}</TableCell>
                       <TableCell>
@@ -419,6 +432,55 @@ export default function TicketsPage() {
               </TableBody>
             </Table>
           </div>
+          {sortedTickets.length > 0 && (
+            <div className="flex items-center justify-between gap-4 border-t px-4 py-3">
+              <p className="text-sm text-muted-foreground" data-testid="text-ticket-count">
+                Showing {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, sortedTickets.length)} of {sortedTickets.length} tickets
+              </p>
+              <div className="flex items-center gap-1">
+                <Button
+                  size="icon"
+                  variant="outline"
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage(p => p - 1)}
+                  data-testid="button-prev-page"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                  .reduce<(number | string)[]>((acc, p, idx, arr) => {
+                    if (idx > 0 && p - (arr[idx - 1] as number) > 1) acc.push("...");
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((p, idx) =>
+                    typeof p === "string" ? (
+                      <span key={`ellipsis-${idx}`} className="px-1 text-sm text-muted-foreground">...</span>
+                    ) : (
+                      <Button
+                        key={p}
+                        size="icon"
+                        variant={currentPage === p ? "default" : "outline"}
+                        onClick={() => setCurrentPage(p)}
+                        data-testid={`button-page-${p}`}
+                      >
+                        <span className="text-xs">{p}</span>
+                      </Button>
+                    )
+                  )}
+                <Button
+                  size="icon"
+                  variant="outline"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage(p => p + 1)}
+                  data-testid="button-next-page"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
