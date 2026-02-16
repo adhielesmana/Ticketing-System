@@ -403,7 +403,7 @@ export default function TicketsPage() {
                               <UserPlus className="w-3.5 h-3.5" />
                             </Button>
                           )}
-                          {canManage && (
+                          {canAssign && (
                             <Button
                               size="icon"
                               variant="ghost"

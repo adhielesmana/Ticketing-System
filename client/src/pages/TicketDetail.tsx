@@ -1,4 +1,4 @@
-import { useTicket, useCloseTicket, useStartTicket, useAssignTicket, useReassignTicket, useUploadFile, useUploadImages, useFreeTechnicians, useNoResponseTicket, useRejectTicket, useCancelReject, useCloseByHelpdesk } from "@/hooks/use-tickets";
+import { useTicket, useCloseTicket, useStartTicket, useAssignTicket, useReassignTicket, useUploadFile, useUploadImages, useFreeTechnicians, useNoResponseTicket, useRejectTicket, useCancelReject, useCloseByHelpdesk, useUpdateTicket } from "@/hooks/use-tickets";
 import { useUsers } from "@/hooks/use-users";
 import { useAuth } from "@/hooks/use-auth";
 import { useParams, Link } from "wouter";
@@ -159,6 +159,7 @@ export default function TicketDetail() {
   const { mutate: rejectTicket, isPending: isRejecting } = useRejectTicket();
   const { mutate: cancelReject, isPending: isCancellingReject } = useCancelReject();
   const { mutate: closeByHelpdesk, isPending: isClosingByHelpdesk } = useCloseByHelpdesk();
+  const { mutate: updateTicket, isPending: isUpdatingTicket } = useUpdateTicket();
 
   const { mutateAsync: uploadFile, isPending: isUploadingFile } = useUploadFile();
   const { mutateAsync: uploadMultiple, isPending: isUploadingMultiple } = useUploadImages();
@@ -279,9 +280,32 @@ export default function TicketDetail() {
             <Badge className={`${statusColors[ticket.status] || ""} text-[10px] capitalize`}>
               {ticket.status.replace(/_/g, ' ')}
             </Badge>
-            <Badge variant="outline" className="text-[10px] capitalize">
-              {ticket.type.replace(/_/g, ' ')}
-            </Badge>
+            {canManage && !['closed', 'rejected'].includes(ticket.status) ? (
+              <Select
+                value={ticket.type}
+                onValueChange={(newType) => {
+                  if (newType === ticket.type) return;
+                  updateTicket({ id: ticketId, type: newType }, {
+                    onSuccess: () => toast({ title: "Success", description: "Ticket type updated. Fees and SLA recalculated." }),
+                    onError: () => toast({ title: "Error", description: "Failed to update ticket type", variant: "destructive" }),
+                  });
+                }}
+                disabled={isUpdatingTicket}
+              >
+                <SelectTrigger className="h-6 w-auto gap-1 px-2 text-[10px] capitalize border-dashed" data-testid="select-ticket-type">
+                  {isUpdatingTicket ? <Loader2 className="w-3 h-3 animate-spin" /> : <SelectValue />}
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="home_maintenance" className="capitalize text-xs">Home Maintenance</SelectItem>
+                  <SelectItem value="backbone_maintenance" className="capitalize text-xs">Backbone Maintenance</SelectItem>
+                  <SelectItem value="installation" className="capitalize text-xs">Installation</SelectItem>
+                </SelectContent>
+              </Select>
+            ) : (
+              <Badge variant="outline" className="text-[10px] capitalize">
+                {ticket.type.replace(/_/g, ' ')}
+              </Badge>
+            )}
           </div>
           <h1 className="text-xl font-bold font-display mt-1" data-testid="text-ticket-title">{toTitleCase(ticket.title)}</h1>
         </div>

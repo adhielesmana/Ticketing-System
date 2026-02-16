@@ -296,6 +296,26 @@ export async function registerRoutes(
     try {
       const input = api.tickets.update.input.parse(req.body);
       if (input.customerName) input.customerName = toTitleCase(input.customerName);
+
+      if (input.type) {
+        const existingTicket = await storage.getTicket(Number(req.params.id));
+        if (existingTicket && input.type !== existingTicket.type && existingTicket.status !== TicketStatus.CLOSED && existingTicket.status !== TicketStatus.REJECTED) {
+          const ticketFeeSetting = await storage.getSetting(`ticket_fee_${input.type}`);
+          const transportFeeSetting = await storage.getSetting(`transport_fee_${input.type}`);
+          const ticketFee = ticketFeeSetting?.value || "0";
+          const transportFee = transportFeeSetting?.value || "0";
+          const bonus = (parseFloat(ticketFee) + parseFloat(transportFee)).toFixed(2);
+          (input as any).ticketFee = ticketFee;
+          (input as any).transportFee = transportFee;
+          (input as any).bonus = bonus;
+
+          let slaHours = 24;
+          if (input.type === TicketType.INSTALLATION) slaHours = 72;
+          const slaDeadline = new Date(existingTicket.createdAt.getTime() + slaHours * 60 * 60 * 1000);
+          (input as any).slaDeadline = slaDeadline;
+        }
+      }
+
       const ticket = await storage.updateTicket(Number(req.params.id), input);
       res.json(ticket);
     } catch (err) {
@@ -489,7 +509,7 @@ export async function registerRoutes(
 
     const isWithinSLA = existingTicket.slaDeadline > now;
     const ticketFee = isWithinSLA ? existingTicket.ticketFee : "0";
-    const transportFee = isWithinSLA ? existingTicket.transportFee : "0";
+    const transportFee = existingTicket.transportFee || "0";
     const bonus = (parseFloat(ticketFee || "0") + parseFloat(transportFee || "0")).toFixed(2);
     const ticket = await storage.updateTicket(ticketId, {
       status: TicketStatus.CLOSED,
@@ -657,7 +677,7 @@ export async function registerRoutes(
       const isWithinSLA = existingTicket.slaDeadline > now;
 
       const closeFee = isWithinSLA ? existingTicket.ticketFee : "0";
-      const closeTransport = isWithinSLA ? existingTicket.transportFee : "0";
+      const closeTransport = existingTicket.transportFee || "0";
       const closeBonus = (parseFloat(closeFee || "0") + parseFloat(closeTransport || "0")).toFixed(2);
 
       const ticket = await storage.updateTicket(ticketId, {
@@ -793,10 +813,8 @@ export async function registerRoutes(
 
         const isWithinSLA = ticket.performStatus === "perform";
         const ticketFee = isWithinSLA ? fees.ticketFee : "0";
-        const transportFee = isWithinSLA ? fees.transportFee : "0";
-        const bonus = isWithinSLA
-          ? (parseFloat(fees.ticketFee) + parseFloat(fees.transportFee)).toFixed(2)
-          : "0";
+        const transportFee = fees.transportFee;
+        const bonus = (parseFloat(ticketFee) + parseFloat(transportFee)).toFixed(2);
 
         await storage.updateTicket(ticket.id, {
           ticketFee,
