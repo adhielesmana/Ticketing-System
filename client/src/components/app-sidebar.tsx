@@ -66,7 +66,7 @@ export function AppSidebar() {
     { href: dashboardHref, label: "Dashboard", icon: LayoutDashboard, show: true },
     { href: "/tickets", label: "Tickets", icon: Ticket, show: !isTechnician },
     { href: "/users", label: "Staff", icon: Users, show: isAdmin },
-    { href: "/reports", label: "Reports", icon: FileText, show: isAdmin },
+    { href: "/reports", label: "Reports", icon: FileText, show: isAdmin || isHelpdesk },
     { href: "/settings", label: "Settings", icon: Settings, show: isAdmin },
   ].filter(item => item.show);
 

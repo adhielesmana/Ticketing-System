@@ -423,11 +423,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   private pickBestCandidate(candidates: Ticket[], lastTicketLocation?: string | null): Ticket {
+    const now = new Date();
+
+    // Rule 0: Overdue tickets (past SLA deadline) get absolute highest priority
+    const overdue = candidates.filter(t => t.slaDeadline && new Date(t.slaDeadline) < now);
+    const notOverdue = candidates.filter(t => !t.slaDeadline || new Date(t.slaDeadline) >= now);
+
+    // If there are overdue tickets, pick from them first (most overdue = earliest deadline)
+    if (overdue.length > 0) {
+      overdue.sort((a, b) => new Date(a.slaDeadline).getTime() - new Date(b.slaDeadline).getTime());
+      return overdue[0];
+    }
+
     const lastCoords = lastTicketLocation ? parseGoogleMapsCoords(lastTicketLocation) : null;
 
     // Rule 1: If same day has a last job, find the nearest location (within 10km)
     if (lastCoords) {
-      const withDistance = candidates.map(t => {
+      const withDistance = notOverdue.map(t => {
         const ticketCoords = parseGoogleMapsCoords(t.customerLocationUrl);
         const dist = ticketCoords
           ? haversineDistance(lastCoords.lat, lastCoords.lng, ticketCoords.lat, ticketCoords.lng)
@@ -439,23 +451,22 @@ export class DatabaseStorage implements IStorage {
       const nearby = withDistance.filter(w => w.distance <= nearbyThreshold);
 
       if (nearby.length > 0) {
-        // Nearest first (proximity takes priority over ticket priority)
         nearby.sort((a, b) => a.distance - b.distance);
         return nearby[0].ticket;
       }
-      // No nearby tickets found — fall through to rule 2
     }
 
     // Rule 2: Find the most prioritized level
     const priorityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2, low: 3 };
-    candidates.sort((a, b) => {
+    notOverdue.sort((a, b) => {
       const pa = priorityOrder[a.priority] ?? 99;
       const pb = priorityOrder[b.priority] ?? 99;
       return pa - pb;
     });
 
-    const highestPriority = priorityOrder[candidates[0].priority] ?? 99;
-    const samePriority = candidates.filter(
+    const target = notOverdue.length > 0 ? notOverdue : candidates;
+    const highestPriority = priorityOrder[target[0].priority] ?? 99;
+    const samePriority = target.filter(
       t => (priorityOrder[t.priority] ?? 99) === highestPriority
     );
 

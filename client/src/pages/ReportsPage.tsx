@@ -51,6 +51,8 @@ export default function ReportsPage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("tickets");
 
+  const today = new Date().toISOString().split("T")[0];
+
   const [ticketFilters, setTicketFilters] = useState({
     dateFrom: "",
     dateTo: "",
@@ -58,12 +60,12 @@ export default function ReportsPage() {
     status: "",
   });
   const [bonusFilters, setBonusFilters] = useState({
-    dateFrom: "",
-    dateTo: "",
+    dateFrom: today,
+    dateTo: today,
   });
   const [perfFilters, setPerfFilters] = useState({
-    dateFrom: "",
-    dateTo: "",
+    dateFrom: today,
+    dateTo: today,
   });
 
   const cleanTicketFilters = Object.fromEntries(
