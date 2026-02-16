@@ -214,7 +214,9 @@ export async function registerRoutes(
          const myTickets = await storage.getTicketsByAssignee(user.id);
          const withAssignees = await Promise.all(myTickets.map(async (t) => {
            const assignees = await storage.getAssigneesForTicket(t.id);
-           return { ...t, assignee: assignees[0], assignees };
+           const assignments = await storage.getTicketAssignments(t.id);
+           const assignmentType = assignments[0]?.assignmentType || null;
+           return { ...t, assignee: assignees[0], assignees, assignmentType };
          }));
          return res.json(withAssignees);
       }
@@ -223,7 +225,9 @@ export async function registerRoutes(
       
       const ticketsWithAssignee = await Promise.all(tickets.map(async (ticket) => {
         const assignees = await storage.getAssigneesForTicket(ticket.id);
-        return { ...ticket, assignee: assignees[0], assignees };
+        const assignments = await storage.getTicketAssignments(ticket.id);
+        const assignmentType = assignments[0]?.assignmentType || null;
+        return { ...ticket, assignee: assignees[0], assignees, assignmentType };
       }));
 
       res.json(ticketsWithAssignee);

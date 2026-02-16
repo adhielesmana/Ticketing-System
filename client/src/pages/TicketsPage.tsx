@@ -379,6 +379,11 @@ export default function TicketsPage() {
                                 <span className="text-sm font-normal whitespace-nowrap" title={toCapName(a.name)}>{toCapName(a.name, 30)}</span>
                               </div>
                             ))}
+                            {ticket.assignmentType && (
+                              <Badge className={`text-[9px] ${ticket.assignmentType === 'auto' ? 'bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300' : 'bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300'}`} data-testid={`badge-assign-type-${ticket.id}`}>
+                                {ticket.assignmentType === 'auto' ? 'Auto' : 'Manual'}
+                              </Badge>
+                            )}
                           </div>
                         ) : ticket.assignee ? (
                           <div className="flex items-center gap-1.5">

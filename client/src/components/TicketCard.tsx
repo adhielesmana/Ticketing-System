@@ -194,6 +194,11 @@ export function TicketCard({ ticket, compact = false }: TicketCardProps) {
                   </AvatarFallback>
                 </Avatar>
                 <span className="text-xs text-muted-foreground font-medium">{toCapName(ticket.assignee.name)}</span>
+                {ticket.assignmentType && (
+                  <Badge className={`text-[9px] ${ticket.assignmentType === 'auto' ? 'bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300' : 'bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300'}`}>
+                    {ticket.assignmentType === 'auto' ? 'Auto' : 'Manual'}
+                  </Badge>
+                )}
               </div>
             ) : (
               <span className="text-xs text-muted-foreground italic">Unassigned</span>
