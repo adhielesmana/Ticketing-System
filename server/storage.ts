@@ -46,6 +46,7 @@ export interface IStorage {
   }): Promise<Ticket | undefined>;
 
   logPerformance(log: InsertPerformanceLog): Promise<PerformanceLog>;
+  deletePerformanceLogsForTicket(ticketId: number): Promise<void>;
   getTechnicianPerformance(userId: number): Promise<TechnicianPerformance>;
 
   getSetting(key: string): Promise<Setting | undefined>;
@@ -481,6 +482,10 @@ export class DatabaseStorage implements IStorage {
   async logPerformance(log: InsertPerformanceLog): Promise<PerformanceLog> {
     const [entry] = await db.insert(performanceLogs).values(log).returning();
     return entry;
+  }
+
+  async deletePerformanceLogsForTicket(ticketId: number): Promise<void> {
+    await db.delete(performanceLogs).where(eq(performanceLogs.ticketId, ticketId));
   }
 
   async getTechnicianPerformance(userId: number): Promise<TechnicianPerformance> {

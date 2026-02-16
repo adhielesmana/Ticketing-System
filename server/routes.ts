@@ -736,37 +736,32 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Provide 1 or 2 technician IDs" });
       }
 
-      await storage.removeAllAssignments(ticketId);
+      // Delete performance logs from the previous close (removes bonus/credit)
+      await storage.deletePerformanceLogsForTicket(ticketId);
 
+      // Reassign to the specified technicians
+      await storage.removeAllAssignments(ticketId);
       for (const techId of technicianIds) {
         await storage.assignTicket(ticketId, Number(techId), "manual");
       }
 
       const now = new Date();
-      const slaHoursSetting = await storage.getSetting(`sla_hours_${existingTicket.type}`);
-      const slaHours = slaHoursSetting?.value ? parseInt(slaHoursSetting.value) : (existingTicket.type === 'installation' ? 72 : 24);
-      const newSlaDeadline = new Date(now.getTime() + slaHours * 60 * 60 * 1000);
 
-      const ticketFeeSetting = await storage.getSetting(`ticket_fee_${existingTicket.type}`);
-      const transportFeeSetting = await storage.getSetting(`transport_fee_${existingTicket.type}`);
-      const ticketFee = ticketFeeSetting?.value || "0";
-      const transportFee = transportFeeSetting?.value || "0";
-
+      // Keep original SLA deadline — if already overdue, it stays overdue
       const ticket = await storage.updateTicket(ticketId, {
         status: TicketStatus.ASSIGNED,
         closedAt: null,
         durationMinutes: null,
         performStatus: null,
         bonus: "0",
-        ticketFee,
-        transportFee,
+        ticketFee: "0",
+        transportFee: "0",
         actionDescription: null,
         speedtestResult: null,
         speedtestImageUrl: null,
         proofImageUrl: null,
         proofImageUrls: [],
         closedNote: null,
-        slaDeadline: newSlaDeadline,
         reopenReason: `${existingTicket.reopenReason ? existingTicket.reopenReason + "\n" : ""}[Reopened ${now.toISOString().slice(0,16).replace('T',' ')}] ${reason.trim()}`,
       });
 

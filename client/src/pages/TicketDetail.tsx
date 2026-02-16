@@ -459,7 +459,14 @@ export default function TicketDetail() {
                   <div className="pt-2">
                     <Dialog open={reopenDialogOpen} onOpenChange={(open) => {
                       setReopenDialogOpen(open);
-                      if (!open) { setReopenReason(""); setReopenTech1(""); setReopenTech2(""); }
+                      if (open) {
+                        const assignees = ticket.assignees || (ticket.assignee ? [ticket.assignee] : []);
+                        setReopenTech1(assignees[0] ? String(assignees[0].id) : "");
+                        setReopenTech2(assignees[1] ? String(assignees[1].id) : "");
+                        setReopenReason("");
+                      } else {
+                        setReopenReason(""); setReopenTech1(""); setReopenTech2("");
+                      }
                     }}>
                       <DialogTrigger asChild>
                         <Button variant="outline" size="sm" className="gap-1.5" data-testid="button-reopen-ticket">
@@ -485,11 +492,11 @@ export default function TicketDetail() {
                           <div className="space-y-1.5">
                             <Label className="text-sm">Lead Technician</Label>
                             <Select value={reopenTech1} onValueChange={setReopenTech1}>
-                              <SelectTrigger data-testid="select-reopen-tech1">
+                              <SelectTrigger className="capitalize" data-testid="select-reopen-tech1">
                                 <SelectValue placeholder="Select technician..." />
                               </SelectTrigger>
                               <SelectContent>
-                                {freeTechnicians?.map((tech: any) => (
+                                {technicians?.filter((t: any) => t.role === 'technician').map((tech: any) => (
                                   <SelectItem key={tech.id} value={String(tech.id)} disabled={String(tech.id) === reopenTech2}>
                                     {tech.name}
                                   </SelectItem>
@@ -500,12 +507,12 @@ export default function TicketDetail() {
                           <div className="space-y-1.5">
                             <Label className="text-sm">Partner (Optional)</Label>
                             <Select value={reopenTech2} onValueChange={setReopenTech2}>
-                              <SelectTrigger data-testid="select-reopen-tech2">
+                              <SelectTrigger className="capitalize" data-testid="select-reopen-tech2">
                                 <SelectValue placeholder="Select partner..." />
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="none">No partner</SelectItem>
-                                {freeTechnicians?.map((tech: any) => (
+                                {technicians?.filter((t: any) => t.role === 'technician').map((tech: any) => (
                                   <SelectItem key={tech.id} value={String(tech.id)} disabled={String(tech.id) === reopenTech1}>
                                     {tech.name}
                                   </SelectItem>
