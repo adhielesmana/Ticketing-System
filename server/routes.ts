@@ -42,7 +42,13 @@ async function resolveShortUrl(url: string): Promise<string> {
   try {
     const res = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(8000) });
     const location = res.headers.get("location");
-    if (location) return location;
+    if (location) {
+      try {
+        return new URL(location, url).href;
+      } catch {
+        return location;
+      }
+    }
     return res.url || url;
   } catch {
     try {
