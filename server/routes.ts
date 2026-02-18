@@ -430,6 +430,34 @@ export async function registerRoutes(
     }
   });
 
+  // === UNASSIGN TICKET (remove all assignments, set back to open) ===
+  app.post("/api/tickets/:id/unassign", async (req, res) => {
+    try {
+      const ticketId = Number(req.params.id);
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const user = await storage.getUser(userId);
+      if (!user || ![UserRole.SUPERADMIN, UserRole.ADMIN].includes(user.role as any)) {
+        return res.status(403).json({ message: "Only superadmin or admin can unassign tickets" });
+      }
+
+      const ticket = await storage.getTicket(ticketId);
+      if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+      if (['closed', 'rejected'].includes(ticket.status)) {
+        return res.status(400).json({ message: "Cannot unassign a closed or rejected ticket" });
+      }
+
+      await storage.removeAllAssignments(ticketId);
+      await storage.updateTicket(ticketId, { status: TicketStatus.OPEN });
+
+      const updated = await storage.getTicket(ticketId);
+      res.json({ ...updated, assignee: null, assignees: [] });
+    } catch (err: any) {
+      console.error("Unassign error:", err);
+      res.status(500).json({ message: err.message || "Failed to unassign ticket" });
+    }
+  });
+
   // === FREE TECHNICIANS (no active/in-progress tickets) ===
   app.get("/api/technicians/free", async (req, res) => {
     try {

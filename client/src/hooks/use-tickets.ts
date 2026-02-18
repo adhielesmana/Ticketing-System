@@ -172,6 +172,34 @@ export function useReassignTicket() {
   });
 }
 
+export function useUnassignTicket() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id }: { id: number }) => {
+      const res = await fetch(`/api/tickets/${id}/unassign`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || "Failed to unassign ticket");
+      }
+      return res.json();
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [api.tickets.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.tickets.get.path, variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/technicians/free"] });
+      toast({ title: "Success", description: "Ticket unassigned and set back to open" });
+    },
+    onError: (error) => {
+      toast({ title: "Unassign Failed", description: error.message, variant: "destructive" });
+    },
+  });
+}
+
 export function useAutoAssignTicket() {
   const queryClient = useQueryClient();
   const { toast } = useToast();

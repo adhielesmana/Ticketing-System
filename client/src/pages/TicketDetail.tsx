@@ -1,4 +1,4 @@
-import { useTicket, useCloseTicket, useStartTicket, useAssignTicket, useReassignTicket, useUploadFile, useUploadImages, useFreeTechnicians, useNoResponseTicket, useRejectTicket, useCancelReject, useCloseByHelpdesk, useUpdateTicket, useReopenTicket } from "@/hooks/use-tickets";
+import { useTicket, useCloseTicket, useStartTicket, useAssignTicket, useReassignTicket, useUnassignTicket, useUploadFile, useUploadImages, useFreeTechnicians, useNoResponseTicket, useRejectTicket, useCancelReject, useCloseByHelpdesk, useUpdateTicket, useReopenTicket } from "@/hooks/use-tickets";
 import { useUsers } from "@/hooks/use-users";
 import { useAuth } from "@/hooks/use-auth";
 import { useParams, Link } from "wouter";
@@ -37,6 +37,7 @@ import {
   PhoneOff,
   RefreshCw,
   RotateCcw,
+  UserX,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useState, useRef } from "react";
@@ -155,6 +156,7 @@ export default function TicketDetail() {
 
   const { mutate: assignTicket } = useAssignTicket();
   const { mutate: reassignTicket, isPending: isReassigning } = useReassignTicket();
+  const { mutate: unassignTicket, isPending: isUnassigning } = useUnassignTicket();
   const { mutate: startTicket } = useStartTicket();
   const { mutate: closeTicket } = useCloseTicket();
   const { mutate: noResponse, isPending: isReportingNoResponse } = useNoResponseTicket();
@@ -1050,6 +1052,19 @@ export default function TicketDetail() {
                         </DialogFooter>
                       </DialogContent>
                     </Dialog>
+                  )}
+                  {(user?.role === 'superadmin' || user?.role === 'admin') && !['closed', 'rejected'].includes(ticket.status) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive"
+                      disabled={isUnassigning}
+                      onClick={() => unassignTicket({ id: ticketId })}
+                      data-testid="button-unassign"
+                    >
+                      {isUnassigning ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <UserX className="w-3.5 h-3.5 mr-1.5" />}
+                      Unassign
+                    </Button>
                   )}
                 </div>
               ) : canManage && !['closed', 'rejected', 'pending_rejection'].includes(ticket.status) ? (
