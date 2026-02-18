@@ -168,6 +168,31 @@ For each eligible technician, the system calculates:
 
 If the system cannot find eligible technicians, it returns an error explaining why (e.g., "No available technicians" or "All technicians are busy").
 
+### 5.2.1 Auto-Assign by Proximity (Next Ticket Selection)
+
+When a technician finishes a ticket and requests their next assignment, the system uses proximity-based logic to pick the best next ticket. It extracts GPS coordinates from the Google Maps URL of the customer location and applies the following priority order:
+
+**Priority 1: Overdue Tickets (Absolute Priority)**
+- If any assigned ticket has passed its SLA deadline, it is selected immediately regardless of distance
+- If multiple tickets are overdue, the one most overdue (earliest SLA deadline) is picked first
+
+**Priority 2: First Ticket of the Day (No Previous Location)**
+- If the technician has no previous ticket location (first job of the day), the system picks the oldest open ticket (earliest creation date)
+
+**Priority 3: Nearby Tickets Within 2 km**
+- The system calculates the distance between the technician's last completed ticket location and each candidate ticket using the Haversine formula (great-circle distance)
+- Tickets within a 2 km radius are considered "nearby"
+- Among nearby tickets, the oldest one (earliest creation date) is selected first
+- This minimizes travel time by keeping technicians working in their current area
+
+**Priority 4: Farther Tickets by Priority + Age**
+- If no tickets are within 2 km, the system falls back to sorting by priority level (critical > high > medium > low), then by creation date (oldest first)
+
+**How It Works:**
+- Customer Location URLs (Google Maps links) are parsed to extract latitude/longitude coordinates
+- The Haversine formula calculates the real-world distance between two GPS points on Earth's surface
+- The 2 km proximity threshold is designed to keep technicians efficient within a local area before sending them further away
+
 ### 5.3 Specialist Categories
 
 | Specialist Type | Eligible Ticket Types | Flag in User Profile |
