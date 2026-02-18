@@ -5,7 +5,7 @@ import { api, errorSchemas } from "@shared/routes";
 import { z } from "zod";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import multer from "multer";
-import { TicketStatus, UserRole, TicketPriority, TicketType } from "@shared/schema";
+import { TicketStatus, UserRole, TicketPriority, TicketType, tickets, ticketAssignments, performanceLogs, technicianFees } from "@shared/schema";
 import { hash, compare } from "bcryptjs";
 import path from "path";
 import fs from "fs";
@@ -1106,23 +1106,22 @@ export async function registerRoutes(
       const allSettings = await storage.getAllSettings();
 
       const allAssignments: any[] = [];
-      const allPerformanceLogs: any[] = [];
       for (const ticket of allTickets) {
         const assignments = await storage.getTicketAssignments(ticket.id);
         allAssignments.push(...assignments);
       }
-      const { db } = await import("./db");
-      const { performanceLogs } = await import("@shared/schema");
-      const logs = await db.select().from(performanceLogs);
-      allPerformanceLogs.push(...logs);
+      const { db: dbExport } = await import("./db");
+      const allPerformanceLogs = await dbExport.select().from(performanceLogs);
+      const allTechnicianFees = await dbExport.select().from(technicianFees);
 
       const exportData = {
         exportedAt: new Date().toISOString(),
         version: 1,
-        users: allUsers.map(({ password, ...rest }) => rest),
+        users: allUsers,
         tickets: allTickets,
         assignments: allAssignments,
         performanceLogs: allPerformanceLogs,
+        technicianFees: allTechnicianFees,
         settings: allSettings,
       };
 
@@ -1145,8 +1144,8 @@ export async function registerRoutes(
     try {
       const userId = (req as any).session.userId;
       if (!userId) return res.status(401).json({ message: "Not authenticated" });
-      const user = await storage.getUser(userId);
-      if (!user || (user.role !== UserRole.SUPERADMIN && user.role !== UserRole.ADMIN)) {
+      const currentUser = await storage.getUser(userId);
+      if (!currentUser || (currentUser.role !== UserRole.SUPERADMIN && currentUser.role !== UserRole.ADMIN)) {
         return res.status(403).json({ message: "Admin access required" });
       }
 
@@ -1167,21 +1166,141 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Invalid import data format" });
       }
 
-      let settingsImported = 0;
+      const { db: dbInstance } = await import("./db");
+
+      const counts = { users: 0, tickets: 0, assignments: 0, performanceLogs: 0, settings: 0, technicianFees: 0 };
+
+      await dbInstance.delete(performanceLogs);
+      await dbInstance.delete(ticketAssignments);
+      await dbInstance.delete(tickets);
+      await dbInstance.delete(technicianFees);
+
+      const existingUsers = await storage.getAllUsers();
+      const existingUserMap = new Map(existingUsers.map(u => [u.username, u]));
+
+      const userIdMap = new Map<number, number>();
+
+      if (importData.users && Array.isArray(importData.users)) {
+        for (const u of importData.users) {
+          const existing = existingUserMap.get(u.username);
+          if (existing) {
+            const updates: any = {
+              name: u.name,
+              email: u.email,
+              phone: u.phone || "",
+              role: u.role,
+              isBackboneSpecialist: u.isBackboneSpecialist || false,
+              isVendorSpecialist: u.isVendorSpecialist || false,
+              isActive: u.isActive !== undefined ? u.isActive : true,
+            };
+            if (u.password) {
+              updates.password = u.password;
+            }
+            await storage.updateUser(existing.id, updates);
+            userIdMap.set(u.id, existing.id);
+            counts.users++;
+          } else {
+            const pwd = u.password || await hash("changeme123", 10);
+            const newUser = await storage.createUser({
+              name: u.name,
+              email: u.email,
+              username: u.username,
+              password: pwd,
+              phone: u.phone || "",
+              role: u.role,
+              isBackboneSpecialist: u.isBackboneSpecialist || false,
+              isVendorSpecialist: u.isVendorSpecialist || false,
+              isActive: u.isActive !== undefined ? u.isActive : true,
+            });
+            userIdMap.set(u.id, newUser.id);
+            counts.users++;
+          }
+        }
+      }
+
+      const ticketIdMap = new Map<number, number>();
+
+      if (importData.tickets && Array.isArray(importData.tickets)) {
+        for (const t of importData.tickets) {
+          const { id, ...ticketData } = t;
+          const [newTicket] = await dbInstance.insert(tickets).values({
+            ...ticketData,
+            slaDeadline: t.slaDeadline ? new Date(t.slaDeadline) : new Date(),
+            createdAt: t.createdAt ? new Date(t.createdAt) : new Date(),
+            closedAt: t.closedAt ? new Date(t.closedAt) : null,
+          }).returning();
+          ticketIdMap.set(id, newTicket.id);
+          counts.tickets++;
+        }
+      }
+
+      if (importData.assignments && Array.isArray(importData.assignments)) {
+        for (const a of importData.assignments) {
+          const mappedTicketId = ticketIdMap.get(a.ticketId);
+          const mappedUserId = userIdMap.get(a.userId);
+          if (mappedTicketId && mappedUserId) {
+            await dbInstance.insert(ticketAssignments).values({
+              ticketId: mappedTicketId,
+              userId: mappedUserId,
+              assignedAt: a.assignedAt ? new Date(a.assignedAt) : new Date(),
+              active: a.active !== undefined ? a.active : true,
+              assignmentType: a.assignmentType || "manual",
+            });
+            counts.assignments++;
+          }
+        }
+      }
+
+      if (importData.performanceLogs && Array.isArray(importData.performanceLogs)) {
+        for (const pl of importData.performanceLogs) {
+          const mappedTicketId = ticketIdMap.get(pl.ticketId);
+          const mappedUserId = userIdMap.get(pl.userId);
+          if (mappedTicketId && mappedUserId) {
+            await dbInstance.insert(performanceLogs).values({
+              userId: mappedUserId,
+              ticketId: mappedTicketId,
+              result: pl.result,
+              completedWithinSLA: pl.completedWithinSLA,
+              durationMinutes: pl.durationMinutes,
+              ticketFee: pl.ticketFee || "0",
+              transportFee: pl.transportFee || "0",
+              bonus: pl.bonus || "0",
+              createdAt: pl.createdAt ? new Date(pl.createdAt) : new Date(),
+            });
+            counts.performanceLogs++;
+          }
+        }
+      }
+
+      if (importData.technicianFees && Array.isArray(importData.technicianFees)) {
+        for (const tf of importData.technicianFees) {
+          const mappedUserId = userIdMap.get(tf.technicianId);
+          if (mappedUserId) {
+            await dbInstance.insert(technicianFees).values({
+              technicianId: mappedUserId,
+              ticketType: tf.ticketType,
+              ticketFee: tf.ticketFee || "0",
+              transportFee: tf.transportFee || "0",
+            });
+            counts.technicianFees++;
+          }
+        }
+      }
+
       if (importData.settings && Array.isArray(importData.settings)) {
         for (const s of importData.settings) {
           await storage.setSetting(s.key, s.value);
-          settingsImported++;
+          counts.settings++;
         }
       }
 
       res.json({
-        message: "Import completed",
-        settingsImported,
+        message: `Import completed: ${counts.users} users, ${counts.tickets} tickets, ${counts.assignments} assignments, ${counts.performanceLogs} performance logs, ${counts.settings} settings`,
+        ...counts,
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Import error:", err);
-      res.status(500).json({ message: "Failed to import database" });
+      res.status(500).json({ message: err.message || "Failed to import database" });
     }
   });
 

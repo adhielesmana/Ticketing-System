@@ -25,7 +25,7 @@ import {
   Ratio,
   Database,
 } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 
 function formatCurrency(value: number | string): string {
   const num = typeof value === "string" ? parseFloat(value) : value;
@@ -203,14 +203,15 @@ export default function SettingsPage() {
           throw new Error(errData.message || `${res.status}: Import failed`);
         }
         const result = await res.json();
-        toast({ title: "Import Complete", description: result.message || "Settings imported successfully" });
+        toast({ title: "Import Complete", description: result.message || "Database imported successfully" });
       } else {
         const text = new TextDecoder().decode(buffer);
         const data = JSON.parse(text);
         const res = await apiRequest("POST", "/api/import-database", data);
         const result = await res.json();
-        toast({ title: "Import Complete", description: result.message || "Settings imported successfully" });
+        toast({ title: "Import Complete", description: result.message || "Database imported successfully" });
       }
+      queryClient.invalidateQueries();
     } catch (err: any) {
       toast({ title: "Import Failed", description: err.message || "Invalid file format", variant: "destructive" });
     } finally {
