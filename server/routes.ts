@@ -843,6 +843,46 @@ export async function registerRoutes(
     }
   });
 
+  // === REOPEN REJECTED TICKET (Admin/Helpdesk/Superadmin reopens a rejected ticket, keeps same team) ===
+  app.post(api.tickets.reopenRejected.path, async (req, res) => {
+    try {
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+
+      const user = await storage.getUser(userId);
+      if (!user || ![UserRole.ADMIN, UserRole.SUPERADMIN, UserRole.HELPDESK].includes(user.role as any)) {
+        return res.status(403).json({ message: "Only admin, superadmin or helpdesk can reopen rejected tickets" });
+      }
+
+      const ticketId = Number(req.params.id);
+      const existingTicket = await storage.getTicket(ticketId);
+      if (!existingTicket) return res.status(404).json({ message: "Ticket not found" });
+
+      if (existingTicket.status !== TicketStatus.REJECTED) {
+        return res.status(400).json({ message: "Only rejected tickets can be reopened with this action" });
+      }
+
+      const { reason } = req.body;
+      if (!reason || reason.trim() === "") {
+        return res.status(400).json({ message: "Reason for reopening is required" });
+      }
+
+      const now = new Date();
+
+      const ticket = await storage.updateTicket(ticketId, {
+        status: TicketStatus.ASSIGNED,
+        rejectionReason: null,
+        reopenReason: `${existingTicket.reopenReason ? existingTicket.reopenReason + "\n" : ""}[Reopened from rejected ${now.toISOString().slice(0,16).replace('T',' ')}] ${reason.trim()}`,
+      });
+
+      const assignees = await storage.getAssigneesForTicket(ticketId);
+      res.json({ ...ticket, assignee: assignees[0], assignees });
+    } catch (err: any) {
+      console.error("Reopen rejected error:", err);
+      res.status(500).json({ message: err.message || "Failed to reopen rejected ticket" });
+    }
+  });
+
   // === BACKFILL AREAS (admin trigger) ===
   app.post("/api/tickets/backfill-areas", async (req, res) => {
     try {

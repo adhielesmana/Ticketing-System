@@ -431,6 +431,38 @@ export function useReopenTicket() {
   });
 }
 
+export function useReopenRejectedTicket() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, reason }: { id: number; reason: string }) => {
+      const url = buildUrl(api.tickets.reopenRejected.path, { id });
+      const res = await fetch(url, {
+        method: api.tickets.reopenRejected.method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Failed" }));
+        throw new Error(err.message || "Failed to reopen rejected ticket");
+      }
+      return res.json();
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: [api.tickets.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.tickets.get.path, variables.id] });
+      queryClient.invalidateQueries({ queryKey: [api.dashboard.stats.path] });
+      queryClient.invalidateQueries({ queryKey: ["/api/technicians/free"] });
+      toast({ title: "Reopened", description: "Rejected ticket has been reopened and assigned to the same team" });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: error.message, variant: "destructive" });
+    },
+  });
+}
+
 export function useDashboardStats() {
   return useQuery({
     queryKey: [api.dashboard.stats.path],

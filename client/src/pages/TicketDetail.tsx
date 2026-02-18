@@ -1,4 +1,4 @@
-import { useTicket, useCloseTicket, useStartTicket, useAssignTicket, useReassignTicket, useUnassignTicket, useUploadFile, useUploadImages, useFreeTechnicians, useNoResponseTicket, useRejectTicket, useCancelReject, useCloseByHelpdesk, useUpdateTicket, useReopenTicket } from "@/hooks/use-tickets";
+import { useTicket, useCloseTicket, useStartTicket, useAssignTicket, useReassignTicket, useUnassignTicket, useUploadFile, useUploadImages, useFreeTechnicians, useNoResponseTicket, useRejectTicket, useCancelReject, useCloseByHelpdesk, useUpdateTicket, useReopenTicket, useReopenRejectedTicket } from "@/hooks/use-tickets";
 import { useUsers } from "@/hooks/use-users";
 import { useAuth } from "@/hooks/use-auth";
 import { useParams, useLocation } from "wouter";
@@ -166,6 +166,7 @@ export default function TicketDetail() {
   const { mutate: closeByHelpdesk, isPending: isClosingByHelpdesk } = useCloseByHelpdesk();
   const { mutate: updateTicket, isPending: isUpdatingTicket } = useUpdateTicket();
   const { mutate: reopenTicket, isPending: isReopening } = useReopenTicket();
+  const { mutate: reopenRejectedTicket, isPending: isReopeningRejected } = useReopenRejectedTicket();
 
   const { mutateAsync: uploadFile, isPending: isUploadingFile } = useUploadFile();
   const { mutateAsync: uploadMultiple, isPending: isUploadingMultiple } = useUploadImages();
@@ -185,6 +186,8 @@ export default function TicketDetail() {
   const [reopenReason, setReopenReason] = useState("");
   const [reopenTech1, setReopenTech1] = useState<string>("");
   const [reopenTech2, setReopenTech2] = useState<string>("");
+  const [reopenRejectedDialogOpen, setReopenRejectedDialogOpen] = useState(false);
+  const [reopenRejectedReason, setReopenRejectedReason] = useState("");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [closeData, setCloseData] = useState({
     actionDescription: "",
@@ -195,6 +198,14 @@ export default function TicketDetail() {
 
   const speedtestInputRef = useRef<HTMLInputElement>(null);
   const proofInputRef = useRef<HTMLInputElement>(null);
+
+  const goBack = () => {
+    if (user?.role === 'technician') {
+      navigate("/dashboard/technician");
+    } else {
+      navigate("/tickets");
+    }
+  };
 
   if (isLoading) {
     return (
@@ -251,14 +262,6 @@ export default function TicketDetail() {
       ...prev,
       proofImageUrls: prev.proofImageUrls.filter((_, i) => i !== index)
     }));
-  };
-
-  const goBack = () => {
-    if (user?.role === 'technician') {
-      navigate("/dashboard/technician");
-    } else {
-      navigate("/tickets");
-    }
   };
 
   const handleClose = () => {
@@ -671,6 +674,59 @@ export default function TicketDetail() {
                         >
                           {isClosingByHelpdesk ? <><Loader2 className="w-4 h-4 animate-spin" /> Closing...</> : "Close Ticket"}
                         </Button>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                )}
+                {canManage && ticket.status === 'rejected' && (
+                  <div className="pt-2">
+                    <Dialog open={reopenRejectedDialogOpen} onOpenChange={(open) => {
+                      setReopenRejectedDialogOpen(open);
+                      if (!open) setReopenRejectedReason("");
+                    }}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" size="sm" className="gap-1.5" data-testid="button-reopen-rejected">
+                          <RotateCcw className="w-3.5 h-3.5" />
+                          Reopen Ticket
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-sm">
+                        <DialogHeader>
+                          <DialogTitle className="flex items-center gap-2">
+                            <RotateCcw className="w-5 h-5" />
+                            Reopen Rejected Ticket
+                          </DialogTitle>
+                        </DialogHeader>
+                        <p className="text-sm text-muted-foreground">
+                          This ticket will be reopened with status <span className="font-medium">Assigned</span> and the same technician team will continue the task.
+                        </p>
+                        <div className="space-y-1.5">
+                          <Label className="text-sm">Reason for Reopening</Label>
+                          <Textarea
+                            value={reopenRejectedReason}
+                            onChange={(e) => setReopenRejectedReason(e.target.value)}
+                            placeholder="Why is this rejected ticket being reopened?"
+                            className="text-sm"
+                            data-testid="input-reopen-rejected-reason"
+                          />
+                        </div>
+                        <DialogFooter>
+                          <Button
+                            onClick={() => {
+                              if (!reopenRejectedReason.trim()) return toast({ title: "Error", description: "Please provide a reason", variant: "destructive" });
+                              reopenRejectedTicket({ id: ticketId, reason: reopenRejectedReason.trim() }, {
+                                onSuccess: () => {
+                                  setReopenRejectedDialogOpen(false);
+                                  setReopenRejectedReason("");
+                                }
+                              });
+                            }}
+                            disabled={isReopeningRejected || !reopenRejectedReason.trim()}
+                            data-testid="button-confirm-reopen-rejected"
+                          >
+                            {isReopeningRejected ? <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Reopening...</> : "Reopen Ticket"}
+                          </Button>
+                        </DialogFooter>
                       </DialogContent>
                     </Dialog>
                   </div>

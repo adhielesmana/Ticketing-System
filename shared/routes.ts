@@ -245,6 +245,16 @@ export const api = {
         200: z.custom<typeof tickets.$inferSelect>(),
       },
     },
+    reopenRejected: {
+      method: 'POST' as const,
+      path: '/api/tickets/:id/reopen-rejected' as const,
+      input: z.object({
+        reason: z.string().min(1, "Reason is required"),
+      }),
+      responses: {
+        200: z.custom<typeof tickets.$inferSelect>(),
+      },
+    },
   },
   dashboard: {
     stats: {
