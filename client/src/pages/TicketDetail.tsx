@@ -1,7 +1,7 @@
 import { useTicket, useCloseTicket, useStartTicket, useAssignTicket, useReassignTicket, useUnassignTicket, useUploadFile, useUploadImages, useFreeTechnicians, useNoResponseTicket, useRejectTicket, useCancelReject, useCloseByHelpdesk, useUpdateTicket, useReopenTicket } from "@/hooks/use-tickets";
 import { useUsers } from "@/hooks/use-users";
 import { useAuth } from "@/hooks/use-auth";
-import { useParams, Link, useLocation } from "wouter";
+import { useParams, useLocation } from "wouter";
 import { SLAIndicator } from "@/components/SLAIndicator";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -213,12 +213,10 @@ export default function TicketDetail() {
       <div className="container mx-auto p-4 lg:p-6 max-w-4xl">
         <div className="text-center py-16 text-muted-foreground">
           <p className="text-lg font-medium">Ticket not found</p>
-          <Link href="/tickets">
-            <Button variant="outline" className="mt-4 gap-2">
-              <ArrowLeft className="w-4 h-4" />
-              Back to Tickets
-            </Button>
-          </Link>
+          <Button variant="outline" className="mt-4 gap-2" onClick={goBack}>
+            <ArrowLeft className="w-4 h-4" />
+            Back
+          </Button>
         </div>
       </div>
     );
@@ -286,11 +284,9 @@ export default function TicketDetail() {
   return (
     <div className="container mx-auto p-4 lg:p-6 max-w-4xl space-y-5">
       <div className="flex items-center gap-3">
-        <Link href="/tickets">
-          <Button variant="ghost" size="icon" data-testid="button-back">
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-        </Link>
+        <Button variant="ghost" size="icon" data-testid="button-back" onClick={goBack}>
+          <ArrowLeft className="w-4 h-4" />
+        </Button>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-mono text-sm text-muted-foreground" data-testid="text-ticket-id">#{ticket.ticketIdCustom || ticket.ticketNumber}</span>
