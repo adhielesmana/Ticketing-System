@@ -1294,8 +1294,10 @@ export async function registerRoutes(
         }
       }
 
+      await fixOrphanedAssignments();
+
       res.json({
-        message: `Import completed: ${counts.users} users, ${counts.tickets} tickets, ${counts.assignments} assignments, ${counts.performanceLogs} performance logs, ${counts.settings} settings`,
+        message: `Import completed: ${counts.users} users, ${counts.tickets} tickets, ${counts.assignments} assignments, ${counts.performanceLogs} perf logs, ${counts.technicianFees} tech fees, ${counts.settings} settings`,
         ...counts,
       });
     } catch (err: any) {
@@ -1546,6 +1548,30 @@ async function seedDatabase() {
   });
 
   console.log("Seeding complete.");
+}
+
+export async function fixOrphanedAssignments() {
+  try {
+    const allTickets = await storage.getAllTickets({});
+    const candidateTickets = allTickets.filter((t: any) => 
+      t.status === 'assigned' || t.status === 'in_progress' || t.status === 'waiting_assignment'
+    );
+    let fixed = 0;
+    for (const ticket of candidateTickets) {
+      const assignments = await storage.getTicketAssignments(ticket.id);
+      const activeAssignments = assignments.filter((a: any) => a.active);
+      if (activeAssignments.length === 0) {
+        await storage.updateTicket(ticket.id, { status: 'open' });
+        fixed++;
+        console.log(`  Fixed orphaned ticket ${ticket.id} (${ticket.ticketNumber}): ${ticket.status} → open`);
+      }
+    }
+    if (fixed > 0) {
+      console.log(`Fixed ${fixed} orphaned ticket(s) with no active assignments.`);
+    }
+  } catch (err) {
+    console.error("Fix orphaned assignments error:", err);
+  }
 }
 
 export async function fixLegacyOverdueStatus() {
