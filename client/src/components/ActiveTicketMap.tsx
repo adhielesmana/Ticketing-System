@@ -27,13 +27,10 @@ function extractCoordinates(url: string): { lat: number; lng: number } | null {
   return null;
 }
 
-const statusColorMap: Record<string, { fill: string; stroke: string }> = {
-  open: { fill: "rgba(59, 130, 246, 0.25)", stroke: "#3b82f6" },
-  waiting_assignment: { fill: "rgba(168, 85, 247, 0.25)", stroke: "#a855f7" },
-  assigned: { fill: "rgba(14, 165, 233, 0.25)", stroke: "#0ea5e9" },
-  in_progress: { fill: "rgba(245, 158, 11, 0.25)", stroke: "#f59e0b" },
-  pending_rejection: { fill: "rgba(239, 68, 68, 0.25)", stroke: "#ef4444" },
-  overdue: { fill: "rgba(220, 38, 38, 0.30)", stroke: "#dc2626" },
+const typeColorMap: Record<string, { fill: string; stroke: string }> = {
+  installation: { fill: "rgba(59, 130, 246, 0.25)", stroke: "#3b82f6" },
+  home_maintenance: { fill: "rgba(245, 158, 11, 0.25)", stroke: "#f59e0b" },
+  backbone_maintenance: { fill: "rgba(239, 68, 68, 0.25)", stroke: "#ef4444" },
 };
 
 const priorityRadius: Record<string, number> = {
@@ -123,7 +120,7 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
     if (points.length === 0) return;
 
     points.forEach((pt) => {
-      const colors = statusColorMap[pt.status] || statusColorMap.open;
+      const colors = typeColorMap[pt.type] || typeColorMap.installation;
       const radius = priorityRadius[pt.priority] || 350;
 
       L.circle([pt.lat, pt.lng], {
@@ -189,11 +186,9 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
             Active Problems Map
           </CardTitle>
           <div className="flex items-center gap-3 flex-wrap">
-            <Legend color="#3b82f6" label="Open" />
-            <Legend color="#0ea5e9" label="Assigned" />
-            <Legend color="#f59e0b" label="In Progress" />
-            <Legend color="#ef4444" label="No Response" />
-            <Legend color="#dc2626" label="Overdue" />
+            <Legend color="#3b82f6" label="New Installation" />
+            <Legend color="#f59e0b" label="Home Maintenance" />
+            <Legend color="#ef4444" label="Backbone Maintenance" />
             <span className="text-xs text-muted-foreground">
               {points.length} active
             </span>
