@@ -3,11 +3,11 @@ set -e
 
 #====================================================================
 # NetGuard ISP - Update Script (Single Container)
-# Version: 5
+# Version: 6
 # Rebuilds Docker image and restarts the single container
 #====================================================================
 
-UPDATE_VERSION="5"
+UPDATE_VERSION="6"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -22,7 +22,7 @@ log_ok()    { echo -e "${GREEN}[OK]${NC} $1"; }
 log_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_err()   { echo -e "${RED}[ERROR]${NC} $1"; }
 
-TOTAL_STEPS=4
+TOTAL_STEPS=5
 CHECKLIST_RESULTS=()
 
 step_start() {
@@ -171,6 +171,21 @@ docker logs "$APP_CONTAINER" 2>&1 | grep -E "^\[" | head -15
 echo ""
 
 step_done 4 "Verify app is running"
+
+#====================================================================
+# STEP 5: Fix data inconsistencies
+#====================================================================
+step_start 5 "Fix data inconsistencies"
+
+log_info "Fixing tickets with 'assigned' status but no active assignments..."
+FIX_COUNT=$(docker exec "$APP_CONTAINER" psql -h 127.0.0.1 -U "$DB_USER" -d "$DB_NAME" -tAc "
+UPDATE tickets SET status = 'open'
+WHERE status IN ('assigned', 'in_progress')
+AND id NOT IN (SELECT ticket_id FROM ticket_assignments WHERE active = true);
+" 2>/dev/null | grep -oP '\d+' || echo "0")
+log_ok "Fixed ${FIX_COUNT} inconsistent ticket(s)"
+
+step_done 5 "Fix data inconsistencies"
 
 print_checklist
 
