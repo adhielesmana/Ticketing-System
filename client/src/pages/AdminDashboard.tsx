@@ -27,6 +27,7 @@ import {
   PhoneOff,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ActiveTicketMap } from "@/components/ActiveTicketMap";
 
 export default function AdminDashboard() {
   const { data: stats, isLoading: statsLoading } = useDashboardStats();
@@ -164,6 +165,8 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      <ActiveTicketMap tickets={recentTickets || []} isLoading={ticketsLoading} />
     </div>
   );
 }
