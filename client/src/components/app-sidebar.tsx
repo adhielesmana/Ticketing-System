@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { useSetting, useUploadFile, useUpdateSetting } from "@/hooks/use-tickets";
+import { useSetting, useUpdateSetting } from "@/hooks/use-tickets";
 import { Button } from "@/components/ui/button";
 import { useState, useRef } from "react";
 import {
@@ -44,8 +44,7 @@ export function AppSidebar() {
   const { user, logout } = useAuth();
   const [location] = useLocation();
   const { data: logoSetting } = useSetting("logo_url");
-  const { mutateAsync: uploadFile, isPending: isUploading } = useUploadFile();
-  const { mutate: updateSetting } = useUpdateSetting();
+  const { mutate: updateSetting, isPending: isUploading } = useUpdateSetting();
   const [logoDialogOpen, setLogoDialogOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -75,14 +74,29 @@ export function AppSidebar() {
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast({ title: "Error", description: "Logo file must be under 2MB", variant: "destructive" });
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
     try {
-      const result = await uploadFile(file);
-      updateSetting({ key: "logo_url", value: result.url }, {
-        onSuccess: () => {
-          toast({ title: "Success", description: "Logo updated" });
-          setLogoDialogOpen(false);
-        }
-      });
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        updateSetting({ key: "logo_url", value: dataUrl }, {
+          onSuccess: () => {
+            toast({ title: "Success", description: "Logo updated" });
+            setLogoDialogOpen(false);
+          },
+          onError: () => {
+            toast({ title: "Error", description: "Failed to save logo", variant: "destructive" });
+          }
+        });
+      };
+      reader.onerror = () => {
+        toast({ title: "Error", description: "Failed to read logo file", variant: "destructive" });
+      };
+      reader.readAsDataURL(file);
     } catch {
       toast({ title: "Error", description: "Failed to upload logo", variant: "destructive" });
     }
