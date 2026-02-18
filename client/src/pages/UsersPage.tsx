@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from "@/hooks/use-users";
 import { useAuth } from "@/hooks/use-auth";
 import { UserRole, UserRoleValues } from "@shared/schema";
 import { Redirect } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import {
   Table,
   TableBody,
@@ -44,7 +47,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { UserPlus, Pencil, Trash2, Users } from "lucide-react";
+import { UserPlus, Pencil, Trash2, Users, DollarSign, Save, Loader2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertUserSchema } from "@shared/schema";
@@ -60,12 +63,84 @@ const roleColors: Record<string, string> = {
 export default function UsersPage() {
   const { user } = useAuth();
   const { data: users, isLoading } = useUsers();
+  const { toast } = useToast();
   const [createOpen, setCreateOpen] = useState(false);
   const [editUser, setEditUser] = useState<any>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [feeUserId, setFeeUserId] = useState<number | null>(null);
+  const [feeUserName, setFeeUserName] = useState("");
   const { mutate: createUser, isPending: isCreating } = useCreateUser();
   const { mutate: updateUser, isPending: isUpdating } = useUpdateUser();
   const { mutate: deleteUser } = useDeleteUser();
+
+  const [feeValues, setFeeValues] = useState<Record<string, string>>({
+    ticket_fee_home_maintenance: "0",
+    transport_fee_home_maintenance: "0",
+    ticket_fee_backbone_maintenance: "0",
+    transport_fee_backbone_maintenance: "0",
+    ticket_fee_installation: "0",
+    transport_fee_installation: "0",
+  });
+
+  const { data: techFees, isLoading: isLoadingFees } = useQuery({
+    queryKey: ['/api/technician-fees', feeUserId],
+    enabled: !!feeUserId,
+  });
+
+  useEffect(() => {
+    if (techFees && Array.isArray(techFees) && feeUserId) {
+      const newValues: Record<string, string> = {
+        ticket_fee_home_maintenance: "0",
+        transport_fee_home_maintenance: "0",
+        ticket_fee_backbone_maintenance: "0",
+        transport_fee_backbone_maintenance: "0",
+        ticket_fee_installation: "0",
+        transport_fee_installation: "0",
+      };
+      for (const f of techFees as any[]) {
+        newValues[`ticket_fee_${f.ticketType}`] = f.ticketFee || "0";
+        newValues[`transport_fee_${f.ticketType}`] = f.transportFee || "0";
+      }
+      setFeeValues(newValues);
+    }
+  }, [techFees, feeUserId]);
+
+  const { mutate: saveFees, isPending: isSavingFees } = useMutation({
+    mutationFn: async (data: { technicianId: number; fees: any[] }) => {
+      const res = await apiRequest("PUT", `/api/technician-fees/${data.technicianId}`, { fees: data.fees });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Saved", description: `Fees updated for ${feeUserName}` });
+      queryClient.invalidateQueries({ queryKey: ['/api/technician-fees'] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    },
+  });
+
+  function openFees(u: any) {
+    setFeeUserId(u.id);
+    setFeeUserName(u.name);
+    setFeeValues({
+      ticket_fee_home_maintenance: "0",
+      transport_fee_home_maintenance: "0",
+      ticket_fee_backbone_maintenance: "0",
+      transport_fee_backbone_maintenance: "0",
+      ticket_fee_installation: "0",
+      transport_fee_installation: "0",
+    });
+  }
+
+  function handleSaveFees() {
+    if (!feeUserId) return;
+    const fees = [
+      { ticketType: "home_maintenance", ticketFee: feeValues.ticket_fee_home_maintenance, transportFee: feeValues.transport_fee_home_maintenance },
+      { ticketType: "backbone_maintenance", ticketFee: feeValues.ticket_fee_backbone_maintenance, transportFee: feeValues.transport_fee_backbone_maintenance },
+      { ticketType: "installation", ticketFee: feeValues.ticket_fee_installation, transportFee: feeValues.transport_fee_installation },
+    ];
+    saveFees({ technicianId: feeUserId, fees });
+  }
 
   if (user?.role !== UserRole.SUPERADMIN && user?.role !== UserRole.ADMIN) {
     return <Redirect to="/" />;
@@ -358,6 +433,16 @@ export default function UsersPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-0.5">
+                          {u.role === 'technician' && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => openFees(u)}
+                              data-testid={`button-fees-user-${u.id}`}
+                            >
+                              <DollarSign className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
                           <Button
                             size="icon"
                             variant="ghost"
@@ -488,6 +573,88 @@ export default function UsersPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={!!feeUserId} onOpenChange={(open) => { if (!open) setFeeUserId(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <DollarSign className="w-5 h-5" />
+              Bonus Fees - {feeUserName}
+            </DialogTitle>
+          </DialogHeader>
+          {isLoadingFees ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-xs text-muted-foreground">
+                Set individual ticket fee and transport fee for this technician. If left at 0, the global default from Settings will be used.
+              </p>
+              {[
+                { type: "home_maintenance", label: "Home Maintenance", color: "bg-blue-500" },
+                { type: "backbone_maintenance", label: "Backbone Maintenance", color: "bg-violet-500" },
+                { type: "installation", label: "New Installation", color: "bg-emerald-500" },
+              ].map((cfg) => {
+                const tfKey = `ticket_fee_${cfg.type}`;
+                const trKey = `transport_fee_${cfg.type}`;
+                const tf = parseFloat(feeValues[tfKey] || "0") || 0;
+                const tr = parseFloat(feeValues[trKey] || "0") || 0;
+                return (
+                  <div key={cfg.type} className="rounded-md border p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2.5 h-2.5 rounded-full ${cfg.color}`} />
+                      <span className="text-sm font-medium">{cfg.label}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Ticket Fee</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Rp</span>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="1000"
+                            value={feeValues[tfKey]}
+                            onChange={(e) => setFeeValues(prev => ({ ...prev, [tfKey]: e.target.value }))}
+                            className="pl-9"
+                            data-testid={`input-tech-ticket-fee-${cfg.type}`}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Transport Fee</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Rp</span>
+                          <Input
+                            type="number"
+                            min="0"
+                            step="1000"
+                            value={feeValues[trKey]}
+                            onChange={(e) => setFeeValues(prev => ({ ...prev, [trKey]: e.target.value }))}
+                            className="pl-9"
+                            data-testid={`input-tech-transport-fee-${cfg.type}`}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Total per ticket: <span className="font-semibold text-foreground">Rp {(tf + tr).toLocaleString("id-ID")}</span>
+                    </p>
+                  </div>
+                );
+              })}
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setFeeUserId(null)}>Cancel</Button>
+                <Button onClick={handleSaveFees} disabled={isSavingFees} className="gap-1.5" data-testid="button-save-fees">
+                  {isSavingFees ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save Fees
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

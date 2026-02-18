@@ -536,30 +536,42 @@ export async function registerRoutes(
 
     const now = new Date();
     const durationMinutes = Math.floor((now.getTime() - existingTicket.createdAt.getTime()) / 60000);
-
     const isWithinSLA = existingTicket.slaDeadline > now;
-    const ticketFee = isWithinSLA ? existingTicket.ticketFee : "0";
-    const transportFee = existingTicket.transportFee || "0";
-    const bonus = (parseFloat(ticketFee || "0") + parseFloat(transportFee || "0")).toFixed(2);
+
+    const globalTicketFeeSetting = await storage.getSetting(`ticket_fee_${existingTicket.type}`);
+    const globalTransportFeeSetting = await storage.getSetting(`transport_fee_${existingTicket.type}`);
+    const globalTicketFee = globalTicketFeeSetting?.value || "0";
+    const globalTransportFee = globalTransportFeeSetting?.value || "0";
+
     const ticket = await storage.updateTicket(ticketId, {
       status: TicketStatus.CLOSED,
       closedAt: now,
       durationMinutes,
       performStatus: isWithinSLA ? "perform" : "not_perform",
-      bonus,
-      ticketFee,
-      transportFee,
+      ticketFee: globalTicketFee,
+      transportFee: globalTransportFee,
+      bonus: (parseFloat(globalTicketFee) + parseFloat(globalTransportFee)).toFixed(2),
       ...input
     });
 
     const allAssignees = await storage.getAssigneesForTicket(ticketId);
     for (const assignee of allAssignees) {
+      const techFee = await storage.getTechnicianFeeForType(assignee.id, existingTicket.type);
+      const techTicketFee = techFee ? techFee.ticketFee : globalTicketFee;
+      const techTransportFee = techFee ? techFee.transportFee : globalTransportFee;
+      const finalTicketFee = isWithinSLA ? techTicketFee : "0";
+      const finalTransportFee = techTransportFee || "0";
+      const techBonus = (parseFloat(finalTicketFee || "0") + parseFloat(finalTransportFee || "0")).toFixed(2);
+
       await storage.logPerformance({
         userId: assignee.id,
         ticketId: ticket.id,
         result: ticket.performStatus as "perform" | "not_perform",
         completedWithinSLA: ticket.performStatus === "perform",
         durationMinutes,
+        ticketFee: finalTicketFee,
+        transportFee: finalTransportFee,
+        bonus: techBonus,
       });
     }
 
@@ -884,17 +896,19 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Admin access required" });
       }
 
-      const ticketFeeHome = (await storage.getSetting("ticket_fee_home_maintenance"))?.value || "0";
-      const transportFeeHome = (await storage.getSetting("transport_fee_home_maintenance"))?.value || "0";
-      const ticketFeeBackbone = (await storage.getSetting("ticket_fee_backbone_maintenance"))?.value || "0";
-      const transportFeeBackbone = (await storage.getSetting("transport_fee_backbone_maintenance"))?.value || "0";
-      const ticketFeeInstall = (await storage.getSetting("ticket_fee_installation"))?.value || "0";
-      const transportFeeInstall = (await storage.getSetting("transport_fee_installation"))?.value || "0";
-
-      const feeMap: Record<string, { ticketFee: string; transportFee: string }> = {
-        home_maintenance: { ticketFee: ticketFeeHome, transportFee: transportFeeHome },
-        backbone_maintenance: { ticketFee: ticketFeeBackbone, transportFee: transportFeeBackbone },
-        installation: { ticketFee: ticketFeeInstall, transportFee: transportFeeInstall },
+      const globalFeeMap: Record<string, { ticketFee: string; transportFee: string }> = {
+        home_maintenance: {
+          ticketFee: (await storage.getSetting("ticket_fee_home_maintenance"))?.value || "0",
+          transportFee: (await storage.getSetting("transport_fee_home_maintenance"))?.value || "0",
+        },
+        backbone_maintenance: {
+          ticketFee: (await storage.getSetting("ticket_fee_backbone_maintenance"))?.value || "0",
+          transportFee: (await storage.getSetting("transport_fee_backbone_maintenance"))?.value || "0",
+        },
+        installation: {
+          ticketFee: (await storage.getSetting("ticket_fee_installation"))?.value || "0",
+          transportFee: (await storage.getSetting("transport_fee_installation"))?.value || "0",
+        },
       };
 
       const closedTickets = await storage.getTicketsReport({ status: "closed" });
@@ -902,18 +916,15 @@ export async function registerRoutes(
       let perfUpdatedCount = 0;
 
       for (const ticket of closedTickets) {
-        const fees = feeMap[ticket.type];
-        if (!fees) continue;
+        const globalFees = globalFeeMap[ticket.type];
+        if (!globalFees) continue;
 
         const isWithinSLA = ticket.performStatus === "perform";
-        const ticketFee = isWithinSLA ? fees.ticketFee : "0";
-        const transportFee = fees.transportFee;
-        const bonus = (parseFloat(ticketFee) + parseFloat(transportFee)).toFixed(2);
 
         await storage.updateTicket(ticket.id, {
-          ticketFee,
-          transportFee,
-          bonus,
+          ticketFee: globalFees.ticketFee,
+          transportFee: globalFees.transportFee,
+          bonus: (parseFloat(globalFees.ticketFee) + parseFloat(globalFees.transportFee)).toFixed(2),
         });
         updatedCount++;
 
@@ -928,12 +939,22 @@ export async function registerRoutes(
           : 0;
 
         for (const assignee of assignees) {
+          const techFee = await storage.getTechnicianFeeForType(assignee.id, ticket.type);
+          const techTicketFee = techFee ? techFee.ticketFee : globalFees.ticketFee;
+          const techTransportFee = techFee ? techFee.transportFee : globalFees.transportFee;
+          const finalTicketFee = isWithinSLA ? techTicketFee : "0";
+          const finalTransportFee = techTransportFee || "0";
+          const techBonus = (parseFloat(finalTicketFee || "0") + parseFloat(finalTransportFee || "0")).toFixed(2);
+
           await storage.logPerformance({
             userId: assignee.id,
             ticketId: ticket.id,
             result: isWithinSLA ? "perform" : "not_perform",
             completedWithinSLA: isWithinSLA,
             durationMinutes,
+            ticketFee: finalTicketFee,
+            transportFee: finalTransportFee,
+            bonus: techBonus,
           });
           perfUpdatedCount++;
         }
@@ -989,6 +1010,57 @@ export async function registerRoutes(
     const { key, value } = req.body;
     const setting = await storage.setSetting(key, value);
     res.json(setting);
+  });
+
+  // === TECHNICIAN FEES (per-technician bonus config) ===
+  app.get("/api/technician-fees/:technicianId", async (req, res) => {
+    try {
+      const technicianId = Number(req.params.technicianId);
+      const fees = await storage.getTechnicianFees(technicianId);
+      res.json(fees);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to get technician fees" });
+    }
+  });
+
+  app.get("/api/technician-fees", async (req, res) => {
+    try {
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const fees = await storage.getAllTechnicianFees();
+      res.json(fees);
+    } catch (err) {
+      res.status(500).json({ message: "Failed to get all technician fees" });
+    }
+  });
+
+  app.put("/api/technician-fees/:technicianId", async (req, res) => {
+    try {
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const user = await storage.getUser(userId);
+      if (!user || (user.role !== UserRole.SUPERADMIN && user.role !== UserRole.ADMIN)) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+      const technicianId = Number(req.params.technicianId);
+      const { fees } = req.body;
+      if (!Array.isArray(fees)) return res.status(400).json({ message: "fees array required" });
+
+      const results = [];
+      for (const f of fees) {
+        const result = await storage.setTechnicianFee(
+          technicianId,
+          f.ticketType,
+          String(f.ticketFee || "0"),
+          String(f.transportFee || "0")
+        );
+        results.push(result);
+      }
+      res.json(results);
+    } catch (err) {
+      console.error("Set technician fees error:", err);
+      res.status(500).json({ message: "Failed to set technician fees" });
+    }
   });
 
   // === EXPORT DATABASE ===

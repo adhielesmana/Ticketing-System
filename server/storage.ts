@@ -1,11 +1,12 @@
 import { db } from "./db";
 import { 
-  users, tickets, ticketAssignments, performanceLogs, settings,
+  users, tickets, ticketAssignments, performanceLogs, settings, technicianFees,
   type User, type InsertUser, 
   type Ticket, type InsertTicket,
   type TicketAssignment, type InsertAssignment,
   type PerformanceLog, type InsertPerformanceLog,
   type Setting, type InsertSetting,
+  type TechnicianFee, type InsertTechnicianFee,
   type TechnicianPerformance,
   TicketStatus
 } from "@shared/schema";
@@ -48,6 +49,11 @@ export interface IStorage {
   logPerformance(log: InsertPerformanceLog): Promise<PerformanceLog>;
   deletePerformanceLogsForTicket(ticketId: number): Promise<void>;
   getTechnicianPerformance(userId: number): Promise<TechnicianPerformance>;
+
+  getTechnicianFees(technicianId: number): Promise<TechnicianFee[]>;
+  setTechnicianFee(technicianId: number, ticketType: string, ticketFee: string, transportFee: string): Promise<TechnicianFee>;
+  getTechnicianFeeForType(technicianId: number, ticketType: string): Promise<TechnicianFee | undefined>;
+  getAllTechnicianFees(): Promise<TechnicianFee[]>;
 
   getSetting(key: string): Promise<Setting | undefined>;
   setSetting(key: string, value: string | null): Promise<Setting>;
@@ -512,6 +518,35 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
+  async getTechnicianFees(technicianId: number): Promise<TechnicianFee[]> {
+    return await db.select().from(technicianFees).where(eq(technicianFees.technicianId, technicianId));
+  }
+
+  async getTechnicianFeeForType(technicianId: number, ticketType: string): Promise<TechnicianFee | undefined> {
+    const [fee] = await db.select().from(technicianFees)
+      .where(and(eq(technicianFees.technicianId, technicianId), eq(technicianFees.ticketType, ticketType)));
+    return fee;
+  }
+
+  async setTechnicianFee(technicianId: number, ticketType: string, ticketFee: string, transportFee: string): Promise<TechnicianFee> {
+    const existing = await this.getTechnicianFeeForType(technicianId, ticketType);
+    if (existing) {
+      const [updated] = await db.update(technicianFees)
+        .set({ ticketFee, transportFee })
+        .where(eq(technicianFees.id, existing.id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(technicianFees)
+      .values({ technicianId, ticketType, ticketFee, transportFee })
+      .returning();
+    return created;
+  }
+
+  async getAllTechnicianFees(): Promise<TechnicianFee[]> {
+    return await db.select().from(technicianFees);
+  }
+
   async getSetting(key: string): Promise<Setting | undefined> {
     const [setting] = await db.select().from(settings).where(eq(settings.key, key));
     return setting;
@@ -602,10 +637,16 @@ export class DatabaseStorage implements IStorage {
     for (const ticket of closedTickets) {
       const assignees = await this.getAssigneesForTicket(ticket.id);
       const assigneeList = assignees.map(a => ({ id: a.id, name: a.name }));
+
+      const perfLogs = await db.select().from(performanceLogs)
+        .where(eq(performanceLogs.ticketId, ticket.id));
+
       for (const tech of assigneeList) {
-        const tf = parseFloat(ticket.ticketFee || "0");
-        const trp = parseFloat(ticket.transportFee || "0");
-        const calculatedBonus = (tf + trp).toFixed(2);
+        const perfLog = perfLogs.find(p => p.userId === tech.id);
+        const tf = perfLog?.ticketFee ? parseFloat(perfLog.ticketFee) : parseFloat(ticket.ticketFee || "0");
+        const trp = perfLog?.transportFee ? parseFloat(perfLog.transportFee) : parseFloat(ticket.transportFee || "0");
+        const calculatedBonus = perfLog?.bonus ? perfLog.bonus : (tf + trp).toFixed(2);
+        
         result.push({
           ticketId: ticket.id,
           ticketNumber: ticket.ticketNumber,
@@ -617,11 +658,11 @@ export class DatabaseStorage implements IStorage {
           closedAt: ticket.closedAt,
           technicianId: tech.id,
           technicianName: tech.name,
-          ticketFee: ticket.ticketFee || "0",
-          transportFee: ticket.transportFee || "0",
+          ticketFee: perfLog?.ticketFee || ticket.ticketFee || "0",
+          transportFee: perfLog?.transportFee || ticket.transportFee || "0",
           bonus: calculatedBonus,
           assigneeCount: assigneeList.length,
-          totalTicketCost: (parseFloat(calculatedBonus) * assigneeList.length).toFixed(2),
+          totalTicketCost: "0",
         });
       }
     }
@@ -678,6 +719,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTechnicianBonusTotal(userId: number): Promise<{ totalBonus: number; ticketCount: number; totalTicketFee: number; totalTransportFee: number }> {
+    const [perfResult] = await db.select({
+      totalTicketFee: sql<number>`coalesce(sum(${performanceLogs.ticketFee}::numeric), 0)`,
+      totalTransportFee: sql<number>`coalesce(sum(${performanceLogs.transportFee}::numeric), 0)`,
+      totalBonus: sql<number>`coalesce(sum(${performanceLogs.bonus}::numeric), 0)`,
+      ticketCount: sql<number>`count(*)`,
+    }).from(performanceLogs)
+      .where(eq(performanceLogs.userId, userId));
+
+    const hasPerfData = Number(perfResult.totalBonus) > 0;
+
+    if (hasPerfData) {
+      return {
+        totalBonus: Number(perfResult.totalBonus) || 0,
+        ticketCount: Number(perfResult.ticketCount) || 0,
+        totalTicketFee: Number(perfResult.totalTicketFee) || 0,
+        totalTransportFee: Number(perfResult.totalTransportFee) || 0,
+      };
+    }
+
     const [result] = await db.select({
       totalTicketFee: sql<number>`coalesce(sum(${tickets.ticketFee}::numeric), 0)`,
       totalTransportFee: sql<number>`coalesce(sum(${tickets.transportFee}::numeric), 0)`,

@@ -234,10 +234,10 @@ export default function SettingsPage() {
       <div className="space-y-4">
         <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
           <DollarSign className="w-4 h-4" />
-          Technician Bonus per Ticket
+          Default Bonus Fees
         </div>
         <p className="text-sm text-muted-foreground">
-          Set the bonus breakdown for each ticket type. Each assigned technician receives the full bonus (ticket fee + transport fee). For a 2-person team, the total ticket cost is double. Overdue tickets automatically get zero bonus.
+          Set the default bonus breakdown per ticket type. These are used as fallback when a technician does not have individual fees configured. To set individual fees per technician, go to Users and click the dollar icon on each technician.
         </p>
 
         {bonusConfigs.map((config) => {

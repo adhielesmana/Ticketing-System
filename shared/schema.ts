@@ -111,6 +111,9 @@ export const performanceLogs = pgTable("performance_logs", {
   result: text("result").notNull(),
   completedWithinSLA: boolean("completed_within_sla").notNull(),
   durationMinutes: integer("duration_minutes").notNull(),
+  ticketFee: numeric("ticket_fee", { precision: 12, scale: 2 }).default("0"),
+  transportFee: numeric("transport_fee", { precision: 12, scale: 2 }).default("0"),
+  bonus: numeric("bonus", { precision: 12, scale: 2 }).default("0"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -145,6 +148,18 @@ export const insertPerformanceLogSchema = createInsertSchema(performanceLogs).om
   createdAt: true
 });
 
+export const technicianFees = pgTable("technician_fees", {
+  id: serial("id").primaryKey(),
+  technicianId: integer("technician_id").notNull(),
+  ticketType: text("ticket_type").notNull(),
+  ticketFee: numeric("ticket_fee", { precision: 12, scale: 2 }).default("0").notNull(),
+  transportFee: numeric("transport_fee", { precision: 12, scale: 2 }).default("0").notNull(),
+});
+
+export const insertTechnicianFeeSchema = createInsertSchema(technicianFees).omit({
+  id: true,
+});
+
 export const insertSettingsSchema = createInsertSchema(settings).omit({
   id: true,
   updatedAt: true
@@ -161,6 +176,9 @@ export type InsertAssignment = z.infer<typeof insertAssignmentSchema>;
 
 export type PerformanceLog = typeof performanceLogs.$inferSelect;
 export type InsertPerformanceLog = z.infer<typeof insertPerformanceLogSchema>;
+
+export type TechnicianFee = typeof technicianFees.$inferSelect;
+export type InsertTechnicianFee = z.infer<typeof insertTechnicianFeeSchema>;
 
 export type Setting = typeof settings.$inferSelect;
 export type InsertSetting = z.infer<typeof insertSettingsSchema>;
