@@ -40,11 +40,13 @@ function extractCoordsFromUrl(url: string): { lat: number; lng: number } | null 
 
 async function resolveShortUrl(url: string): Promise<string> {
   try {
-    const res = await fetch(url, { method: "HEAD", redirect: "follow" });
+    const res = await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(8000) });
+    const location = res.headers.get("location");
+    if (location) return location;
     return res.url || url;
   } catch {
     try {
-      const res = await fetch(url, { redirect: "follow" });
+      const res = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(8000) });
       return res.url || url;
     } catch {
       return url;

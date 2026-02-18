@@ -1,9 +1,25 @@
-import { useEffect, useRef, useMemo } from "react";
+import { useEffect, useRef, useMemo, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import "leaflet.heat";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MapPin } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+
+declare module "leaflet" {
+  function heatLayer(
+    latlngs: Array<[number, number, number?]>,
+    options?: {
+      minOpacity?: number;
+      maxZoom?: number;
+      max?: number;
+      radius?: number;
+      blur?: number;
+      gradient?: Record<number, string>;
+    }
+  ): L.Layer;
+}
 
 function extractCoordinates(url: string): { lat: number; lng: number } | null {
   if (!url) return null;
@@ -27,19 +43,6 @@ function extractCoordinates(url: string): { lat: number; lng: number } | null {
   return null;
 }
 
-const typeColorMap: Record<string, { fill: string; stroke: string }> = {
-  installation: { fill: "rgba(59, 130, 246, 0.25)", stroke: "#3b82f6" },
-  home_maintenance: { fill: "rgba(245, 158, 11, 0.25)", stroke: "#f59e0b" },
-  backbone_maintenance: { fill: "rgba(239, 68, 68, 0.25)", stroke: "#ef4444" },
-};
-
-const priorityRadius: Record<string, number> = {
-  critical: 600,
-  high: 450,
-  medium: 350,
-  low: 250,
-};
-
 interface TicketPoint {
   id: number;
   ticketIdCustom?: string;
@@ -58,16 +61,31 @@ interface ActiveTicketMapProps {
   isLoading: boolean;
 }
 
+type ViewMode = "heatmap" | "markers";
+
+const priorityIntensity: Record<string, number> = {
+  critical: 1.0,
+  high: 0.8,
+  medium: 0.6,
+  low: 0.4,
+};
+
+const typeColorMap: Record<string, { fill: string; stroke: string }> = {
+  installation: { fill: "rgba(59, 130, 246, 0.25)", stroke: "#3b82f6" },
+  home_maintenance: { fill: "rgba(245, 158, 11, 0.25)", stroke: "#f59e0b" },
+  backbone_maintenance: { fill: "rgba(239, 68, 68, 0.25)", stroke: "#ef4444" },
+};
+
 export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<L.Map | null>(null);
-  const layerGroup = useRef<L.LayerGroup | null>(null);
+  const heatLayerRef = useRef<L.Layer | null>(null);
+  const markerLayerRef = useRef<L.LayerGroup | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("heatmap");
 
   const points: TicketPoint[] = useMemo(() => {
     if (!tickets) return [];
-    const excludeStatuses = ["closed", "rejected"];
     return tickets
-      .filter((t: any) => !excludeStatuses.includes(t.status))
       .map((t: any) => {
         let lat: number | null = null;
         let lng: number | null = null;
@@ -108,14 +126,15 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
       center: defaultCenter,
       zoom: 12,
       zoomControl: true,
-      attributionControl: false,
+      attributionControl: true,
     });
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 18,
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>',
     }).addTo(map);
 
-    layerGroup.current = L.layerGroup().addTo(map);
+    markerLayerRef.current = L.layerGroup().addTo(map);
     mapInstance.current = map;
 
     return () => {
@@ -125,53 +144,76 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
   }, []);
 
   useEffect(() => {
-    if (!mapInstance.current || !layerGroup.current) return;
+    if (!mapInstance.current) return;
+    const map = mapInstance.current;
 
-    layerGroup.current.clearLayers();
+    if (heatLayerRef.current) {
+      map.removeLayer(heatLayerRef.current);
+      heatLayerRef.current = null;
+    }
+    if (markerLayerRef.current) {
+      markerLayerRef.current.clearLayers();
+    }
 
     if (points.length === 0) return;
 
-    points.forEach((pt) => {
-      const colors = typeColorMap[pt.type] || typeColorMap.installation;
-      const radius = priorityRadius[pt.priority] || 350;
+    if (viewMode === "heatmap") {
+      const heatData: Array<[number, number, number]> = points.map((pt) => {
+        const intensity = priorityIntensity[pt.priority] || 0.5;
+        return [pt.lat, pt.lng, intensity];
+      });
 
-      L.circle([pt.lat, pt.lng], {
-        radius: radius,
-        fillColor: colors.fill,
-        fillOpacity: 0.4,
-        color: colors.stroke,
-        weight: 1.5,
-        opacity: 0.6,
-      }).addTo(layerGroup.current!);
+      const heat = L.heatLayer(heatData, {
+        radius: 30,
+        blur: 20,
+        maxZoom: 17,
+        minOpacity: 0.3,
+        max: 1.0,
+        gradient: {
+          0.0: "#0000ff",
+          0.2: "#00bfff",
+          0.4: "#00ff80",
+          0.6: "#ffff00",
+          0.8: "#ff8000",
+          1.0: "#ff0000",
+        },
+      });
 
-      const marker = L.circleMarker([pt.lat, pt.lng], {
-        radius: 6,
-        fillColor: colors.stroke,
-        fillOpacity: 1,
-        color: "#fff",
-        weight: 2,
-      }).addTo(layerGroup.current!);
+      heat.addTo(map);
+      heatLayerRef.current = heat;
+    } else {
+      points.forEach((pt) => {
+        const colors = typeColorMap[pt.type] || typeColorMap.installation;
 
-      const typeLabel = pt.type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-      const statusLabel = pt.status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+        const marker = L.circleMarker([pt.lat, pt.lng], {
+          radius: 7,
+          fillColor: colors.stroke,
+          fillOpacity: 0.9,
+          color: "#fff",
+          weight: 2,
+        }).addTo(markerLayerRef.current!);
 
-      marker.bindPopup(
-        `<div style="font-size:13px;line-height:1.5;min-width:160px">
-          <div style="font-weight:600;margin-bottom:4px">#${pt.ticketIdCustom || pt.ticketNumber || pt.id}</div>
-          <div>${pt.title}</div>
-          <div style="color:#666;font-size:11px;margin-top:2px">${pt.customerName}</div>
-          <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
-            <span style="background:${colors.stroke};color:#fff;padding:1px 8px;border-radius:10px;font-size:11px">${statusLabel}</span>
-            <span style="background:#f3f4f6;color:#374151;padding:1px 8px;border-radius:10px;font-size:11px">${typeLabel}</span>
-          </div>
-        </div>`,
-        { closeButton: false }
-      );
-    });
+        const typeLabel = pt.type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+        const statusLabel = pt.status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+        marker.bindPopup(
+          `<div style="font-size:13px;line-height:1.5;min-width:160px">
+            <div style="font-weight:600;margin-bottom:4px">#${pt.ticketIdCustom || pt.ticketNumber || pt.id}</div>
+            <div>${pt.title}</div>
+            <div style="color:#666;font-size:11px;margin-top:2px">${pt.customerName}</div>
+            <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
+              <span style="background:${colors.stroke};color:#fff;padding:1px 8px;border-radius:10px;font-size:11px">${statusLabel}</span>
+              <span style="background:#f3f4f6;color:#374151;padding:1px 8px;border-radius:10px;font-size:11px">${typeLabel}</span>
+            </div>
+          </div>`,
+          { closeButton: false }
+        );
+      });
+    }
 
     const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng]));
-    mapInstance.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
-  }, [points]);
+    map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+  }, [points, viewMode]);
 
   if (isLoading) {
     return (
@@ -179,7 +221,7 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
             <MapPin className="w-4 h-4" />
-            Active Problems Map
+            Problems Heatmap
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -195,14 +237,36 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <CardTitle className="text-base flex items-center gap-2">
             <MapPin className="w-4 h-4" />
-            Active Problems Map
+            Problems Heatmap
           </CardTitle>
           <div className="flex items-center gap-3 flex-wrap">
-            <Legend color="#3b82f6" label="New Installation" />
-            <Legend color="#f59e0b" label="Home Maintenance" />
-            <Legend color="#ef4444" label="Backbone Maintenance" />
-            <span className="text-xs text-muted-foreground">
-              {points.length} active
+            <div className="flex items-center gap-1" data-testid="map-view-toggle">
+              <Button
+                size="sm"
+                variant={viewMode === "heatmap" ? "default" : "outline"}
+                onClick={() => setViewMode("heatmap")}
+                data-testid="button-heatmap-view"
+              >
+                Heatmap
+              </Button>
+              <Button
+                size="sm"
+                variant={viewMode === "markers" ? "default" : "outline"}
+                onClick={() => setViewMode("markers")}
+                data-testid="button-markers-view"
+              >
+                Markers
+              </Button>
+            </div>
+            {viewMode === "markers" && (
+              <div className="flex items-center gap-3 flex-wrap">
+                <Legend color="#3b82f6" label="Installation" />
+                <Legend color="#f59e0b" label="Home Maint." />
+                <Legend color="#ef4444" label="Backbone" />
+              </div>
+            )}
+            <span className="text-xs text-muted-foreground" data-testid="text-ticket-count">
+              {points.length} / {tickets?.length || 0} mapped
             </span>
           </div>
         </div>
@@ -210,7 +274,7 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
       <CardContent>
         {points.length === 0 ? (
           <div className="h-[400px] flex items-center justify-center text-muted-foreground text-sm rounded-md border border-dashed">
-            No active tickets with location data
+            No tickets with location data
           </div>
         ) : (
           <div
