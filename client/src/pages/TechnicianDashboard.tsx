@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useTickets, useTechnicianPerformance, useAutoAssignTicket, useFreeTechnicians, useTechnicianBonusTotal } from "@/hooks/use-tickets";
 import { TicketCard } from "@/components/TicketCard";
@@ -16,6 +16,8 @@ import {
   Loader2,
   Users,
   UserPlus,
+  Radar,
+  Wifi,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -36,10 +38,209 @@ import {
 import { UserRole } from "@shared/schema";
 import { Redirect } from "wouter";
 
+const SCAN_MESSAGES = [
+  "Scanning nearby area...",
+  "Checking SLA priorities...",
+  "Calculating distances...",
+  "Analyzing workload balance...",
+  "Matching ticket type...",
+  "Evaluating proximity...",
+  "Finding optimal route...",
+  "Locking best match...",
+];
+
+function TicketScanOverlay({ onFound, onError }: { onFound: () => void; onError: (msg: string) => void }) {
+  const [messageIndex, setMessageIndex] = useState(0);
+  const [dots, setDots] = useState<Array<{ id: number; x: number; y: number; delay: number; size: number }>>([]);
+  const [phase, setPhase] = useState<"scanning" | "found" | "error">("scanning");
+  const [errorMsg, setErrorMsg] = useState("");
+
+  useEffect(() => {
+    const generated = Array.from({ length: 12 }, (_, i) => ({
+      id: i,
+      x: 20 + Math.random() * 60,
+      y: 20 + Math.random() * 60,
+      delay: Math.random() * 2,
+      size: 4 + Math.random() * 6,
+    }));
+    setDots(generated);
+  }, []);
+
+  useEffect(() => {
+    if (phase !== "scanning") return;
+    const interval = setInterval(() => {
+      setMessageIndex(prev => (prev + 1) % SCAN_MESSAGES.length);
+    }, 1200);
+    return () => clearInterval(interval);
+  }, [phase]);
+
+  const triggerFound = useCallback(() => {
+    setPhase("found");
+    setTimeout(onFound, 1200);
+  }, [onFound]);
+
+  const triggerError = useCallback((msg: string) => {
+    setPhase("error");
+    setErrorMsg(msg);
+    setTimeout(() => onError(msg), 2000);
+  }, [onError]);
+
+  useEffect(() => {
+    (window as any).__scanOverlayFound = triggerFound;
+    (window as any).__scanOverlayError = triggerError;
+    return () => {
+      delete (window as any).__scanOverlayFound;
+      delete (window as any).__scanOverlayError;
+    };
+  }, [triggerFound, triggerError]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm">
+      <div className="relative w-64 h-64 mb-8">
+        <div className="absolute inset-0 rounded-full border border-primary/20" />
+        <div className="absolute inset-8 rounded-full border border-primary/15" />
+        <div className="absolute inset-16 rounded-full border border-primary/10" />
+
+        {phase === "scanning" && (
+          <div
+            className="absolute inset-0 rounded-full"
+            style={{
+              background: "conic-gradient(from 0deg, transparent 0deg, hsl(var(--primary) / 0.3) 40deg, transparent 80deg)",
+              animation: "spin 2s linear infinite",
+            }}
+          />
+        )}
+
+        {phase === "found" && (
+          <div
+            className="absolute inset-0 rounded-full"
+            style={{
+              background: "radial-gradient(circle, hsl(142 76% 36% / 0.3) 0%, transparent 70%)",
+              animation: "pulse 0.6s ease-in-out infinite",
+            }}
+          />
+        )}
+
+        {phase === "error" && (
+          <div
+            className="absolute inset-0 rounded-full"
+            style={{
+              background: "radial-gradient(circle, hsl(0 84% 60% / 0.2) 0%, transparent 70%)",
+              animation: "pulse 0.8s ease-in-out infinite",
+            }}
+          />
+        )}
+
+        {dots.map(dot => (
+          <div
+            key={dot.id}
+            className="absolute rounded-full"
+            style={{
+              left: `${dot.x}%`,
+              top: `${dot.y}%`,
+              width: dot.size,
+              height: dot.size,
+              backgroundColor:
+                phase === "found"
+                  ? "hsl(142 76% 36% / 0.8)"
+                  : phase === "error"
+                    ? "hsl(0 84% 60% / 0.5)"
+                    : "hsl(var(--primary) / 0.6)",
+              animation: phase === "scanning"
+                ? `ticketDotPulse 2s ease-in-out ${dot.delay}s infinite`
+                : phase === "found"
+                  ? "ticketDotFound 0.5s ease-out forwards"
+                  : "ticketDotFade 0.5s ease-out forwards",
+              transition: "background-color 0.5s ease",
+            }}
+          />
+        ))}
+
+        <div className="absolute inset-0 flex items-center justify-center">
+          {phase === "scanning" && (
+            <div className="relative">
+              <Radar className="w-10 h-10 text-primary" style={{ animation: "pulse 1.5s ease-in-out infinite" }} />
+              <Wifi
+                className="w-5 h-5 text-primary/60 absolute -top-2 -right-2"
+                style={{ animation: "ticketDotPulse 1s ease-in-out infinite" }}
+              />
+            </div>
+          )}
+          {phase === "found" && (
+            <CheckCircle2
+              className="w-12 h-12 text-emerald-500"
+              style={{ animation: "ticketFoundPop 0.4s ease-out" }}
+            />
+          )}
+          {phase === "error" && (
+            <AlertTriangle
+              className="w-12 h-12 text-red-500"
+              style={{ animation: "ticketFoundPop 0.4s ease-out" }}
+            />
+          )}
+        </div>
+      </div>
+
+      <div className="text-center space-y-2">
+        {phase === "scanning" && (
+          <>
+            <p className="text-lg font-semibold text-foreground" style={{ animation: "fadeInUp 0.3s ease-out" }}>
+              {SCAN_MESSAGES[messageIndex]}
+            </p>
+            <p className="text-sm text-muted-foreground">Looking for the best ticket nearby</p>
+          </>
+        )}
+        {phase === "found" && (
+          <>
+            <p className="text-lg font-semibold text-emerald-600 dark:text-emerald-400" style={{ animation: "fadeInUp 0.3s ease-out" }}>
+              Ticket Found!
+            </p>
+            <p className="text-sm text-muted-foreground">Assigning to you now...</p>
+          </>
+        )}
+        {phase === "error" && (
+          <>
+            <p className="text-lg font-semibold text-red-600 dark:text-red-400" style={{ animation: "fadeInUp 0.3s ease-out" }}>
+              No Tickets Available
+            </p>
+            <p className="text-sm text-muted-foreground max-w-xs">{errorMsg || "No matching tickets found right now"}</p>
+          </>
+        )}
+      </div>
+
+      <style>{`
+        @keyframes ticketDotPulse {
+          0%, 100% { opacity: 0.3; transform: scale(0.8); }
+          50% { opacity: 1; transform: scale(1.3); }
+        }
+        @keyframes ticketDotFound {
+          0% { opacity: 0.6; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.8); }
+          100% { opacity: 0; transform: scale(0.5); }
+        }
+        @keyframes ticketDotFade {
+          0% { opacity: 0.6; }
+          100% { opacity: 0.1; }
+        }
+        @keyframes ticketFoundPop {
+          0% { transform: scale(0); opacity: 0; }
+          60% { transform: scale(1.2); opacity: 1; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes fadeInUp {
+          0% { opacity: 0; transform: translateY(8px); }
+          100% { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 export default function TechnicianDashboard() {
   const { user } = useAuth();
   const [showPartnerDialog, setShowPartnerDialog] = useState(false);
   const [selectedPartnerId, setSelectedPartnerId] = useState<string>("");
+  const [showScanOverlay, setShowScanOverlay] = useState(false);
 
   if (user && user.role !== UserRole.TECHNICIAN) {
     return <Redirect to="/dashboard/admin" />;
@@ -70,16 +271,48 @@ export default function TechnicianDashboard() {
 
   const handleConfirmGetTicket = () => {
     if (!selectedPartnerId) return;
+    setShowPartnerDialog(false);
+    setShowScanOverlay(true);
+
+    const minScanTime = 2500;
+    const startTime = Date.now();
+
     autoAssign(Number(selectedPartnerId), {
       onSuccess: () => {
-        setShowPartnerDialog(false);
-        setSelectedPartnerId("");
+        const elapsed = Date.now() - startTime;
+        const remaining = Math.max(0, minScanTime - elapsed);
+        setTimeout(() => {
+          if ((window as any).__scanOverlayFound) {
+            (window as any).__scanOverlayFound();
+          }
+        }, remaining);
+      },
+      onError: (error: any) => {
+        const elapsed = Date.now() - startTime;
+        const remaining = Math.max(0, minScanTime - elapsed);
+        setTimeout(() => {
+          if ((window as any).__scanOverlayError) {
+            (window as any).__scanOverlayError(error?.message || "Could not find a matching ticket");
+          }
+        }, remaining);
       },
     });
   };
 
+  const handleScanComplete = () => {
+    setShowScanOverlay(false);
+    setSelectedPartnerId("");
+  };
+
   return (
     <div className="container mx-auto max-w-lg pb-20">
+      {showScanOverlay && (
+        <TicketScanOverlay
+          onFound={handleScanComplete}
+          onError={handleScanComplete}
+        />
+      )}
+
       <div className="bg-primary px-5 pt-6 pb-10 rounded-b-[2rem] mb-5 text-primary-foreground">
         <h1 className="text-xl font-bold font-display" data-testid="text-tech-greeting">
           Hello, {user?.name.split(' ')[0]}
@@ -108,12 +341,12 @@ export default function TechnicianDashboard() {
 
         <Button
           onClick={handleGetTicketClick}
-          disabled={isAutoAssigning || hasActiveTicket}
+          disabled={isAutoAssigning || hasActiveTicket || showScanOverlay}
           className="w-full mt-4 bg-white/20 border border-white/20 text-primary-foreground gap-2"
           data-testid="button-get-ticket"
         >
-          {isAutoAssigning ? (
-            <><Loader2 className="w-4 h-4 animate-spin" /> Assigning...</>
+          {isAutoAssigning || showScanOverlay ? (
+            <><Loader2 className="w-4 h-4 animate-spin" /> Scanning...</>
           ) : hasActiveTicket ? (
             <>Complete current ticket first</>
           ) : (
@@ -245,11 +478,7 @@ export default function TechnicianDashboard() {
               className="gap-2"
               data-testid="button-confirm-get-ticket"
             >
-              {isAutoAssigning ? (
-                <><Loader2 className="w-4 h-4 animate-spin" /> Assigning...</>
-              ) : (
-                <><Zap className="w-4 h-4" /> Get Ticket</>
-              )}
+              <Zap className="w-4 h-4" /> Get Ticket
             </Button>
           </DialogFooter>
         </DialogContent>
