@@ -281,6 +281,8 @@ export async function registerRoutes(
         bonus,
         ticketFee,
         transportFee,
+        latitude: coords ? String(coords.lat) : null,
+        longitude: coords ? String(coords.lng) : null,
       });
 
       res.status(201).json(ticket);
@@ -925,6 +927,49 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Backfill areas error:", err);
       res.status(500).json({ message: "Failed to backfill areas" });
+    }
+  });
+
+  // === BACKFILL COORDINATES (resolve short URLs and store lat/lng) ===
+  app.post("/api/tickets/backfill-coordinates", async (req, res) => {
+    try {
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const user = await storage.getUser(userId);
+      if (!user || !["superadmin", "admin"].includes(user.role)) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const allTickets = await storage.getAllTickets({});
+      const ticketsWithoutCoords = allTickets.filter((t: any) => (!t.latitude || !t.longitude) && t.customerLocationUrl);
+      if (ticketsWithoutCoords.length === 0) {
+        return res.json({ message: "All tickets already have coordinates", processed: 0, total: 0 });
+      }
+
+      let processed = 0;
+      let failed = 0;
+      for (const ticket of ticketsWithoutCoords) {
+        try {
+          const coords = await extractCoordsWithResolve(ticket.customerLocationUrl);
+          if (coords) {
+            await storage.updateTicket(ticket.id, {
+              latitude: String(coords.lat),
+              longitude: String(coords.lng),
+            });
+            processed++;
+          } else {
+            failed++;
+          }
+        } catch {
+          failed++;
+        }
+        await new Promise(r => setTimeout(r, 300));
+      }
+
+      res.json({ message: "Coordinate backfill complete", processed, failed, total: ticketsWithoutCoords.length });
+    } catch (err) {
+      console.error("Backfill coordinates error:", err);
+      res.status(500).json({ message: "Failed to backfill coordinates" });
     }
   });
 

@@ -69,8 +69,20 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
     return tickets
       .filter((t: any) => !excludeStatuses.includes(t.status))
       .map((t: any) => {
-        const coords = extractCoordinates(t.customerLocationUrl || "");
-        if (!coords) return null;
+        let lat: number | null = null;
+        let lng: number | null = null;
+        if (t.latitude && t.longitude) {
+          lat = parseFloat(t.latitude);
+          lng = parseFloat(t.longitude);
+        }
+        if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) {
+          const coords = extractCoordinates(t.customerLocationUrl || "");
+          if (coords) {
+            lat = coords.lat;
+            lng = coords.lng;
+          }
+        }
+        if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) return null;
         return {
           id: t.id,
           ticketIdCustom: t.ticketIdCustom,
@@ -80,8 +92,8 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
           priority: t.priority,
           type: t.type,
           customerName: t.customerName,
-          lat: coords.lat,
-          lng: coords.lng,
+          lat,
+          lng,
         };
       })
       .filter(Boolean) as TicketPoint[];
