@@ -1091,7 +1091,7 @@ export async function registerRoutes(
     }
   });
 
-  // === EXPORT DATABASE ===
+  // === EXPORT DATABASE (gzip compressed) ===
   app.get("/api/export-database", async (req, res) => {
     try {
       const userId = (req as any).session.userId;
@@ -1126,16 +1126,21 @@ export async function registerRoutes(
         settings: allSettings,
       };
 
-      res.setHeader("Content-Type", "application/json");
-      res.setHeader("Content-Disposition", `attachment; filename=netguard-export-${new Date().toISOString().split('T')[0]}.json`);
-      res.json(exportData);
+      const { gzipSync } = await import("zlib");
+      const jsonStr = JSON.stringify(exportData);
+      const compressed = gzipSync(Buffer.from(jsonStr), { level: 9 });
+
+      res.setHeader("Content-Type", "application/gzip");
+      res.setHeader("Content-Disposition", `attachment; filename=netguard-export-${new Date().toISOString().split('T')[0]}.json.gz`);
+      res.setHeader("Content-Length", compressed.length);
+      res.send(compressed);
     } catch (err) {
       console.error("Export error:", err);
       res.status(500).json({ message: "Failed to export database" });
     }
   });
 
-  // === IMPORT DATABASE ===
+  // === IMPORT DATABASE (supports gzip compressed + plain JSON) ===
   app.post("/api/import-database", async (req, res) => {
     try {
       const userId = (req as any).session.userId;
@@ -1145,7 +1150,19 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Admin access required" });
       }
 
-      const importData = req.body;
+      let importData: any;
+      const rawBody = (req as any).rawBody || (Buffer.isBuffer(req.body) ? req.body : null);
+
+      if (rawBody && rawBody.length >= 2 && rawBody[0] === 0x1f && rawBody[1] === 0x8b) {
+        const { gunzipSync } = await import("zlib");
+        const decompressed = gunzipSync(rawBody);
+        importData = JSON.parse(decompressed.toString("utf-8"));
+      } else if (Buffer.isBuffer(req.body)) {
+        importData = JSON.parse(req.body.toString("utf-8"));
+      } else {
+        importData = req.body;
+      }
+
       if (!importData || !importData.version) {
         return res.status(400).json({ message: "Invalid import data format" });
       }

@@ -39,6 +39,7 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false, limit: '50mb' }));
+app.use(express.raw({ type: 'application/octet-stream', limit: '50mb', verify: (req, _res, buf) => { (req as any).rawBody = buf; } }));
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

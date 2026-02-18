@@ -173,10 +173,10 @@ export default function SettingsPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `netguard-export-${new Date().toISOString().split('T')[0]}.json`;
+      a.download = `netguard-export-${new Date().toISOString().split('T')[0]}.json.gz`;
       a.click();
       URL.revokeObjectURL(url);
-      toast({ title: "Export Complete", description: "Database exported successfully" });
+      toast({ title: "Export Complete", description: "Database exported (compressed)" });
     } catch (err: any) {
       toast({ title: "Export Failed", description: err.message || "Something went wrong", variant: "destructive" });
     } finally {
@@ -187,11 +187,30 @@ export default function SettingsPage() {
   const handleImport = async (file: File) => {
     setIsImporting(true);
     try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-      const res = await apiRequest("POST", "/api/import-database", data);
-      const result = await res.json();
-      toast({ title: "Import Complete", description: result.message || "Settings imported successfully" });
+      const buffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(buffer);
+      const isGzip = bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
+
+      if (isGzip) {
+        const res = await fetch("/api/import-database", {
+          method: "POST",
+          headers: { "Content-Type": "application/octet-stream" },
+          body: buffer,
+          credentials: "include",
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.message || `${res.status}: Import failed`);
+        }
+        const result = await res.json();
+        toast({ title: "Import Complete", description: result.message || "Settings imported successfully" });
+      } else {
+        const text = new TextDecoder().decode(buffer);
+        const data = JSON.parse(text);
+        const res = await apiRequest("POST", "/api/import-database", data);
+        const result = await res.json();
+        toast({ title: "Import Complete", description: result.message || "Settings imported successfully" });
+      }
     } catch (err: any) {
       toast({ title: "Import Failed", description: err.message || "Invalid file format", variant: "destructive" });
     } finally {
@@ -472,7 +491,7 @@ export default function SettingsPage() {
                   <input
                     ref={importFileRef}
                     type="file"
-                    accept=".json"
+                    accept=".json,.gz,.json.gz"
                     className="hidden"
                     data-testid="input-import-file"
                     onChange={(e) => {
