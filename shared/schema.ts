@@ -51,6 +51,7 @@ export const users = pgTable("users", {
   phone: text("phone"),
   role: text("role").notNull().default(UserRole.TECHNICIAN),
   isBackboneSpecialist: boolean("is_backbone_specialist").default(false).notNull(),
+  isVendorSpecialist: boolean("is_vendor_specialist").default(false).notNull(),
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

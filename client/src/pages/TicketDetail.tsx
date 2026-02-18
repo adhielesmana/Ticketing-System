@@ -951,7 +951,10 @@ export default function TicketDetail() {
                   {canManage && ticket.assignees.length < 2 && !['closed', 'rejected', 'pending_rejection'].includes(ticket.status) && (
                     <div className="space-y-1">
                       <p className="text-xs text-muted-foreground">Only technicians without active tickets are shown:</p>
-                      {freeTechnicians && freeTechnicians.filter((tech: any) => !ticket.assignees.some((a: any) => a.id === tech.id)).length > 0 ? (
+                      {freeTechnicians && freeTechnicians
+                        .filter((tech: any) => !ticket.assignees.some((a: any) => a.id === tech.id))
+                        .filter((tech: any) => user?.role === 'helpdesk' ? (tech.isBackboneSpecialist || tech.isVendorSpecialist) : true)
+                        .length > 0 ? (
                         <Select onValueChange={(val) => assignTicket({ id: ticketId, userId: Number(val) })}>
                           <SelectTrigger data-testid="select-add-second-technician">
                             <SelectValue placeholder="Add second technician..." />
@@ -959,6 +962,7 @@ export default function TicketDetail() {
                           <SelectContent>
                             {freeTechnicians
                               .filter((tech: any) => !ticket.assignees.some((a: any) => a.id === tech.id))
+                              .filter((tech: any) => user?.role === 'helpdesk' ? (tech.isBackboneSpecialist || tech.isVendorSpecialist) : true)
                               .map((tech: any) => (
                               <SelectItem key={tech.id} value={String(tech.id)}>{tech.name}</SelectItem>
                             ))}
@@ -995,7 +999,9 @@ export default function TicketDetail() {
                                 <SelectValue placeholder="Select lead technician..." />
                               </SelectTrigger>
                               <SelectContent>
-                                {technicians?.filter((t: any) => t.role === 'technician').map((tech: any) => (
+                                {technicians?.filter((t: any) => t.role === 'technician')
+                                  .filter((t: any) => user?.role === 'helpdesk' ? (t.isBackboneSpecialist || t.isVendorSpecialist) : true)
+                                  .map((tech: any) => (
                                   <SelectItem key={tech.id} value={String(tech.id)} disabled={String(tech.id) === reassignTech2}>
                                     {toCapName(tech.name)}
                                   </SelectItem>
@@ -1011,7 +1017,9 @@ export default function TicketDetail() {
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="none">No partner</SelectItem>
-                                {technicians?.filter((t: any) => t.role === 'technician').map((tech: any) => (
+                                {technicians?.filter((t: any) => t.role === 'technician')
+                                  .filter((t: any) => user?.role === 'helpdesk' ? (t.isBackboneSpecialist || t.isVendorSpecialist) : true)
+                                  .map((tech: any) => (
                                   <SelectItem key={tech.id} value={String(tech.id)} disabled={String(tech.id) === reassignTech1}>
                                     {toCapName(tech.name)}
                                   </SelectItem>
@@ -1055,7 +1063,9 @@ export default function TicketDetail() {
                       <SelectValue placeholder="Select Technician" />
                     </SelectTrigger>
                     <SelectContent>
-                      {technicians?.map((tech: any) => (
+                      {technicians
+                        ?.filter((tech: any) => user?.role === 'helpdesk' ? (tech.isBackboneSpecialist || tech.isVendorSpecialist) : true)
+                        .map((tech: any) => (
                         <SelectItem key={tech.id} value={String(tech.id)}>{tech.name}</SelectItem>
                       ))}
                     </SelectContent>

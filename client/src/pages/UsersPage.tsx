@@ -81,6 +81,7 @@ export default function UsersPage() {
       role: "technician",
       phone: "",
       isBackboneSpecialist: false,
+      isVendorSpecialist: false,
       isActive: true,
     },
   });
@@ -92,6 +93,7 @@ export default function UsersPage() {
       phone: "",
       role: "technician",
       isBackboneSpecialist: false,
+      isVendorSpecialist: false,
       isActive: true,
       password: "",
     },
@@ -105,6 +107,7 @@ export default function UsersPage() {
       phone: u.phone || "",
       role: u.role,
       isBackboneSpecialist: u.isBackboneSpecialist,
+      isVendorSpecialist: u.isVendorSpecialist || false,
       isActive: u.isActive,
       password: "",
     });
@@ -251,6 +254,21 @@ export default function UsersPage() {
                     </FormItem>
                   )}
                 />
+                <FormField
+                  control={createForm.control}
+                  name="isVendorSpecialist"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between rounded-md border p-3">
+                      <div>
+                        <FormLabel className="mb-0">Vendor Specialist</FormLabel>
+                        <p className="text-xs text-muted-foreground">Vendor category technician</p>
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} data-testid="switch-vendor" />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
                 <DialogFooter>
                   <Button type="submit" disabled={isCreating} data-testid="button-submit-create-user">
                     {isCreating ? "Creating..." : "Create User"}
@@ -318,11 +336,17 @@ export default function UsersPage() {
                       <TableCell className="text-sm">{u.email}</TableCell>
                       <TableCell className="text-sm text-muted-foreground">{u.phone || "-"}</TableCell>
                       <TableCell>
-                        {u.isBackboneSpecialist ? (
-                          <Badge variant="outline" className="text-[10px]">Backbone</Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">-</span>
-                        )}
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {u.isBackboneSpecialist && (
+                            <Badge variant="outline" className="text-[10px]">Backbone</Badge>
+                          )}
+                          {u.isVendorSpecialist && (
+                            <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700 dark:text-amber-400">Vendor</Badge>
+                          )}
+                          {!u.isBackboneSpecialist && !u.isVendorSpecialist && (
+                            <span className="text-xs text-muted-foreground">-</span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
                         <Badge className={u.isActive
@@ -414,6 +438,17 @@ export default function UsersPage() {
                 checked={editForm.watch("isBackboneSpecialist")}
                 onCheckedChange={(val) => editForm.setValue("isBackboneSpecialist", val)}
                 data-testid="switch-edit-backbone"
+              />
+            </div>
+            <div className="flex items-center justify-between rounded-md border p-3">
+              <div>
+                <label className="text-sm font-medium">Vendor Specialist</label>
+                <p className="text-xs text-muted-foreground">Vendor category technician</p>
+              </div>
+              <Switch
+                checked={editForm.watch("isVendorSpecialist")}
+                onCheckedChange={(val) => editForm.setValue("isVendorSpecialist", val)}
+                data-testid="switch-edit-vendor"
               />
             </div>
             <div className="flex items-center justify-between rounded-md border p-3">

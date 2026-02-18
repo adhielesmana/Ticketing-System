@@ -52,6 +52,7 @@ export interface IStorage {
   getSetting(key: string): Promise<Setting | undefined>;
   setSetting(key: string, value: string | null): Promise<Setting>;
   getAllSettings(): Promise<Setting[]>;
+  bulkResetStaleAssignments(maxAgeHours?: number): Promise<number>;
 
   getTicketsReport(filters?: { dateFrom?: string; dateTo?: string; type?: string; status?: string }): Promise<any[]>;
   getBonusSummary(filters?: { dateFrom?: string; dateTo?: string }): Promise<any[]>;
@@ -533,6 +534,36 @@ export class DatabaseStorage implements IStorage {
 
   async getAllSettings(): Promise<Setting[]> {
     return await db.select().from(settings);
+  }
+
+  async bulkResetStaleAssignments(maxAgeHours: number = 24): Promise<number> {
+    const cutoff = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000);
+    const staleAssignments = await db.select({
+      ticketId: ticketAssignments.ticketId,
+    }).from(ticketAssignments)
+      .innerJoin(tickets, eq(tickets.id, ticketAssignments.ticketId))
+      .where(and(
+        eq(ticketAssignments.active, true),
+        or(
+          eq(tickets.status, TicketStatus.ASSIGNED),
+          eq(tickets.status, TicketStatus.WAITING_ASSIGNMENT)
+        ),
+        sql`${ticketAssignments.assignedAt} < ${cutoff}`
+      ));
+
+    const ticketIdSet = new Set(staleAssignments.map(a => a.ticketId));
+    const uniqueTicketIds = Array.from(ticketIdSet);
+    let count = 0;
+    for (const ticketId of uniqueTicketIds) {
+      await db.update(ticketAssignments)
+        .set({ active: false })
+        .where(and(eq(ticketAssignments.ticketId, ticketId), eq(ticketAssignments.active, true)));
+      await db.update(tickets)
+        .set({ status: TicketStatus.OPEN })
+        .where(eq(tickets.id, ticketId));
+      count++;
+    }
+    return count;
   }
 
   async getTicketsReport(filters: { dateFrom?: string; dateTo?: string; type?: string; status?: string } = {}): Promise<any[]> {

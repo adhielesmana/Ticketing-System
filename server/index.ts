@@ -4,6 +4,7 @@ import MemoryStore from "memorystore";
 import { registerRoutes, backfillTicketAreas, fixLegacyOverdueStatus } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { storage } from "./storage";
 
 const app = express();
 const httpServer = createServer(app);
@@ -116,6 +117,24 @@ app.use((req, res, next) => {
       log(`serving on port ${port}`);
       backfillTicketAreas().catch(err => console.error("Backfill error:", err));
       fixLegacyOverdueStatus().catch(err => console.error("Fix overdue status error:", err));
+
+      function scheduleMidnightReset() {
+        const now = new Date();
+        const midnight = new Date(now);
+        midnight.setHours(24, 0, 0, 0);
+        const msUntilMidnight = midnight.getTime() - now.getTime();
+        setTimeout(async () => {
+          try {
+            const count = await storage.bulkResetStaleAssignments(24);
+            log(`Midnight reset: ${count} stale assignment(s) cleared`);
+          } catch (err) {
+            console.error("Midnight reset error:", err);
+          }
+          scheduleMidnightReset();
+        }, msUntilMidnight);
+        log(`Midnight reset scheduled in ${Math.round(msUntilMidnight / 60000)} minutes`);
+      }
+      scheduleMidnightReset();
     },
   );
 })();

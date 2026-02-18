@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useSetting, useUpdateSetting } from "@/hooks/use-tickets";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,6 +19,11 @@ import {
   Type,
   Truck,
   Ticket,
+  Download,
+  Upload,
+  RotateCcw,
+  Ratio,
+  Database,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -67,6 +72,10 @@ export default function SettingsPage() {
   const [isBackfilling, setIsBackfilling] = useState(false);
   const [isBackfillingNames, setIsBackfillingNames] = useState(false);
   const [isRecalculating, setIsRecalculating] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const importFileRef = useRef<HTMLInputElement>(null);
 
   const { data: ticketFeeHome } = useSetting("ticket_fee_home_maintenance");
   const { data: transportFeeHome } = useSetting("transport_fee_home_maintenance");
@@ -79,6 +88,9 @@ export default function SettingsPage() {
   const { data: oldBonusBackbone } = useSetting("bonus_backbone_maintenance");
   const { data: oldBonusInstall } = useSetting("bonus_installation");
 
+  const { data: ratioMaintSetting } = useSetting("preference_ratio_maintenance");
+  const { data: ratioInstallSetting } = useSetting("preference_ratio_installation");
+
   const [values, setValues] = useState<Record<string, string>>({
     ticket_fee_home_maintenance: "",
     transport_fee_home_maintenance: "",
@@ -88,7 +100,11 @@ export default function SettingsPage() {
     transport_fee_installation: "",
   });
 
+  const [ratioMaint, setRatioMaint] = useState("4");
+  const [ratioInstall, setRatioInstall] = useState("2");
+
   const [initialized, setInitialized] = useState(false);
+  const [ratioInitialized, setRatioInitialized] = useState(false);
 
   useEffect(() => {
     if (!initialized && ticketFeeHome !== undefined && transportFeeHome !== undefined) {
@@ -103,6 +119,14 @@ export default function SettingsPage() {
       setInitialized(true);
     }
   }, [ticketFeeHome, transportFeeHome, ticketFeeBackbone, transportFeeBackbone, ticketFeeInstall, transportFeeInstall, oldBonusHome, oldBonusBackbone, oldBonusInstall, initialized]);
+
+  useEffect(() => {
+    if (!ratioInitialized && ratioMaintSetting !== undefined) {
+      setRatioMaint(ratioMaintSetting?.value || "4");
+      setRatioInstall(ratioInstallSetting?.value || "2");
+      setRatioInitialized(true);
+    }
+  }, [ratioMaintSetting, ratioInstallSetting, ratioInitialized]);
 
   if (!user) return null;
   if (user.role !== UserRole.SUPERADMIN && user.role !== UserRole.ADMIN) {
@@ -128,6 +152,67 @@ export default function SettingsPage() {
     toast({ title: "Saved", description: "All bonus settings updated" });
   };
 
+  const handleSaveRatio = () => {
+    const m = parseInt(ratioMaint, 10);
+    const i = parseInt(ratioInstall, 10);
+    if (isNaN(m) || m < 1 || isNaN(i) || i < 1) {
+      toast({ title: "Invalid Ratio", description: "Both values must be at least 1", variant: "destructive" });
+      return;
+    }
+    updateSetting({ key: "preference_ratio_maintenance", value: String(m) });
+    updateSetting({ key: "preference_ratio_installation", value: String(i) });
+    toast({ title: "Saved", description: `Preference ratio updated to ${m}:${i} (maintenance:installation)` });
+  };
+
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const res = await fetch("/api/export-database", { credentials: "include" });
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `netguard-export-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "Export Complete", description: "Database exported successfully" });
+    } catch (err: any) {
+      toast({ title: "Export Failed", description: err.message || "Something went wrong", variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleImport = async (file: File) => {
+    setIsImporting(true);
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      const res = await apiRequest("POST", "/api/import-database", data);
+      const result = await res.json();
+      toast({ title: "Import Complete", description: result.message || "Settings imported successfully" });
+    } catch (err: any) {
+      toast({ title: "Import Failed", description: err.message || "Invalid file format", variant: "destructive" });
+    } finally {
+      setIsImporting(false);
+      if (importFileRef.current) importFileRef.current.value = "";
+    }
+  };
+
+  const handleBulkReset = async () => {
+    setIsResetting(true);
+    try {
+      const res = await apiRequest("POST", "/api/bulk-reset-assignments", { maxAgeHours: 24 });
+      const data = await res.json();
+      toast({ title: "Reset Complete", description: data.message || `${data.reset} ticket(s) unassigned` });
+    } catch (err: any) {
+      toast({ title: "Reset Failed", description: err.message || "Something went wrong", variant: "destructive" });
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   return (
     <div className="container mx-auto max-w-2xl px-4 py-6 space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -137,7 +222,7 @@ export default function SettingsPage() {
           </div>
           <div>
             <h1 className="text-xl font-bold font-display" data-testid="text-settings-title">Settings</h1>
-            <p className="text-sm text-muted-foreground">Configure bonus amounts for ticket types</p>
+            <p className="text-sm text-muted-foreground">System configuration and maintenance</p>
           </div>
         </div>
         <Button onClick={handleSaveAll} disabled={isPending} className="gap-2" data-testid="button-save-all-bonus">
@@ -234,6 +319,185 @@ export default function SettingsPage() {
             </Card>
           );
         })}
+      </div>
+
+      <div className="space-y-4 mt-8 pt-6 border-t">
+        <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+          <Ratio className="w-4 h-4" />
+          Auto-Assign Preference Ratio
+        </div>
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-md bg-sky-500 flex items-center justify-center shrink-0">
+                <Ratio className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 space-y-3">
+                <div>
+                  <h3 className="font-semibold text-sm">Maintenance : Installation Ratio</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Controls how auto-assign distributes tickets. In every cycle, technicians will get maintenance tickets first, then installation tickets based on this ratio.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="space-y-1 flex-1">
+                    <label className="text-xs font-medium text-muted-foreground">Maintenance</label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="20"
+                      value={ratioMaint}
+                      onChange={(e) => setRatioMaint(e.target.value)}
+                      data-testid="input-ratio-maintenance"
+                    />
+                  </div>
+                  <span className="text-lg font-bold text-muted-foreground mt-5">:</span>
+                  <div className="space-y-1 flex-1">
+                    <label className="text-xs font-medium text-muted-foreground">Installation</label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="20"
+                      value={ratioInstall}
+                      onChange={(e) => setRatioInstall(e.target.value)}
+                      data-testid="input-ratio-installation"
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-5"
+                    onClick={handleSaveRatio}
+                    disabled={isPending}
+                    data-testid="button-save-ratio"
+                  >
+                    Save
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Current: Every {parseInt(ratioMaint) + parseInt(ratioInstall) || 6} tickets, {ratioMaint} will be maintenance and {ratioInstall} will be installation.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="space-y-4 mt-8 pt-6 border-t">
+        <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+          <RotateCcw className="w-4 h-4" />
+          Assignment Management
+        </div>
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-md bg-rose-500 flex items-center justify-center shrink-0">
+                <RotateCcw className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 space-y-2">
+                <div>
+                  <h3 className="font-semibold text-sm">Bulk Reset Old Assignments</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Unassign all tickets that have been assigned for more than 24 hours with no progress (not started, not closed). These tickets will be set back to open and available for reassignment. This also runs automatically at midnight every day.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isResetting}
+                  data-testid="button-bulk-reset"
+                  onClick={handleBulkReset}
+                >
+                  {isResetting ? (
+                    <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Resetting...</>
+                  ) : (
+                    "Reset Stale Assignments"
+                  )}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="space-y-4 mt-8 pt-6 border-t">
+        <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+          <Database className="w-4 h-4" />
+          Database
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex items-start gap-4">
+                <div className="w-10 h-10 rounded-md bg-blue-500 flex items-center justify-center shrink-0">
+                  <Download className="w-5 h-5 text-white" />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <div>
+                    <h3 className="font-semibold text-sm">Export Database</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Download all data as a JSON file for backup or migration.
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isExporting}
+                    data-testid="button-export-db"
+                    onClick={handleExport}
+                  >
+                    {isExporting ? (
+                      <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Exporting...</>
+                    ) : (
+                      "Export"
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex items-start gap-4">
+                <div className="w-10 h-10 rounded-md bg-green-500 flex items-center justify-center shrink-0">
+                  <Upload className="w-5 h-5 text-white" />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <div>
+                    <h3 className="font-semibold text-sm">Import Database</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Restore settings from a previously exported JSON file.
+                    </p>
+                  </div>
+                  <input
+                    ref={importFileRef}
+                    type="file"
+                    accept=".json"
+                    className="hidden"
+                    data-testid="input-import-file"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleImport(file);
+                    }}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={isImporting}
+                    data-testid="button-import-db"
+                    onClick={() => importFileRef.current?.click()}
+                  >
+                    {isImporting ? (
+                      <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Importing...</>
+                    ) : (
+                      "Import"
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       <div className="space-y-4 mt-8 pt-6 border-t">

@@ -343,6 +343,20 @@ export async function registerRoutes(
     }
 
     try {
+      const sessionUserId = (req as any).session.userId;
+      const sessionUser = sessionUserId ? await storage.getUser(sessionUserId) : null;
+
+      const targetTech = await storage.getUser(userId);
+      if (!targetTech || targetTech.role !== UserRole.TECHNICIAN) {
+        return res.status(400).json({ message: "Target user is not a valid technician" });
+      }
+
+      if (sessionUser && sessionUser.role === UserRole.HELPDESK) {
+        if (!targetTech.isBackboneSpecialist && !targetTech.isVendorSpecialist) {
+          return res.status(403).json({ message: "Helpdesk can only manually assign to backbone or vendor specialists. Other technicians must use auto-assign (Get Ticket)." });
+        }
+      }
+
       const existingAssignees = await storage.getAssigneesForTicket(ticketId);
       if (existingAssignees.some((a: any) => a.userId === userId || a.id === userId)) {
         return res.status(400).json({ message: "This technician is already assigned to this ticket" });
@@ -381,6 +395,15 @@ export async function registerRoutes(
       const { technicianIds } = req.body;
       if (!technicianIds || !Array.isArray(technicianIds) || technicianIds.length === 0 || technicianIds.length > 2) {
         return res.status(400).json({ message: "Provide 1 or 2 technician IDs" });
+      }
+
+      if (user.role === UserRole.HELPDESK) {
+        for (const techId of technicianIds) {
+          const tech = await storage.getUser(Number(techId));
+          if (tech && !tech.isBackboneSpecialist && !tech.isVendorSpecialist) {
+            return res.status(403).json({ message: "Helpdesk can only assign to backbone or vendor specialists. Other technicians must use auto-assign (Get Ticket)." });
+          }
+        }
       }
 
       await storage.removeAllAssignments(ticketId);
@@ -456,16 +479,19 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Selected partner already has an active ticket" });
       }
 
-      // Determine preferred type based on 4:2 ratio (maintenance:installation)
       let preferredType: "maintenance" | "installation" = "maintenance";
 
       if (!user.isBackboneSpecialist) {
+        const ratioMaintSetting = await storage.getSetting("preference_ratio_maintenance");
+        const ratioInstallSetting = await storage.getSetting("preference_ratio_installation");
+        const ratioMaint = parseInt(ratioMaintSetting?.value || "4", 10) || 4;
+        const ratioInstall = parseInt(ratioInstallSetting?.value || "2", 10) || 2;
+        const cycleSize = ratioMaint + ratioInstall;
+
         const counts = await storage.getCompletedTicketsTodayByUser(userId);
         const totalDone = counts.maintenanceCount + counts.installationCount;
-        // 4:2 ratio = in every cycle of 6 tickets, 4 should be maintenance, 2 installation
-        // Check position in current cycle
-        const cyclePosition = totalDone % 6;
-        if (cyclePosition < 4) {
+        const cyclePosition = totalDone % cycleSize;
+        if (cyclePosition < ratioMaint) {
           preferredType = "maintenance";
         } else {
           preferredType = "installation";
@@ -963,6 +989,101 @@ export async function registerRoutes(
     const { key, value } = req.body;
     const setting = await storage.setSetting(key, value);
     res.json(setting);
+  });
+
+  // === EXPORT DATABASE ===
+  app.get("/api/export-database", async (req, res) => {
+    try {
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const user = await storage.getUser(userId);
+      if (!user || (user.role !== UserRole.SUPERADMIN && user.role !== UserRole.ADMIN)) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const allUsers = await storage.getAllUsers();
+      const allTickets = await storage.getAllTickets();
+      const allSettings = await storage.getAllSettings();
+
+      const allAssignments: any[] = [];
+      const allPerformanceLogs: any[] = [];
+      for (const ticket of allTickets) {
+        const assignments = await storage.getTicketAssignments(ticket.id);
+        allAssignments.push(...assignments);
+      }
+      const { db } = await import("./db");
+      const { performanceLogs } = await import("@shared/schema");
+      const logs = await db.select().from(performanceLogs);
+      allPerformanceLogs.push(...logs);
+
+      const exportData = {
+        exportedAt: new Date().toISOString(),
+        version: 1,
+        users: allUsers.map(({ password, ...rest }) => rest),
+        tickets: allTickets,
+        assignments: allAssignments,
+        performanceLogs: allPerformanceLogs,
+        settings: allSettings,
+      };
+
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Content-Disposition", `attachment; filename=netguard-export-${new Date().toISOString().split('T')[0]}.json`);
+      res.json(exportData);
+    } catch (err) {
+      console.error("Export error:", err);
+      res.status(500).json({ message: "Failed to export database" });
+    }
+  });
+
+  // === IMPORT DATABASE ===
+  app.post("/api/import-database", async (req, res) => {
+    try {
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const user = await storage.getUser(userId);
+      if (!user || (user.role !== UserRole.SUPERADMIN && user.role !== UserRole.ADMIN)) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const importData = req.body;
+      if (!importData || !importData.version) {
+        return res.status(400).json({ message: "Invalid import data format" });
+      }
+
+      let settingsImported = 0;
+      if (importData.settings && Array.isArray(importData.settings)) {
+        for (const s of importData.settings) {
+          await storage.setSetting(s.key, s.value);
+          settingsImported++;
+        }
+      }
+
+      res.json({
+        message: "Import completed",
+        settingsImported,
+      });
+    } catch (err) {
+      console.error("Import error:", err);
+      res.status(500).json({ message: "Failed to import database" });
+    }
+  });
+
+  // === BULK RESET STALE ASSIGNMENTS ===
+  app.post("/api/bulk-reset-assignments", async (req, res) => {
+    try {
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const user = await storage.getUser(userId);
+      if (!user || (user.role !== UserRole.SUPERADMIN && user.role !== UserRole.ADMIN)) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+      const maxAgeHours = req.body.maxAgeHours || 24;
+      const count = await storage.bulkResetStaleAssignments(maxAgeHours);
+      res.json({ reset: count, message: `${count} ticket(s) unassigned` });
+    } catch (err) {
+      console.error("Bulk reset error:", err);
+      res.status(500).json({ message: "Failed to reset assignments" });
+    }
   });
 
   // === REPORTS ===
