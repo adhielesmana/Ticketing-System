@@ -1,7 +1,7 @@
 import { useTicket, useCloseTicket, useStartTicket, useAssignTicket, useReassignTicket, useUnassignTicket, useUploadFile, useUploadImages, useFreeTechnicians, useNoResponseTicket, useRejectTicket, useCancelReject, useCloseByHelpdesk, useUpdateTicket, useReopenTicket } from "@/hooks/use-tickets";
 import { useUsers } from "@/hooks/use-users";
 import { useAuth } from "@/hooks/use-auth";
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
 import { SLAIndicator } from "@/components/SLAIndicator";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -146,6 +146,7 @@ export default function TicketDetail() {
   const { id } = useParams();
   const ticketId = Number(id);
   const { user } = useAuth();
+  const [, navigate] = useLocation();
   const { data: ticket, isLoading } = useTicket(ticketId);
   const { data: technicians } = useUsers("technician");
   const hasOneAssignee = ticket?.assignees?.length === 1;
@@ -254,6 +255,14 @@ export default function TicketDetail() {
     }));
   };
 
+  const goBack = () => {
+    if (user?.role === 'technician') {
+      navigate("/dashboard/technician");
+    } else {
+      navigate("/tickets");
+    }
+  };
+
   const handleClose = () => {
     closeTicket({
       id: ticketId,
@@ -262,7 +271,10 @@ export default function TicketDetail() {
       proofImageUrls: closeData.proofImageUrls.length > 0 ? closeData.proofImageUrls : undefined,
       closedNote: closeData.closedNote,
     }, {
-      onSuccess: () => setCloseDialogOpen(false)
+      onSuccess: () => {
+        setCloseDialogOpen(false);
+        goBack();
+      }
     });
   };
 
@@ -601,9 +613,13 @@ export default function TicketDetail() {
                           disabled={!rejectReason.trim() || isRejecting}
                           data-testid="button-submit-reject"
                           onClick={() => {
-                            rejectTicket({ id: ticketId, reason: rejectReason.trim() });
-                            setRejectReasonDialogOpen(false);
-                            setRejectReason("");
+                            rejectTicket({ id: ticketId, reason: rejectReason.trim() }, {
+                              onSuccess: () => {
+                                setRejectReasonDialogOpen(false);
+                                setRejectReason("");
+                                goBack();
+                              }
+                            });
                           }}
                         >
                           {isRejecting ? <><Loader2 className="w-4 h-4 animate-spin" /> Rejecting...</> : "Confirm Reject"}
@@ -648,9 +664,13 @@ export default function TicketDetail() {
                           disabled={!helpdeskCloseReason.trim() || isClosingByHelpdesk}
                           data-testid="button-submit-helpdesk-close"
                           onClick={() => {
-                            closeByHelpdesk({ id: ticketId, reason: helpdeskCloseReason.trim() });
-                            setHelpdeskCloseDialogOpen(false);
-                            setHelpdeskCloseReason("");
+                            closeByHelpdesk({ id: ticketId, reason: helpdeskCloseReason.trim() }, {
+                              onSuccess: () => {
+                                setHelpdeskCloseDialogOpen(false);
+                                setHelpdeskCloseReason("");
+                                goBack();
+                              }
+                            });
                           }}
                         >
                           {isClosingByHelpdesk ? <><Loader2 className="w-4 h-4 animate-spin" /> Closing...</> : "Close Ticket"}
@@ -699,7 +719,7 @@ export default function TicketDetail() {
                       onClick={() => {
                         if (!noResponseReason.trim()) return;
                         noResponse({ id: ticketId, rejectionReason: noResponseReason.trim() }, {
-                          onSuccess: () => { setNoResponseDialogOpen(false); setNoResponseReason(""); },
+                          onSuccess: () => { setNoResponseDialogOpen(false); setNoResponseReason(""); goBack(); },
                         });
                       }}
                       disabled={!noResponseReason.trim() || isReportingNoResponse}
@@ -1059,7 +1079,7 @@ export default function TicketDetail() {
                       size="sm"
                       className="text-destructive"
                       disabled={isUnassigning}
-                      onClick={() => unassignTicket({ id: ticketId })}
+                      onClick={() => unassignTicket({ id: ticketId }, { onSuccess: goBack })}
                       data-testid="button-unassign"
                     >
                       {isUnassigning ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <UserX className="w-3.5 h-3.5 mr-1.5" />}

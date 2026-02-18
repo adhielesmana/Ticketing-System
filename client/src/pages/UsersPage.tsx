@@ -113,6 +113,7 @@ export default function UsersPage() {
     onSuccess: () => {
       toast({ title: "Saved", description: `Fees updated for ${feeUserName}` });
       queryClient.invalidateQueries({ queryKey: ['/api/technician-fees'] });
+      setFeeUserId(null);
     },
     onError: (err: any) => {
       toast({ title: "Error", description: err.message, variant: "destructive" });
