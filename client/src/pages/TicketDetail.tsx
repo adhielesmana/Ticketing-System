@@ -40,7 +40,7 @@ import {
   UserX,
 } from "lucide-react";
 import { format } from "date-fns";
-import { useEffect, useState, useRef } from "react";
+import { ChangeEvent, useEffect, useState, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -142,6 +142,904 @@ function GoogleMapsPreview({ url }: { url: string }) {
   );
 }
 
+interface ImagePreviewDialogProps {
+  imagePreview: string;
+  onClose: () => void;
+}
+
+function ImagePreviewDialog({ imagePreview, onClose }: ImagePreviewDialogProps) {
+  if (!imagePreview) return null;
+  return (
+    <Dialog open={!!imagePreview} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl p-2">
+        <img src={imagePreview} alt="Preview" className="w-full rounded-md" />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+type ToastFn = ReturnType<typeof useToast>["toast"];
+
+interface ReopenTicketDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  ticket: any;
+  technicians?: any[];
+  toast: ToastFn;
+  ticketId: number;
+  reopenTicket: (variables: { id: number; reason: string; technicianIds: number[] }, options?: any) => void;
+  isReopening: boolean;
+}
+
+function ReopenTicketDialog({
+  open,
+  onOpenChange,
+  ticket,
+  technicians,
+  toast,
+  ticketId,
+  reopenTicket,
+  isReopening,
+}: ReopenTicketDialogProps) {
+  const [reason, setReason] = useState("");
+  const [leadTech, setLeadTech] = useState("");
+  const [partnerTech, setPartnerTech] = useState("none");
+
+  useEffect(() => {
+    if (!ticket) return;
+    if (open) {
+      const assignees = ticket.assignees || (ticket.assignee ? [ticket.assignee] : []);
+      setLeadTech(assignees[0] ? String(assignees[0].id) : "");
+      setPartnerTech(assignees[1] ? String(assignees[1].id) : "none");
+      setReason("");
+    } else {
+      setReason("");
+      setLeadTech("");
+      setPartnerTech("none");
+    }
+  }, [open, ticket]);
+
+  const handleConfirm = () => {
+    if (!reason.trim()) {
+      toast({ title: "Error", description: "Please provide a reason", variant: "destructive" });
+      return;
+    }
+    if (!leadTech) {
+      toast({ title: "Error", description: "Please select a technician", variant: "destructive" });
+      return;
+    }
+    const techIds = [Number(leadTech)];
+    if (partnerTech && partnerTech !== "none") {
+      techIds.push(Number(partnerTech));
+    }
+
+    reopenTicket(
+      { id: ticketId, reason: reason.trim(), technicianIds: techIds },
+      {
+        onSuccess: () => {
+          onOpenChange(false);
+          setReason("");
+          setLeadTech("");
+          setPartnerTech("none");
+        },
+      }
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="gap-1.5" data-testid="button-reopen-ticket">
+          <RotateCcw className="w-3.5 h-3.5" />
+          Reopen & Reassign
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Reopen Ticket</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-sm">Reason for Reopening</Label>
+            <Textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Why is this ticket being reopened?"
+              className="text-sm"
+              data-testid="input-reopen-reason"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm">Lead Technician</Label>
+            <Select value={leadTech} onValueChange={setLeadTech}>
+              <SelectTrigger className="capitalize" data-testid="select-reopen-tech1">
+                <SelectValue placeholder="Select technician..." />
+              </SelectTrigger>
+              <SelectContent>
+                {technicians
+                  ?.filter((t: any) => t.role === "technician")
+                  .map((tech: any) => (
+                    <SelectItem
+                      key={tech.id}
+                      value={String(tech.id)}
+                      disabled={String(tech.id) === partnerTech}
+                    >
+                      {tech.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-sm">Partner (Optional)</Label>
+            <Select value={partnerTech} onValueChange={setPartnerTech}>
+              <SelectTrigger className="capitalize" data-testid="select-reopen-tech2">
+                <SelectValue placeholder="Select partner..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No partner</SelectItem>
+                {technicians
+                  ?.filter((t: any) => t.role === "technician")
+                  .map((tech: any) => (
+                    <SelectItem key={tech.id} value={String(tech.id)} disabled={String(tech.id) === leadTech}>
+                      {tech.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            onClick={handleConfirm}
+            disabled={isReopening || !reason.trim() || !leadTech}
+            data-testid="button-confirm-reopen"
+          >
+            {isReopening ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                Reopening...
+              </>
+            ) : (
+              "Reopen Ticket"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface ReassignTicketDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  ticketId: number;
+  ticket: any;
+  technicians?: any[];
+  userRole?: string;
+  reassignTicket: (variables: { id: number; technicianIds: number[] }, options?: any) => void;
+  isReassigning: boolean;
+  toast: ToastFn;
+}
+
+function ReassignTicketDialog({
+  open,
+  onOpenChange,
+  ticketId,
+  ticket,
+  technicians,
+  userRole,
+  reassignTicket,
+  isReassigning,
+  toast,
+}: ReassignTicketDialogProps) {
+  const [leadTech, setLeadTech] = useState("");
+  const [partnerTech, setPartnerTech] = useState("none");
+  const isHelpdesk = userRole === "helpdesk";
+
+  useEffect(() => {
+    if (!ticket) return;
+    if (open) {
+      const assignees = ticket.assignees || (ticket.assignee ? [ticket.assignee] : []);
+      setLeadTech(assignees[0] ? String(assignees[0].id) : "");
+      setPartnerTech(assignees[1] ? String(assignees[1].id) : "none");
+    } else {
+      setLeadTech("");
+      setPartnerTech("none");
+    }
+  }, [open, ticket]);
+
+  const handleConfirm = () => {
+    if (!leadTech) {
+      toast({ title: "Error", description: "Select a lead technician", variant: "destructive" });
+      return;
+    }
+    const ids = [Number(leadTech)];
+    if (partnerTech && partnerTech !== "none") {
+      ids.push(Number(partnerTech));
+    }
+    reassignTicket(
+      { id: ticketId, technicianIds: ids },
+      {
+        onSuccess: () => {
+          setLeadTech("");
+          setPartnerTech("none");
+          onOpenChange(false);
+        },
+      }
+    );
+  };
+
+  const filteredTechnicians = technicians?.filter((t: any) => t.role === "technician") || [];
+  const partnerOptions = filteredTechnicians.filter((tech: any) => String(tech.id) !== leadTech);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" data-testid="button-reassign">
+          <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+          Reassign
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Reassign Ticket</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <p className="text-sm text-muted-foreground">
+            Select new technician(s) to replace the current assignment. This will remove all existing assignees.
+          </p>
+          <div className="space-y-2">
+            <Label>Lead Technician *</Label>
+            <Select value={leadTech} onValueChange={setLeadTech} disabled={isHelpdesk}>
+              <SelectTrigger data-testid="select-reassign-tech1">
+                <SelectValue placeholder="Select lead technician..." />
+              </SelectTrigger>
+              <SelectContent>
+                {filteredTechnicians
+                  .filter(tech => !isHelpdesk || tech.isBackboneSpecialist || tech.isVendorSpecialist)
+                  .map((tech: any) => (
+                    <SelectItem
+                      key={tech.id}
+                      value={String(tech.id)}
+                      disabled={String(tech.id) === partnerTech || (isHelpdesk && String(tech.id) !== leadTech && !!leadTech)}
+                    >
+                      {toCapName(tech.name)}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            {isHelpdesk && (
+              <p className="text-xs text-muted-foreground">
+                Lead technician is locked for helpdesk. You can only change partner.
+              </p>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label>Partner (optional)</Label>
+            <Select value={partnerTech} onValueChange={setPartnerTech}>
+              <SelectTrigger data-testid="select-reassign-tech2">
+                <SelectValue placeholder="Select partner..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No partner</SelectItem>
+                {partnerOptions.map((tech: any) => (
+                  <SelectItem key={tech.id} value={String(tech.id)} disabled={String(tech.id) === leadTech}>
+                    {toCapName(tech.name)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button disabled={!leadTech || isReassigning} data-testid="button-confirm-reassign" onClick={handleConfirm}>
+            {isReassigning ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                Reassigning...
+              </>
+            ) : (
+              "Confirm Reassign"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface CloseTicketDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  ticketId: number;
+  closeTicket: (variables: {
+    id: number;
+    actionDescription: string;
+    speedtestImageUrl?: string;
+    proofImageUrls?: string[];
+    closedNote?: string;
+  }, options?: any) => void;
+  isClosing: boolean;
+  uploadFile: (file: File) => Promise<{ url: string }>;
+  isUploadingFile: boolean;
+  uploadMultiple: (files: File[]) => Promise<{ urls: string[] }>;
+  isUploadingMultiple: boolean;
+  goBack: () => void;
+  toast: ToastFn;
+}
+
+function CloseTicketDialog({
+  open,
+  onOpenChange,
+  ticketId,
+  closeTicket,
+  isClosing,
+  uploadFile,
+  isUploadingFile,
+  uploadMultiple,
+  isUploadingMultiple,
+  goBack,
+  toast,
+}: CloseTicketDialogProps) {
+  const [closeData, setCloseData] = useState({
+    actionDescription: "",
+    speedtestImageUrl: "",
+    proofImageUrls: [] as string[],
+    closedNote: "",
+  });
+  const speedtestInputRef = useRef<HTMLInputElement>(null);
+  const proofInputRef = useRef<HTMLInputElement>(null);
+
+  const handleSpeedtestUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const result = await uploadFile(file);
+      setCloseData(prev => ({ ...prev, speedtestImageUrl: result.url }));
+    } catch {
+      toast({ title: "Error", description: "Failed to upload speedtest image", variant: "destructive" });
+    }
+    if (speedtestInputRef.current) speedtestInputRef.current.value = "";
+  };
+
+  const handleProofUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    try {
+      const result = await uploadMultiple(files);
+      setCloseData(prev => ({ ...prev, proofImageUrls: [...prev.proofImageUrls, ...result.urls] }));
+    } catch {
+      toast({ title: "Error", description: "Failed to upload proof images", variant: "destructive" });
+    }
+    if (proofInputRef.current) proofInputRef.current.value = "";
+  };
+
+  const removeProofImage = (index: number) => {
+    setCloseData(prev => ({
+      ...prev,
+      proofImageUrls: prev.proofImageUrls.filter((_, i) => i !== index),
+    }));
+  };
+
+  const handleClose = () => {
+    closeTicket(
+      {
+        id: ticketId,
+        actionDescription: closeData.actionDescription,
+        speedtestImageUrl: closeData.speedtestImageUrl || undefined,
+        proofImageUrls: closeData.proofImageUrls.length > 0 ? closeData.proofImageUrls : undefined,
+        closedNote: closeData.closedNote,
+      },
+      {
+        onSuccess: () => {
+          onOpenChange(false);
+          setCloseData({
+            actionDescription: "",
+            speedtestImageUrl: "",
+            proofImageUrls: [],
+            closedNote: "",
+          });
+          goBack();
+        },
+      }
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogTrigger asChild>
+        <Button data-testid="button-complete-close">Complete & Close</Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Close Ticket</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label>Action Taken</Label>
+            <Textarea
+              placeholder="What did you do to resolve this?"
+              value={closeData.actionDescription}
+              onChange={(e) => setCloseData(prev => ({ ...prev, actionDescription: e.target.value }))}
+              data-testid="textarea-action"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Speedtest Screenshot</Label>
+            <input
+              ref={speedtestInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleSpeedtestUpload}
+              className="hidden"
+              data-testid="input-speedtest-file"
+            />
+            {closeData.speedtestImageUrl ? (
+              <div className="relative rounded-md overflow-visible border border-border">
+                <img
+                  src={closeData.speedtestImageUrl}
+                  alt="Speedtest"
+                  className="w-full h-32 object-cover rounded-md"
+                />
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  className="absolute top-1 right-1 h-6 w-6"
+                  onClick={() => setCloseData(prev => ({ ...prev, speedtestImageUrl: "" }))}
+                  data-testid="button-remove-speedtest"
+                >
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                className="w-full gap-2"
+                onClick={() => speedtestInputRef.current?.click()}
+                disabled={isUploadingFile}
+                data-testid="button-upload-speedtest"
+              >
+                {isUploadingFile ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <Camera className="w-4 h-4" />
+                    Upload Speedtest Screenshot
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label>Proof Images</Label>
+            <input
+              ref={proofInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handleProofUpload}
+              className="hidden"
+              data-testid="input-proof-files"
+            />
+            {closeData.proofImageUrls.length > 0 && (
+              <div className="grid grid-cols-3 gap-2">
+                {closeData.proofImageUrls.map((url, i) => (
+                  <div key={i} className="relative rounded-md overflow-visible border border-border">
+                    <img
+                      src={url}
+                      alt={`Proof ${i + 1}`}
+                      className="w-full h-20 object-cover rounded-md"
+                    />
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="absolute top-0.5 right-0.5 h-5 w-5"
+                      onClick={() => removeProofImage(i)}
+                      data-testid={`button-remove-proof-${i}`}
+                    >
+                      <X className="w-3 h-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <Button
+              variant="outline"
+              className="w-full gap-2"
+              onClick={() => proofInputRef.current?.click()}
+              disabled={isUploadingMultiple}
+              data-testid="button-upload-proof"
+            >
+              {isUploadingMultiple ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Uploading...
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4" />
+                  Upload Proof Images
+                </>
+              )}
+            </Button>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Closing Notes</Label>
+            <Textarea
+              placeholder="Any additional notes..."
+              value={closeData.closedNote}
+              onChange={(e) => setCloseData(prev => ({ ...prev, closedNote: e.target.value }))}
+              data-testid="textarea-notes"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={handleClose} data-testid="button-submit-close" disabled={isClosing}>
+            {isClosing ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                Submitting...
+              </>
+            ) : (
+              "Submit"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface NoResponseDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  ticketId: number;
+  noResponse: (variables: { id: number; rejectionReason: string }, options?: any) => void;
+  isPending: boolean;
+  goBack: () => void;
+  toast: ToastFn;
+}
+
+function NoResponseDialog({
+  open,
+  onOpenChange,
+  ticketId,
+  noResponse,
+  isPending,
+  goBack,
+  toast,
+}: NoResponseDialogProps) {
+  const [reason, setReason] = useState("");
+
+  const handleSubmit = () => {
+    if (!reason.trim()) return;
+    noResponse(
+      { id: ticketId, rejectionReason: reason.trim() },
+      {
+        onSuccess: () => {
+          onOpenChange(false);
+          setReason("");
+          goBack();
+        },
+      }
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogTrigger asChild>
+        <Button variant="outline" data-testid="button-no-response">
+          <PhoneOff className="w-4 h-4 mr-1.5" />
+          No Response
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <PhoneOff className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+            No Response
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Report that the customer did not respond. This ticket will be sent to admin for review.
+        </p>
+        <Textarea
+          placeholder="Enter reason (e.g. Customer unreachable after 3 call attempts)"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          className="min-h-[80px]"
+          data-testid="input-no-response-reason-detail"
+        />
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => { onOpenChange(false); setReason(""); }}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={!reason.trim() || isPending}
+            data-testid="button-confirm-no-response-detail"
+          >
+            {isPending ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Submitting...
+              </>
+            ) : (
+              "Submit"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface ReopenRejectedDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  ticketId: number;
+  reopenRejectedTicket: (variables: { id: number; reason: string; assignmentMode: "current" | "auto" }, options?: any) => void;
+  isReopening: boolean;
+  toast: ToastFn;
+}
+
+function ReopenRejectedDialog({
+  open,
+  onOpenChange,
+  ticketId,
+  reopenRejectedTicket,
+  isReopening,
+  toast,
+}: ReopenRejectedDialogProps) {
+  const [reason, setReason] = useState("");
+  const [mode, setMode] = useState<"current" | "auto">("current");
+
+  const handleConfirm = () => {
+    if (!reason.trim()) return;
+    reopenRejectedTicket(
+      { id: ticketId, reason: reason.trim(), assignmentMode: mode },
+      {
+        onSuccess: () => {
+          onOpenChange(false);
+          setReason("");
+          setMode("current");
+        },
+      }
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="gap-1.5" data-testid="button-reopen-rejected">
+          <RotateCcw className="w-3.5 h-3.5" />
+          Reopen Ticket
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <RotateCcw className="w-5 h-5" />
+            Reopen Rejected Ticket
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Choose how this rejected ticket should be reopened.
+        </p>
+        <div className="space-y-1.5">
+          <Label className="text-sm">Assignment Mode</Label>
+          <Select value={mode} onValueChange={(value: "current" | "auto") => setMode(value)}>
+            <SelectTrigger data-testid="select-reopen-rejected-mode">
+              <SelectValue placeholder="Choose assignment mode" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="current">Current assignment (keep same team)</SelectItem>
+              <SelectItem value="auto">Auto assignment (open + unassigned)</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            {mode === "current"
+              ? "Ticket will reopen as Assigned with the current technician team."
+              : "Ticket will reopen as Open and unassigned, so technicians can pick it via Get Ticket."}
+          </p>
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-sm">Reason for Reopening</Label>
+          <Textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            placeholder="Why is this rejected ticket being reopened?"
+            className="text-sm"
+            data-testid="input-reopen-rejected-reason"
+          />
+        </div>
+        <DialogFooter>
+          <Button
+            onClick={handleConfirm}
+            disabled={isReopening || !reason.trim()}
+            data-testid="button-confirm-reopen-rejected"
+          >
+            {isReopening ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin mr-1" />
+                Reopening...
+              </>
+            ) : (
+              "Reopen Ticket"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface HelpdeskCloseDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  ticketId: number;
+  closeByHelpdesk: (variables: { id: number; reason: string }, options?: any) => void;
+  isClosing: boolean;
+  goBack: () => void;
+  toast: ToastFn;
+}
+
+function HelpdeskCloseDialog({
+  open,
+  onOpenChange,
+  ticketId,
+  closeByHelpdesk,
+  isClosing,
+  goBack,
+  toast,
+}: HelpdeskCloseDialogProps) {
+  const [reason, setReason] = useState("");
+
+  const handleConfirm = () => {
+    if (!reason.trim()) return;
+    closeByHelpdesk(
+      { id: ticketId, reason: reason.trim() },
+      {
+        onSuccess: () => {
+          onOpenChange(false);
+          setReason("");
+          goBack();
+        },
+      }
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogTrigger asChild>
+        <Button variant="secondary" size="sm" data-testid="button-close-by-helpdesk">
+          <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+          Close Ticket
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+            Close Ticket by Helpdesk
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          Close this ticket with normal bonus calculation. Please provide a reason why helpdesk is closing it.
+        </p>
+        <Textarea
+          placeholder="Enter reason for closing..."
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          data-testid="input-helpdesk-close-reason"
+        />
+        <Button
+          disabled={!reason.trim() || isClosing}
+          data-testid="button-submit-helpdesk-close"
+          onClick={handleConfirm}
+        >
+          {isClosing ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Closing...
+            </>
+          ) : (
+            "Close Ticket"
+          )}
+        </Button>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+interface RejectTicketDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  ticketId: number;
+  rejectTicket: (variables: { id: number; reason: string }, options?: any) => void;
+  isRejecting: boolean;
+  goBack: () => void;
+  toast: ToastFn;
+}
+
+function RejectTicketDialog({
+  open,
+  onOpenChange,
+  ticketId,
+  rejectTicket,
+  isRejecting,
+  goBack,
+  toast,
+}: RejectTicketDialogProps) {
+  const [reason, setReason] = useState("");
+
+  const handleConfirm = () => {
+    if (!reason.trim()) return;
+    rejectTicket(
+      { id: ticketId, reason: reason.trim() },
+      {
+        onSuccess: () => {
+          onOpenChange(false);
+          setReason("");
+          goBack();
+        },
+      }
+    );
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogTrigger asChild>
+        <Button variant="destructive" size="sm" data-testid="button-confirm-reject">
+          Confirm Reject & Close
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <PhoneOff className="w-5 h-5 text-red-600 dark:text-red-400" />
+            Confirm Reject & Close
+          </DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground">
+          This will permanently reject the ticket with zero bonus. Please provide a reason.
+        </p>
+        <Textarea
+          placeholder="Enter rejection reason..."
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          data-testid="input-reject-reason"
+        />
+        <Button
+          variant="destructive"
+          disabled={!reason.trim() || isRejecting}
+          data-testid="button-submit-reject"
+          onClick={handleConfirm}
+        >
+          {isRejecting ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Rejecting...
+            </>
+          ) : (
+            "Confirm Reject"
+          )}
+        </Button>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function TicketDetail() {
   const { id } = useParams();
   const ticketId = Number(id);
@@ -159,7 +1057,7 @@ export default function TicketDetail() {
   const { mutate: reassignTicket, isPending: isReassigning } = useReassignTicket();
   const { mutate: unassignTicket, isPending: isUnassigning } = useUnassignTicket();
   const { mutate: startTicket } = useStartTicket();
-  const { mutate: closeTicket } = useCloseTicket();
+  const { mutate: closeTicket, isPending: isClosing } = useCloseTicket();
   const { mutate: noResponse, isPending: isReportingNoResponse } = useNoResponseTicket();
   const { mutate: rejectTicket, isPending: isRejecting } = useRejectTicket();
   const { mutate: cancelReject, isPending: isCancellingReject } = useCancelReject();
@@ -174,31 +1072,12 @@ export default function TicketDetail() {
 
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
   const [noResponseDialogOpen, setNoResponseDialogOpen] = useState(false);
-  const [noResponseReason, setNoResponseReason] = useState("");
   const [rejectReasonDialogOpen, setRejectReasonDialogOpen] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
   const [helpdeskCloseDialogOpen, setHelpdeskCloseDialogOpen] = useState(false);
-  const [helpdeskCloseReason, setHelpdeskCloseReason] = useState("");
   const [reassignDialogOpen, setReassignDialogOpen] = useState(false);
-  const [reassignTech1, setReassignTech1] = useState<string>("");
-  const [reassignTech2, setReassignTech2] = useState<string>("");
   const [reopenDialogOpen, setReopenDialogOpen] = useState(false);
-  const [reopenReason, setReopenReason] = useState("");
-  const [reopenTech1, setReopenTech1] = useState<string>("");
-  const [reopenTech2, setReopenTech2] = useState<string>("");
   const [reopenRejectedDialogOpen, setReopenRejectedDialogOpen] = useState(false);
-  const [reopenRejectedReason, setReopenRejectedReason] = useState("");
-  const [reopenRejectedMode, setReopenRejectedMode] = useState<"current" | "auto">("current");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
-  const [closeData, setCloseData] = useState({
-    actionDescription: "",
-    speedtestImageUrl: "",
-    proofImageUrls: [] as string[],
-    closedNote: ""
-  });
-
-  const speedtestInputRef = useRef<HTMLInputElement>(null);
-  const proofInputRef = useRef<HTMLInputElement>(null);
 
   const goBack = () => {
     if (user?.role === 'technician') {
@@ -234,66 +1113,12 @@ export default function TicketDetail() {
     );
   }
 
-  const handleSpeedtestUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const result = await uploadFile(file);
-      setCloseData(prev => ({ ...prev, speedtestImageUrl: result.url }));
-    } catch {
-      toast({ title: "Error", description: "Failed to upload speedtest image", variant: "destructive" });
-    }
-    if (speedtestInputRef.current) speedtestInputRef.current.value = "";
-  };
-
-  const handleProofUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    try {
-      const result = await uploadMultiple(Array.from(files));
-      setCloseData(prev => ({ ...prev, proofImageUrls: [...prev.proofImageUrls, ...result.urls] }));
-    } catch {
-      toast({ title: "Error", description: "Failed to upload proof images", variant: "destructive" });
-    }
-    if (proofInputRef.current) proofInputRef.current.value = "";
-  };
-
-  const removeProofImage = (index: number) => {
-    setCloseData(prev => ({
-      ...prev,
-      proofImageUrls: prev.proofImageUrls.filter((_, i) => i !== index)
-    }));
-  };
-
-  const handleClose = () => {
-    closeTicket({
-      id: ticketId,
-      actionDescription: closeData.actionDescription,
-      speedtestImageUrl: closeData.speedtestImageUrl || undefined,
-      proofImageUrls: closeData.proofImageUrls.length > 0 ? closeData.proofImageUrls : undefined,
-      closedNote: closeData.closedNote,
-    }, {
-      onSuccess: () => {
-        setCloseDialogOpen(false);
-        goBack();
-      }
-    });
-  };
-
   const isAssignedToMe = ticket.assignees?.some((a: any) => a.id === user?.id) || ticket.assignee?.id === user?.id;
   const canManage = user?.role === 'admin' || user?.role === 'superadmin' || user?.role === 'helpdesk';
   const descImages: string[] = ticket.descriptionImages || [];
   const hasMapPreview = ticket.customerLocationUrl && extractCoordinates(ticket.customerLocationUrl);
 
   const isHelpdesk = user?.role === "helpdesk";
-
-  useEffect(() => {
-    if (!ticket || !reassignDialogOpen) return;
-    const lead = ticket.assignees?.[0]?.id ? String(ticket.assignees[0].id) : "";
-    const partner = ticket.assignees?.[1]?.id ? String(ticket.assignees[1].id) : "none";
-    setReassignTech1(lead);
-    setReassignTech2(partner);
-  }, [ticket, reassignDialogOpen]);
 
   return (
     <div className="container mx-auto p-4 lg:p-6 max-w-4xl space-y-5">
@@ -493,91 +1318,16 @@ export default function TicketDetail() {
                 )}
                 {canManage && (
                   <div className="pt-2">
-                    <Dialog open={reopenDialogOpen} onOpenChange={(open) => {
-                      setReopenDialogOpen(open);
-                      if (open) {
-                        const assignees = ticket.assignees || (ticket.assignee ? [ticket.assignee] : []);
-                        setReopenTech1(assignees[0] ? String(assignees[0].id) : "");
-                        setReopenTech2(assignees[1] ? String(assignees[1].id) : "");
-                        setReopenReason("");
-                      } else {
-                        setReopenReason(""); setReopenTech1(""); setReopenTech2("");
-                      }
-                    }}>
-                      <DialogTrigger asChild>
-                        <Button variant="outline" size="sm" className="gap-1.5" data-testid="button-reopen-ticket">
-                          <RotateCcw className="w-3.5 h-3.5" />
-                          Reopen & Reassign
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-sm">
-                        <DialogHeader>
-                          <DialogTitle>Reopen Ticket</DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-3">
-                          <div className="space-y-1.5">
-                            <Label className="text-sm">Reason for Reopening</Label>
-                            <Textarea
-                              value={reopenReason}
-                              onChange={(e) => setReopenReason(e.target.value)}
-                              placeholder="Why is this ticket being reopened?"
-                              className="text-sm"
-                              data-testid="input-reopen-reason"
-                            />
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label className="text-sm">Lead Technician</Label>
-                            <Select value={reopenTech1} onValueChange={setReopenTech1}>
-                              <SelectTrigger className="capitalize" data-testid="select-reopen-tech1">
-                                <SelectValue placeholder="Select technician..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {technicians?.filter((t: any) => t.role === 'technician').map((tech: any) => (
-                                  <SelectItem key={tech.id} value={String(tech.id)} disabled={String(tech.id) === reopenTech2}>
-                                    {tech.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label className="text-sm">Partner (Optional)</Label>
-                            <Select value={reopenTech2} onValueChange={setReopenTech2}>
-                              <SelectTrigger className="capitalize" data-testid="select-reopen-tech2">
-                                <SelectValue placeholder="Select partner..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">No partner</SelectItem>
-                                {technicians?.filter((t: any) => t.role === 'technician').map((tech: any) => (
-                                  <SelectItem key={tech.id} value={String(tech.id)} disabled={String(tech.id) === reopenTech1}>
-                                    {tech.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                        <DialogFooter>
-                          <Button
-                            onClick={() => {
-                              if (!reopenReason.trim()) return toast({ title: "Error", description: "Please provide a reason", variant: "destructive" });
-                              if (!reopenTech1) return toast({ title: "Error", description: "Please select a technician", variant: "destructive" });
-                              const techIds = [Number(reopenTech1)];
-                              if (reopenTech2 && reopenTech2 !== "none") techIds.push(Number(reopenTech2));
-                              reopenTicket({ id: ticketId, reason: reopenReason.trim(), technicianIds: techIds });
-                              setReopenDialogOpen(false);
-                              setReopenReason("");
-                              setReopenTech1("");
-                              setReopenTech2("");
-                            }}
-                            disabled={isReopening || !reopenReason.trim() || !reopenTech1}
-                            data-testid="button-confirm-reopen"
-                          >
-                            {isReopening ? <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Reopening...</> : "Reopen Ticket"}
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
+                    <ReopenTicketDialog
+                      open={reopenDialogOpen}
+                      onOpenChange={setReopenDialogOpen}
+                      ticket={ticket}
+                      technicians={technicians}
+                      toast={toast}
+                      ticketId={ticketId}
+                      reopenTicket={reopenTicket}
+                      isReopening={isReopening}
+                    />
                   </div>
                 )}
               </CardContent>
@@ -596,46 +1346,15 @@ export default function TicketDetail() {
                 <p className="text-sm text-muted-foreground whitespace-pre-line">{ticket.rejectionReason}</p>
                 {canManage && ticket.status === 'pending_rejection' && (
                   <div className="flex flex-wrap gap-2 pt-1">
-                    <Dialog open={rejectReasonDialogOpen} onOpenChange={setRejectReasonDialogOpen}>
-                      <DialogTrigger asChild>
-                        <Button variant="destructive" size="sm" data-testid="button-confirm-reject">
-                          Confirm Reject & Close
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-sm">
-                        <DialogHeader>
-                          <DialogTitle className="flex items-center gap-2">
-                            <PhoneOff className="w-5 h-5 text-red-600 dark:text-red-400" />
-                            Confirm Reject & Close
-                          </DialogTitle>
-                        </DialogHeader>
-                        <p className="text-sm text-muted-foreground">
-                          This will permanently reject the ticket with zero bonus. Please provide a reason.
-                        </p>
-                        <Textarea
-                          placeholder="Enter rejection reason..."
-                          value={rejectReason}
-                          onChange={(e) => setRejectReason(e.target.value)}
-                          data-testid="input-reject-reason"
-                        />
-                        <Button
-                          variant="destructive"
-                          disabled={!rejectReason.trim() || isRejecting}
-                          data-testid="button-submit-reject"
-                          onClick={() => {
-                            rejectTicket({ id: ticketId, reason: rejectReason.trim() }, {
-                              onSuccess: () => {
-                                setRejectReasonDialogOpen(false);
-                                setRejectReason("");
-                                goBack();
-                              }
-                            });
-                          }}
-                        >
-                          {isRejecting ? <><Loader2 className="w-4 h-4 animate-spin" /> Rejecting...</> : "Confirm Reject"}
-                        </Button>
-                      </DialogContent>
-                    </Dialog>
+                    <RejectTicketDialog
+                      open={rejectReasonDialogOpen}
+                      onOpenChange={setRejectReasonDialogOpen}
+                      ticketId={ticketId}
+                      rejectTicket={rejectTicket}
+                      isRejecting={isRejecting}
+                      goBack={goBack}
+                      toast={toast}
+                    />
 
                     <Button
                       variant="outline"
@@ -647,120 +1366,27 @@ export default function TicketDetail() {
                       {isCancellingReject ? <><Loader2 className="w-4 h-4 animate-spin" /> Reopening...</> : <><RefreshCw className="w-3.5 h-3.5 mr-1" /> Cancel Reject (Reopen)</>}
                     </Button>
 
-                    <Dialog open={helpdeskCloseDialogOpen} onOpenChange={setHelpdeskCloseDialogOpen}>
-                      <DialogTrigger asChild>
-                        <Button variant="secondary" size="sm" data-testid="button-close-by-helpdesk">
-                          <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
-                          Close Ticket
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-sm">
-                        <DialogHeader>
-                          <DialogTitle className="flex items-center gap-2">
-                            <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                            Close Ticket by Helpdesk
-                          </DialogTitle>
-                        </DialogHeader>
-                        <p className="text-sm text-muted-foreground">
-                          Close this ticket with normal bonus calculation. Please provide a reason why helpdesk is closing it.
-                        </p>
-                        <Textarea
-                          placeholder="Enter reason for closing..."
-                          value={helpdeskCloseReason}
-                          onChange={(e) => setHelpdeskCloseReason(e.target.value)}
-                          data-testid="input-helpdesk-close-reason"
-                        />
-                        <Button
-                          disabled={!helpdeskCloseReason.trim() || isClosingByHelpdesk}
-                          data-testid="button-submit-helpdesk-close"
-                          onClick={() => {
-                            closeByHelpdesk({ id: ticketId, reason: helpdeskCloseReason.trim() }, {
-                              onSuccess: () => {
-                                setHelpdeskCloseDialogOpen(false);
-                                setHelpdeskCloseReason("");
-                                goBack();
-                              }
-                            });
-                          }}
-                        >
-                          {isClosingByHelpdesk ? <><Loader2 className="w-4 h-4 animate-spin" /> Closing...</> : "Close Ticket"}
-                        </Button>
-                      </DialogContent>
-                    </Dialog>
+                    <HelpdeskCloseDialog
+                      open={helpdeskCloseDialogOpen}
+                      onOpenChange={setHelpdeskCloseDialogOpen}
+                      ticketId={ticketId}
+                      closeByHelpdesk={closeByHelpdesk}
+                      isClosing={isClosingByHelpdesk}
+                      goBack={goBack}
+                      toast={toast}
+                    />
                   </div>
                 )}
                 {canManage && ticket.status === 'rejected' && (
                   <div className="pt-2">
-                    <Dialog open={reopenRejectedDialogOpen} onOpenChange={(open) => {
-                      setReopenRejectedDialogOpen(open);
-                      if (!open) {
-                        setReopenRejectedReason("");
-                        setReopenRejectedMode("current");
-                      }
-                    }}>
-                      <DialogTrigger asChild>
-                        <Button variant="outline" size="sm" className="gap-1.5" data-testid="button-reopen-rejected">
-                          <RotateCcw className="w-3.5 h-3.5" />
-                          Reopen Ticket
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-sm">
-                        <DialogHeader>
-                          <DialogTitle className="flex items-center gap-2">
-                            <RotateCcw className="w-5 h-5" />
-                            Reopen Rejected Ticket
-                          </DialogTitle>
-                        </DialogHeader>
-                        <p className="text-sm text-muted-foreground">
-                          Choose how this rejected ticket should be reopened.
-                        </p>
-                        <div className="space-y-1.5">
-                          <Label className="text-sm">Assignment Mode</Label>
-                          <Select value={reopenRejectedMode} onValueChange={(v: "current" | "auto") => setReopenRejectedMode(v)}>
-                            <SelectTrigger data-testid="select-reopen-rejected-mode">
-                              <SelectValue placeholder="Choose assignment mode" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="current">Current assignment (keep same team)</SelectItem>
-                              <SelectItem value="auto">Auto assignment (open + unassigned)</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <p className="text-xs text-muted-foreground">
-                            {reopenRejectedMode === "current"
-                              ? "Ticket will reopen as Assigned with the current technician team."
-                              : "Ticket will reopen as Open and unassigned, so technicians can pick it via Get Ticket."}
-                          </p>
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-sm">Reason for Reopening</Label>
-                          <Textarea
-                            value={reopenRejectedReason}
-                            onChange={(e) => setReopenRejectedReason(e.target.value)}
-                            placeholder="Why is this rejected ticket being reopened?"
-                            className="text-sm"
-                            data-testid="input-reopen-rejected-reason"
-                          />
-                        </div>
-                        <DialogFooter>
-                          <Button
-                            onClick={() => {
-                              if (!reopenRejectedReason.trim()) return toast({ title: "Error", description: "Please provide a reason", variant: "destructive" });
-                              reopenRejectedTicket({ id: ticketId, reason: reopenRejectedReason.trim(), assignmentMode: reopenRejectedMode }, {
-                                onSuccess: () => {
-                                  setReopenRejectedDialogOpen(false);
-                                  setReopenRejectedReason("");
-                                  setReopenRejectedMode("current");
-                                }
-                              });
-                            }}
-                            disabled={isReopeningRejected || !reopenRejectedReason.trim()}
-                            data-testid="button-confirm-reopen-rejected"
-                          >
-                            {isReopeningRejected ? <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Reopening...</> : "Reopen Ticket"}
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
+                    <ReopenRejectedDialog
+                      open={reopenRejectedDialogOpen}
+                      onOpenChange={setReopenRejectedDialogOpen}
+                      ticketId={ticketId}
+                      reopenRejectedTicket={reopenRejectedTicket}
+                      isReopening={isReopeningRejected}
+                      toast={toast}
+                    />
                   </div>
                 )}
               </CardContent>
@@ -775,173 +1401,30 @@ export default function TicketDetail() {
                 </Button>
               )}
 
-              <Dialog open={noResponseDialogOpen} onOpenChange={setNoResponseDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button variant="outline" data-testid="button-no-response">
-                    <PhoneOff className="w-4 h-4 mr-1.5" />
-                    No Response
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-sm">
-                  <DialogHeader>
-                    <DialogTitle className="flex items-center gap-2">
-                      <PhoneOff className="w-5 h-5 text-orange-600 dark:text-orange-400" />
-                      No Response
-                    </DialogTitle>
-                  </DialogHeader>
-                  <p className="text-sm text-muted-foreground">Report that the customer did not respond. This ticket will be sent to admin for review.</p>
-                  <Textarea
-                    placeholder="Enter reason (e.g. Customer unreachable after 3 call attempts)"
-                    value={noResponseReason}
-                    onChange={(e) => setNoResponseReason(e.target.value)}
-                    className="min-h-[80px]"
-                    data-testid="input-no-response-reason-detail"
-                  />
-                  <DialogFooter className="gap-2">
-                    <Button variant="outline" onClick={() => { setNoResponseDialogOpen(false); setNoResponseReason(""); }}>Cancel</Button>
-                    <Button
-                      onClick={() => {
-                        if (!noResponseReason.trim()) return;
-                        noResponse({ id: ticketId, rejectionReason: noResponseReason.trim() }, {
-                          onSuccess: () => { setNoResponseDialogOpen(false); setNoResponseReason(""); goBack(); },
-                        });
-                      }}
-                      disabled={!noResponseReason.trim() || isReportingNoResponse}
-                      data-testid="button-confirm-no-response-detail"
-                    >
-                      {isReportingNoResponse ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : "Submit"}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
+              <NoResponseDialog
+                open={noResponseDialogOpen}
+                onOpenChange={setNoResponseDialogOpen}
+                ticketId={ticketId}
+                noResponse={noResponse}
+                isPending={isReportingNoResponse}
+                goBack={goBack}
+                toast={toast}
+              />
 
               {ticket.status === 'in_progress' && (
-                <Dialog open={closeDialogOpen} onOpenChange={setCloseDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button data-testid="button-complete-close">
-                      Complete & Close
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="max-w-md">
-                    <DialogHeader>
-                      <DialogTitle>Close Ticket</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4 py-2">
-                      <div className="space-y-1.5">
-                        <Label>Action Taken</Label>
-                        <Textarea
-                          placeholder="What did you do to resolve this?"
-                          value={closeData.actionDescription}
-                          onChange={e => setCloseData({...closeData, actionDescription: e.target.value})}
-                          data-testid="textarea-action"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>Speedtest Screenshot</Label>
-                        <input
-                          ref={speedtestInputRef}
-                          type="file"
-                          accept="image/*"
-                          onChange={handleSpeedtestUpload}
-                          className="hidden"
-                          data-testid="input-speedtest-file"
-                        />
-                        {closeData.speedtestImageUrl ? (
-                          <div className="relative rounded-md overflow-visible border border-border">
-                            <img
-                              src={closeData.speedtestImageUrl}
-                              alt="Speedtest"
-                              className="w-full h-32 object-cover rounded-md"
-                            />
-                            <Button
-                              variant="secondary"
-                              size="icon"
-                              className="absolute top-1 right-1 h-6 w-6"
-                              onClick={() => setCloseData(prev => ({ ...prev, speedtestImageUrl: "" }))}
-                              data-testid="button-remove-speedtest"
-                            >
-                              <X className="w-3 h-3" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <Button
-                            variant="outline"
-                            className="w-full gap-2"
-                            onClick={() => speedtestInputRef.current?.click()}
-                            disabled={isUploadingFile}
-                            data-testid="button-upload-speedtest"
-                          >
-                            {isUploadingFile ? (
-                              <><Loader2 className="w-4 h-4 animate-spin" /> Uploading...</>
-                            ) : (
-                              <><Camera className="w-4 h-4" /> Upload Speedtest Screenshot</>
-                            )}
-                          </Button>
-                        )}
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>Proof Images</Label>
-                        <input
-                          ref={proofInputRef}
-                          type="file"
-                          accept="image/*"
-                          multiple
-                          onChange={handleProofUpload}
-                          className="hidden"
-                          data-testid="input-proof-files"
-                        />
-                        {closeData.proofImageUrls.length > 0 && (
-                          <div className="grid grid-cols-3 gap-2">
-                            {closeData.proofImageUrls.map((url, i) => (
-                              <div key={i} className="relative rounded-md overflow-visible border border-border">
-                                <img
-                                  src={url}
-                                  alt={`Proof ${i + 1}`}
-                                  className="w-full h-20 object-cover rounded-md"
-                                />
-                                <Button
-                                  variant="secondary"
-                                  size="icon"
-                                  className="absolute top-0.5 right-0.5 h-5 w-5"
-                                  onClick={() => removeProofImage(i)}
-                                  data-testid={`button-remove-proof-${i}`}
-                                >
-                                  <X className="w-3 h-3" />
-                                </Button>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                        <Button
-                          variant="outline"
-                          className="w-full gap-2"
-                          onClick={() => proofInputRef.current?.click()}
-                          disabled={isUploadingMultiple}
-                          data-testid="button-upload-proof"
-                        >
-                          {isUploadingMultiple ? (
-                            <><Loader2 className="w-4 h-4 animate-spin" /> Uploading...</>
-                          ) : (
-                            <><Upload className="w-4 h-4" /> Upload Proof Images</>
-                          )}
-                        </Button>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label>Closing Notes</Label>
-                        <Textarea
-                          placeholder="Any additional notes..."
-                          value={closeData.closedNote}
-                          onChange={e => setCloseData({...closeData, closedNote: e.target.value})}
-                          data-testid="textarea-notes"
-                        />
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button variant="outline" onClick={() => setCloseDialogOpen(false)}>Cancel</Button>
-                      <Button onClick={handleClose} data-testid="button-submit-close">Submit</Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
+            <CloseTicketDialog
+              open={closeDialogOpen}
+              onOpenChange={setCloseDialogOpen}
+              ticketId={ticketId}
+              closeTicket={closeTicket}
+              isClosing={isClosing}
+              uploadFile={uploadFile}
+              isUploadingFile={isUploadingFile}
+              uploadMultiple={uploadMultiple}
+              isUploadingMultiple={isUploadingMultiple}
+              goBack={goBack}
+              toast={toast}
+            />
               )}
             </div>
           )}
@@ -1080,84 +1563,17 @@ export default function TicketDetail() {
                     </div>
                   )}
                   {canManage && !['closed', 'rejected'].includes(ticket.status) && (
-                    <Dialog open={reassignDialogOpen} onOpenChange={(open) => {
-                      setReassignDialogOpen(open);
-                    }}>
-                      <DialogTrigger asChild>
-                        <Button variant="outline" size="sm" data-testid="button-reassign">
-                          <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
-                          Reassign
-                        </Button>
-                      </DialogTrigger>
-                      <DialogContent>
-                        <DialogHeader>
-                          <DialogTitle>Reassign Ticket</DialogTitle>
-                        </DialogHeader>
-                        <div className="space-y-4 py-2">
-                          <p className="text-sm text-muted-foreground">
-                            Select new technician(s) to replace the current assignment. This will remove all existing assignees.
-                          </p>
-                          <div className="space-y-2">
-                            <Label>Lead Technician *</Label>
-                            <Select value={reassignTech1} onValueChange={setReassignTech1} disabled={isHelpdesk}>
-                              <SelectTrigger data-testid="select-reassign-tech1">
-                                <SelectValue placeholder="Select lead technician..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {technicians?.filter((t: any) => t.role === 'technician')
-                                  .filter((t: any) => user?.role === 'helpdesk' ? (t.isBackboneSpecialist || t.isVendorSpecialist) : true)
-                                  .map((tech: any) => (
-                                  <SelectItem key={tech.id} value={String(tech.id)} disabled={String(tech.id) === reassignTech2 || (isHelpdesk && String(tech.id) !== reassignTech1)}>
-                                    {toCapName(tech.name)}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            {isHelpdesk && (
-                              <p className="text-xs text-muted-foreground">Lead technician is locked for helpdesk. You can only change partner.</p>
-                            )}
-                          </div>
-                          <div className="space-y-2">
-                            <Label>Partner (optional)</Label>
-                            <Select value={reassignTech2} onValueChange={setReassignTech2}>
-                              <SelectTrigger data-testid="select-reassign-tech2">
-                                <SelectValue placeholder="Select partner..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">No partner</SelectItem>
-                                {technicians?.filter((t: any) => t.role === 'technician')
-                                  .filter((t: any) => user?.role === 'helpdesk' ? (t.isBackboneSpecialist || t.isVendorSpecialist) : true)
-                                  .map((tech: any) => (
-                                  <SelectItem key={tech.id} value={String(tech.id)} disabled={String(tech.id) === reassignTech1}>
-                                    {toCapName(tech.name)}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        </div>
-                        <DialogFooter>
-                          <Button variant="outline" onClick={() => setReassignDialogOpen(false)}>Cancel</Button>
-                          <Button
-                            disabled={!reassignTech1 || isReassigning}
-                            data-testid="button-confirm-reassign"
-                            onClick={() => {
-                              const ids = [Number(reassignTech1)];
-                              if (reassignTech2 && reassignTech2 !== "none") ids.push(Number(reassignTech2));
-                              reassignTicket({ id: ticketId, technicianIds: ids }, {
-                                onSuccess: () => {
-                                  setReassignDialogOpen(false);
-                                  setReassignTech1("");
-                                  setReassignTech2("");
-                                }
-                              });
-                            }}
-                          >
-                            {isReassigning ? <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Reassigning...</> : "Confirm Reassign"}
-                          </Button>
-                        </DialogFooter>
-                      </DialogContent>
-                    </Dialog>
+                    <ReassignTicketDialog
+                      open={reassignDialogOpen}
+                      onOpenChange={setReassignDialogOpen}
+                      ticketId={ticketId}
+                      ticket={ticket}
+                      technicians={technicians}
+                      userRole={user?.role}
+                      reassignTicket={reassignTicket}
+                      isReassigning={isReassigning}
+                      toast={toast}
+                    />
                   )}
                   {(user?.role === 'superadmin' || user?.role === 'admin') && !['closed', 'rejected'].includes(ticket.status) && (
                     <Button
@@ -1230,11 +1646,7 @@ export default function TicketDetail() {
       </div>
 
       {imagePreview && (
-        <Dialog open={!!imagePreview} onOpenChange={() => setImagePreview(null)}>
-          <DialogContent className="max-w-2xl p-2">
-            <img src={imagePreview} alt="Preview" className="w-full rounded-md" />
-          </DialogContent>
-        </Dialog>
+        <ImagePreviewDialog imagePreview={imagePreview} onClose={() => setImagePreview(null)} />
       )}
     </div>
   );
