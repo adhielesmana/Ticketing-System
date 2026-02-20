@@ -106,40 +106,6 @@ ensure_cmd_or_pkg() {
   command -v "$cmd" >/dev/null 2>&1 || ensure_package "$pkg"
 }
 
-ensure_runtime_dependencies() {
-  local missing=0
-
-  if ! command -v docker >/dev/null 2>&1; then
-    missing=1
-  fi
-  if ! command -v nginx >/dev/null 2>&1; then
-    missing=1
-  fi
-  if ! command -v certbot >/dev/null 2>&1; then
-    missing=1
-  fi
-  if ! dpkg -s python3-certbot-nginx >/dev/null 2>&1; then
-    missing=1
-  fi
-
-  if [ "$missing" -eq 0 ]; then
-    log_info "docker, nginx, and certbot are already installed; skipping package install."
-    return
-  fi
-
-  export DEBIAN_FRONTEND=noninteractive
-  apt-get update -y
-  ensure_package ca-certificates
-  ensure_package curl
-  ensure_package openssl
-  ensure_cmd_or_pkg docker docker.io
-  ensure_cmd_or_pkg nginx nginx
-  ensure_cmd_or_pkg certbot certbot
-  if ! dpkg -s python3-certbot-nginx >/dev/null 2>&1; then
-    apt-get install -y python3-certbot-nginx
-  fi
-}
-
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
@@ -211,7 +177,17 @@ echo ""
 
 # STEP 1: host dependencies
 step_start 1 "Install/verify host dependencies"
-ensure_runtime_dependencies
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -y
+ensure_package ca-certificates
+ensure_package curl
+ensure_package openssl
+ensure_cmd_or_pkg docker docker.io
+ensure_cmd_or_pkg nginx nginx
+ensure_cmd_or_pkg certbot certbot
+if ! dpkg -s python3-certbot-nginx >/dev/null 2>&1; then
+  apt-get install -y python3-certbot-nginx
+fi
 systemctl enable --now docker >/dev/null 2>&1 || true
 systemctl enable --now nginx >/dev/null 2>&1 || true
 step_done 1 "Install/verify host dependencies"
