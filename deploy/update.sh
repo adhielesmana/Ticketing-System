@@ -1,13 +1,13 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 #====================================================================
 # NetGuard ISP - Update Script (Single Container)
-# Version: 6
-# Rebuilds Docker image and restarts the single container
+# Version: 7
+# Rebuilds image, restarts container, and refreshes nginx/ssl config
 #====================================================================
 
-UPDATE_VERSION="6"
+UPDATE_VERSION="7"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -22,176 +22,328 @@ log_ok()    { echo -e "${GREEN}[OK]${NC} $1"; }
 log_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_err()   { echo -e "${RED}[ERROR]${NC} $1"; }
 
-TOTAL_STEPS=5
+TOTAL_STEPS=7
 CHECKLIST_RESULTS=()
 
 step_start() {
-    local step_num=$1
-    local step_name=$2
-    echo ""
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${WHITE_BOLD}  STEP ${step_num}/${TOTAL_STEPS}: ${step_name}${NC}"
-    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  local step_num=$1
+  local step_name=$2
+  echo ""
+  echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+  echo -e "${WHITE_BOLD}  STEP ${step_num}/${TOTAL_STEPS}: ${step_name}${NC}"
+  echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 }
 
 step_done() {
-    local step_num=$1
-    local step_name=$2
-    CHECKLIST_RESULTS+=("${GREEN}[PASS]${NC} Step ${step_num}: ${step_name}")
-    echo -e "${GREEN}>>> STEP ${step_num} COMPLETE: ${step_name}${NC}"
+  local step_num=$1
+  local step_name=$2
+  CHECKLIST_RESULTS+=("${GREEN}[PASS]${NC} Step ${step_num}: ${step_name}")
+  echo -e "${GREEN}>>> STEP ${step_num} COMPLETE: ${step_name}${NC}"
 }
 
 print_checklist() {
-    echo ""
-    echo -e "${WHITE_BOLD}=============================================="
-    echo -e "  UPDATE CHECKLIST SUMMARY (v${UPDATE_VERSION})"
-    echo -e "==============================================${NC}"
-    for result in "${CHECKLIST_RESULTS[@]}"; do
-        echo -e "  $result"
-    done
-    echo -e "${WHITE_BOLD}==============================================${NC}"
-    echo ""
+  echo ""
+  echo -e "${WHITE_BOLD}=============================================="
+  echo -e "  UPDATE CHECKLIST SUMMARY (v${UPDATE_VERSION})"
+  echo -e "==============================================${NC}"
+  for result in "${CHECKLIST_RESULTS[@]}"; do
+    echo -e "  $result"
+  done
+  echo -e "${WHITE_BOLD}==============================================${NC}"
+  echo ""
+}
+
+require_root() {
+  if [ "$(id -u)" -ne 0 ]; then
+    log_err "Please run as root (or sudo)."
+    exit 1
+  fi
+}
+
+load_env_file() {
+  local file="$1"
+  [ -f "$file" ] || return 0
+  while IFS='=' read -r key value; do
+    [[ -z "$key" || "$key" =~ ^# ]] && continue
+    key="${key// /}"
+    value="${value%$'\r'}"
+    case "$key" in
+      DOMAIN|APP_NAME|APP_PORT|APP_CONTAINER|DB_NAME|DB_USER|PGDATA_VOLUME|UPLOADS_VOLUME|INSTALL_DIR|SESSION_SECRET)
+        eval "$key=\"$value\""
+        ;;
+    esac
+  done < "$file"
+}
+
+get_all_used_ports() {
+  local sys_ports docker_ports
+  sys_ports=$(ss -tlnH 2>/dev/null | awk '{print $4}' | grep -oE '[0-9]+$' | sort -un || true)
+  docker_ports=$(docker ps --format '{{.Ports}}' 2>/dev/null | tr ',' '\n' | grep -oE ':[0-9]+->' | tr -d ':->' | sort -un || true)
+  printf '%s\n%s\n' "$sys_ports" "$docker_ports" | awk 'NF' | sort -un
+}
+
+find_free_port() {
+  local port="$1"
+  local used_ports="$2"
+  while echo "$used_ports" | grep -qx "$port"; do
+    port=$((port + 1))
+  done
+  echo "$port"
+}
+
+is_placeholder_domain() {
+  echo "$1" | grep -qE '(yourdomain\.com|localhost|\.local$)'
+}
+
+ensure_cmd_or_pkg() {
+  local cmd="$1"
+  local pkg="$2"
+  command -v "$cmd" >/dev/null 2>&1 || apt-get install -y "$pkg"
+}
+
+
+ensure_runtime_dependencies() {
+  local missing=0
+
+  if ! command -v docker >/dev/null 2>&1; then
+    missing=1
+  fi
+  if ! command -v nginx >/dev/null 2>&1; then
+    missing=1
+  fi
+  if ! command -v certbot >/dev/null 2>&1; then
+    missing=1
+  fi
+  if ! dpkg -s python3-certbot-nginx >/dev/null 2>&1; then
+    missing=1
+  fi
+
+  if [ "$missing" -eq 0 ]; then
+    log_info "docker, nginx, and certbot are already installed; skipping package install."
+    return
+  fi
+
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -y
+  ensure_cmd_or_pkg docker docker.io
+  ensure_cmd_or_pkg nginx nginx
+  ensure_cmd_or_pkg certbot certbot
+  if ! dpkg -s python3-certbot-nginx >/dev/null 2>&1; then
+    apt-get install -y python3-certbot-nginx
+  fi
 }
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
+CLI_DOMAIN=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --domain)
+      CLI_DOMAIN="${2:-}"; shift 2 ;;
+    *)
+      log_err "Unknown argument: $1"; exit 1 ;;
+  esac
+done
+
 INSTALL_DIR="${INSTALL_DIR:-/opt/netguard}"
-
-DEPLOY_INFO="${INSTALL_DIR}/.deploy-info"
-if [ -f "$DEPLOY_INFO" ]; then
-    eval "$(grep -v 'DEPLOYED_AT' "$DEPLOY_INFO")"
-fi
-
 APP_NAME="${APP_NAME:-netguard}"
 APP_CONTAINER="${APP_CONTAINER:-netguard_app}"
 APP_PORT="${APP_PORT:-3100}"
 PGDATA_VOLUME="${PGDATA_VOLUME:-netguard_pgdata}"
 UPLOADS_VOLUME="${UPLOADS_VOLUME:-netguard_uploads}"
-
 DB_NAME="m4xnetPlus"
 DB_USER="m4xnetPlus"
 DB_PASS='m4xnetPlus2026!'
+DOMAIN=""
+SSL_EMAIL="${SSL_EMAIL:-admin@yourdomain.com}"
 
-if [ -f "${INSTALL_DIR}/.credentials" ]; then
-    eval "$(grep -E '^SESSION_SECRET=' "${INSTALL_DIR}/.credentials")"
-fi
+DEPLOY_INFO="${INSTALL_DIR}/.deploy-info"
+CREDENTIALS_FILE="${INSTALL_DIR}/.credentials"
+
+load_env_file "$DEPLOY_INFO"
+load_env_file "$CREDENTIALS_FILE"
 SESSION_SECRET="${SESSION_SECRET:-$(openssl rand -hex 32)}"
+
+if [ -n "$CLI_DOMAIN" ]; then
+  DOMAIN="$CLI_DOMAIN"
+fi
+
+if [ -z "${DOMAIN:-}" ]; then
+  log_err "Domain not found. Run deploy.sh first or pass --domain example.com"
+  exit 1
+fi
+
+require_root
 
 echo ""
 echo "=============================================="
 echo "  NetGuard ISP - Update"
 echo "  Version: ${UPDATE_VERSION} (Single Container)"
-if [ -n "$DEPLOY_VERSION" ]; then
-    echo "  Last deploy: v${DEPLOY_VERSION}"
-fi
 echo "=============================================="
 echo ""
+log_info "Domain:        $DOMAIN"
+log_info "App Port:      $APP_PORT"
+log_info "Install Dir:   $INSTALL_DIR"
 
-#====================================================================
-# STEP 1: Copy updated source files
-#====================================================================
-step_start 1 "Copy updated source files"
-log_info "Copying updated files to ${INSTALL_DIR}..."
+echo ""
+
+# STEP 1: ensure dependencies
+step_start 1 "Install/verify host dependencies"
+ensure_runtime_dependencies
+systemctl enable --now docker >/dev/null 2>&1 || true
+systemctl enable --now nginx >/dev/null 2>&1 || true
+step_done 1 "Install/verify host dependencies"
+
+# STEP 2: copy source
+step_start 2 "Copy updated source files"
 cp -a "$PROJECT_DIR/." "$INSTALL_DIR/" 2>/dev/null || true
 rm -rf "$INSTALL_DIR/node_modules" "$INSTALL_DIR/.git"
 cp "$SCRIPT_DIR/Dockerfile" "$INSTALL_DIR/Dockerfile"
 cp "$SCRIPT_DIR/entrypoint.sh" "$INSTALL_DIR/deploy/entrypoint.sh"
-log_ok "Source files copied"
-step_done 1 "Copy updated source files"
+step_done 2 "Copy updated source files"
 
-#====================================================================
-# STEP 2: Build Docker image
-#====================================================================
-step_start 2 "Build Docker image"
+# STEP 3: build image
+step_start 3 "Build Docker image"
 cd "$INSTALL_DIR"
-log_info "Rebuilding Docker image '${APP_NAME}'..."
 docker build -t "$APP_NAME" . 2>&1 | tail -20
-log_ok "Docker image rebuilt"
-step_done 2 "Build Docker image"
+step_done 3 "Build Docker image"
 
-#====================================================================
-# STEP 3: Restart container
-#====================================================================
-step_start 3 "Restart container"
-log_info "Stopping old container..."
-docker stop "$APP_CONTAINER" 2>/dev/null || true
-docker rm "$APP_CONTAINER" 2>/dev/null || true
+# STEP 4: restart container (with conflict-safe port)
+step_start 4 "Restart container"
+docker stop "$APP_CONTAINER" >/dev/null 2>&1 || true
+docker rm "$APP_CONTAINER" >/dev/null 2>&1 || true
 
-log_info "Starting updated container..."
+USED_PORTS=$(get_all_used_ports)
+ORIGINAL_PORT="$APP_PORT"
+APP_PORT=$(find_free_port "$APP_PORT" "$USED_PORTS")
+if [ "$APP_PORT" != "$ORIGINAL_PORT" ]; then
+  log_warn "Port ${ORIGINAL_PORT} is occupied. Using ${APP_PORT}."
+fi
+
 docker run -d \
-    --name "$APP_CONTAINER" \
-    --restart unless-stopped \
-    -e DB_USER="$DB_USER" \
-    -e DB_NAME="$DB_NAME" \
-    -e DB_PASS="$DB_PASS" \
-    -e SESSION_SECRET="$SESSION_SECRET" \
-    -e RUN_MIGRATIONS=true \
-    -e NODE_ENV=production \
-    -e TZ=Asia/Jakarta \
-    -p "127.0.0.1:${APP_PORT}:3000" \
-    -v "${PGDATA_VOLUME}:/var/lib/postgresql/data" \
-    -v "${UPLOADS_VOLUME}:/app/uploads" \
-    "$APP_NAME"
+  --name "$APP_CONTAINER" \
+  --restart unless-stopped \
+  -e DB_USER="$DB_USER" \
+  -e DB_NAME="$DB_NAME" \
+  -e DB_PASS="$DB_PASS" \
+  -e SESSION_SECRET="$SESSION_SECRET" \
+  -e RUN_MIGRATIONS=true \
+  -e NODE_ENV=production \
+  -e TZ=Asia/Jakarta \
+  -p "127.0.0.1:${APP_PORT}:3000" \
+  -v "${PGDATA_VOLUME}:/var/lib/postgresql/data" \
+  -v "${UPLOADS_VOLUME}:/app/uploads" \
+  "$APP_NAME" >/dev/null
 
 sleep 5
-if docker ps --format '{{.Names}}' | grep -qw "$APP_CONTAINER"; then
-    log_ok "Container started"
-else
-    log_err "Container failed to start."
-    docker logs "$APP_CONTAINER" --tail 30
-    exit 1
-fi
-step_done 3 "Restart container"
+docker ps --format '{{.Names}}' | grep -qw "$APP_CONTAINER" || { log_err "Container failed to start"; docker logs "$APP_CONTAINER" --tail 30; exit 1; }
+step_done 4 "Restart container"
 
-#====================================================================
-# STEP 4: Verify app is running
-#====================================================================
-step_start 4 "Verify app is running"
-
-log_info "Waiting for app to be ready..."
+# STEP 5: verify app
+step_start 5 "Verify app is running"
 retries=0
 while [ $retries -lt 30 ]; do
-    if docker logs "$APP_CONTAINER" 2>&1 | grep -q "Schema push complete\|listening on\|server started"; then
-        break
-    fi
-    retries=$((retries + 1))
-    sleep 2
+  if docker logs "$APP_CONTAINER" 2>&1 | grep -q "Schema push complete\|listening on\|server started\|serving on port"; then
+    break
+  fi
+  retries=$((retries + 1))
+  sleep 2
 done
-
 if [ $retries -ge 30 ]; then
-    log_warn "App may still be starting. Check: docker logs ${APP_CONTAINER}"
+  log_warn "App may still be starting. Check: docker logs ${APP_CONTAINER}"
 else
-    log_ok "App is ready"
+  log_ok "App is ready"
+fi
+step_done 5 "Verify app is running"
+
+# STEP 6: refresh nginx + ssl
+step_start 6 "Update Nginx and SSL"
+avail_file="/etc/nginx/sites-available/${APP_NAME}"
+enabled_link="/etc/nginx/sites-enabled/${APP_NAME}"
+mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/ssl /var/lib/letsencrypt
+
+cat > "$avail_file" <<NGINX_CONF
+server {
+    listen 80;
+    server_name ${DOMAIN};
+
+    location /.well-known/acme-challenge/ {
+        root /var/lib/letsencrypt;
+        allow all;
+    }
+
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name ${DOMAIN};
+
+    ssl_certificate     /etc/nginx/ssl/${APP_NAME}_self.crt;
+    ssl_certificate_key /etc/nginx/ssl/${APP_NAME}_self.key;
+
+    client_max_body_size 50M;
+
+    location / {
+        proxy_pass http://127.0.0.1:${APP_PORT};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+NGINX_CONF
+
+ln -sf "$avail_file" "$enabled_link"
+rm -f /etc/nginx/sites-enabled/default
+
+if [ ! -f "/etc/nginx/ssl/${APP_NAME}_self.crt" ]; then
+  openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout "/etc/nginx/ssl/${APP_NAME}_self.key" \
+    -out "/etc/nginx/ssl/${APP_NAME}_self.crt" \
+    -subj "/CN=${DOMAIN}" >/dev/null 2>&1
 fi
 
-echo ""
-log_info "Container startup log:"
-docker logs "$APP_CONTAINER" 2>&1 | grep -E "^\[" | head -15
-echo ""
+nginx -t
+systemctl reload nginx
 
-step_done 4 "Verify app is running"
+if is_placeholder_domain "$DOMAIN"; then
+  log_warn "Placeholder/local domain detected. Keeping self-signed certificate."
+else
+  certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --email "$SSL_EMAIL" --redirect || \
+    log_warn "Certbot failed. Keeping existing cert configuration."
+fi
+step_done 6 "Update Nginx and SSL"
 
-#====================================================================
-# STEP 5: Fix data inconsistencies
-#====================================================================
-step_start 5 "Fix data inconsistencies"
-
-log_info "Fixing tickets with 'assigned' status but no active assignments..."
-FIX_COUNT=$(docker exec "$APP_CONTAINER" psql -h 127.0.0.1 -U "$DB_USER" -d "$DB_NAME" -tAc "
-UPDATE tickets SET status = 'open'
-WHERE status IN ('assigned', 'in_progress')
-AND id NOT IN (SELECT ticket_id FROM ticket_assignments WHERE active = true);
-" 2>/dev/null | grep -oP '\d+' || echo "0")
-log_ok "Fixed ${FIX_COUNT} inconsistent ticket(s)"
-
-step_done 5 "Fix data inconsistencies"
+# STEP 7: persist metadata
+step_start 7 "Persist deployment metadata"
+cat > "$DEPLOY_INFO" <<INFO
+DEPLOY_VERSION=${UPDATE_VERSION}
+DOMAIN=${DOMAIN}
+APP_NAME=${APP_NAME}
+APP_PORT=${APP_PORT}
+APP_CONTAINER=${APP_CONTAINER}
+DB_NAME=${DB_NAME}
+DB_USER=${DB_USER}
+PGDATA_VOLUME=${PGDATA_VOLUME}
+UPLOADS_VOLUME=${UPLOADS_VOLUME}
+INSTALL_DIR=${INSTALL_DIR}
+DEPLOYED_AT="$(date +'%Y-%m-%d %H:%M:%S %Z')"
+INFO
+chmod 600 "$DEPLOY_INFO"
+step_done 7 "Persist deployment metadata"
 
 print_checklist
 
 echo -e "${GREEN}Update deployed successfully! (v${UPDATE_VERSION})${NC}"
 echo ""
-echo "  App logs:  docker logs ${APP_CONTAINER} -f"
-echo "  Restart:   docker restart ${APP_CONTAINER}"
-echo "  DB Shell:  docker exec -it ${APP_CONTAINER} psql -h 127.0.0.1 -U ${DB_USER} -d ${DB_NAME}"
+echo "  URL:      https://${DOMAIN}"
+echo "  Logs:     docker logs ${APP_CONTAINER} -f"
+echo "  Restart:  docker restart ${APP_CONTAINER}"
 echo ""

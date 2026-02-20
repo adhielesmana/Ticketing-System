@@ -250,6 +250,7 @@ export const api = {
       path: '/api/tickets/:id/reopen-rejected' as const,
       input: z.object({
         reason: z.string().min(1, "Reason is required"),
+        assignmentMode: z.enum(["current", "auto"]).default("current"),
       }),
       responses: {
         200: z.custom<typeof tickets.$inferSelect>(),

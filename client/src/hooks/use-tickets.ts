@@ -436,12 +436,12 @@ export function useReopenRejectedTicket() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ id, reason }: { id: number; reason: string }) => {
+    mutationFn: async ({ id, reason, assignmentMode }: { id: number; reason: string; assignmentMode: "current" | "auto" }) => {
       const url = buildUrl(api.tickets.reopenRejected.path, { id });
       const res = await fetch(url, {
         method: api.tickets.reopenRejected.method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason }),
+        body: JSON.stringify({ reason, assignmentMode }),
         credentials: "include",
       });
       if (!res.ok) {
@@ -450,12 +450,15 @@ export function useReopenRejectedTicket() {
       }
       return res.json();
     },
-    onSuccess: (_data, variables) => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: [api.tickets.list.path] });
       queryClient.invalidateQueries({ queryKey: [api.tickets.get.path, variables.id] });
       queryClient.invalidateQueries({ queryKey: [api.dashboard.stats.path] });
       queryClient.invalidateQueries({ queryKey: ["/api/technicians/free"] });
-      toast({ title: "Reopened", description: "Rejected ticket has been reopened and assigned to the same team" });
+      const description = data?.status === "open"
+        ? "Rejected ticket reopened as open and unassigned (auto assignment ready)"
+        : "Rejected ticket reopened with current assignment";
+      toast({ title: "Reopened", description });
     },
     onError: (error) => {
       toast({ title: "Failed", description: error.message, variant: "destructive" });

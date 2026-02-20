@@ -159,20 +159,39 @@ export async function registerRoutes(
     res.json(user);
   });
 
+  const requireAdminAccess = async (req: any, res: any): Promise<boolean> => {
+    const userId = req.session?.userId;
+    if (!userId) {
+      res.status(401).json({ message: "Not authenticated" });
+      return false;
+    }
+
+    const currentUser = await storage.getUser(userId);
+    if (!currentUser || ![UserRole.SUPERADMIN, UserRole.ADMIN].includes(currentUser.role as any)) {
+      res.status(403).json({ message: "Admin access required" });
+      return false;
+    }
+
+    return true;
+  };
+
   // === USERS ===
   app.get(api.users.list.path, async (req, res) => {
+    if (!(await requireAdminAccess(req, res))) return;
     const role = req.query.role as string | undefined;
     const users = await storage.getAllUsers(role);
     res.json(users);
   });
 
   app.get(api.users.get.path, async (req, res) => {
+    if (!(await requireAdminAccess(req, res))) return;
     const user = await storage.getUser(Number(req.params.id));
     if (!user) return res.status(404).json({ message: "User not found" });
     res.json(user);
   });
 
   app.post(api.users.create.path, async (req, res) => {
+    if (!(await requireAdminAccess(req, res))) return;
     try {
       const input = api.users.create.input.parse(req.body);
       const hashedPassword = await hash(input.password, 10);
@@ -191,6 +210,7 @@ export async function registerRoutes(
   });
 
   app.patch(api.users.update.path, async (req, res) => {
+    if (!(await requireAdminAccess(req, res))) return;
     try {
       const input = api.users.update.input.parse(req.body);
       if (input.password) {
@@ -206,6 +226,7 @@ export async function registerRoutes(
   });
 
   app.delete(api.users.delete.path, async (req, res) => {
+    if (!(await requireAdminAccess(req, res))) return;
     const user = await storage.getUser(Number(req.params.id));
     if (!user) return res.status(404).json({ message: "User not found" });
     await storage.deleteUser(Number(req.params.id));
@@ -407,11 +428,22 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Provide 1 or 2 technician IDs" });
       }
 
+      const existingAssignees = await storage.getAssigneesForTicket(ticketId);
+      const currentLeadId = existingAssignees[0]?.id;
+
       if (user.role === UserRole.HELPDESK) {
-        for (const techId of technicianIds) {
+        if (!currentLeadId) {
+          return res.status(400).json({ message: "Helpdesk can only reassign tickets that already have a lead technician" });
+        }
+
+        if (Number(technicianIds[0]) !== Number(currentLeadId)) {
+          return res.status(403).json({ message: "Helpdesk can only change partner technician. Lead technician is locked." });
+        }
+
+        for (const techId of technicianIds.slice(1)) {
           const tech = await storage.getUser(Number(techId));
           if (tech && !tech.isBackboneSpecialist && !tech.isVendorSpecialist) {
-            return res.status(403).json({ message: "Helpdesk can only assign to backbone or vendor specialists. Other technicians must use auto-assign (Get Ticket)." });
+            return res.status(403).json({ message: "Helpdesk can only assign partner to backbone or vendor specialists." });
           }
         }
       }
@@ -872,21 +904,30 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Only rejected tickets can be reopened with this action" });
       }
 
-      const { reason } = req.body;
+      const { reason, assignmentMode = "current" } = req.body;
       if (!reason || reason.trim() === "") {
         return res.status(400).json({ message: "Reason for reopening is required" });
       }
 
+      if (!["current", "auto"].includes(assignmentMode)) {
+        return res.status(400).json({ message: "Invalid assignmentMode. Use 'current' or 'auto'." });
+      }
+
       const now = new Date();
+      const modeLabel = assignmentMode === "auto" ? "AUTO_OPEN" : "CURRENT_ASSIGNMENT";
+
+      if (assignmentMode === "auto") {
+        await storage.removeAllAssignments(ticketId);
+      }
 
       const ticket = await storage.updateTicket(ticketId, {
-        status: TicketStatus.ASSIGNED,
+        status: assignmentMode === "auto" ? TicketStatus.OPEN : TicketStatus.ASSIGNED,
         rejectionReason: null,
-        reopenReason: `${existingTicket.reopenReason ? existingTicket.reopenReason + "\n" : ""}[Reopened from rejected ${now.toISOString().slice(0,16).replace('T',' ')}] ${reason.trim()}`,
+        reopenReason: `${existingTicket.reopenReason ? existingTicket.reopenReason + "\n" : ""}[Reopened from rejected ${now.toISOString().slice(0,16).replace('T',' ')} | ${modeLabel}] ${reason.trim()}`,
       });
 
       const assignees = await storage.getAssigneesForTicket(ticketId);
-      res.json({ ...ticket, assignee: assignees[0], assignees });
+      res.json({ ...ticket, assignee: assignees[0], assignees, assignmentMode });
     } catch (err: any) {
       console.error("Reopen rejected error:", err);
       res.status(500).json({ message: err.message || "Failed to reopen rejected ticket" });
