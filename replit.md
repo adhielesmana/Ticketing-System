@@ -114,3 +114,26 @@ The build script (`script/build.ts`) bundles specific server dependencies into t
 - **Client:** react, @tanstack/react-query, wouter, recharts, react-hook-form, zod, date-fns, framer-motion
 - **Shared:** drizzle-zod, zod
 - **UI:** Full shadcn/ui component library (Radix UI primitives + Tailwind CSS)
+
+## Recent Deployment Script Improvements (v8/v7)
+
+### What changed
+- `deploy/deploy.sh`
+  - Added host dependency bootstrap (`docker.io`, `nginx`, `certbot`, `python3-certbot-nginx`, `openssl`, `curl`, `ca-certificates`) before continuing.
+  - Added first-install domain prompt when domain is not provided or stored.
+  - Added `--domain <url>` override to intentionally force domain changes.
+  - Added app-port conflict scan against host + Docker ports and auto-selects the next free port.
+  - Regenerates Nginx config, validates via `nginx -t`, reloads service, and attempts Certbot for real domains.
+
+- `deploy/update.sh`
+  - Added dependency verification/bootstrap and Docker/Nginx service enable checks.
+  - Reuses saved domain from `.deploy-info` by default; supports `--domain <url>` to force a change.
+  - Detects app-port conflicts during update and auto-reassigns to a free port.
+  - Rebuilds Nginx config and re-runs certbot flow to keep TLS/proxy aligned with current domain/port.
+  - Persists updated metadata (`DOMAIN`, `APP_PORT`, container settings) back to `.deploy-info`.
+
+### Why these changes were made
+- Avoid failed deployments caused by missing host dependencies.
+- Reduce downtime from port collisions with other Docker services.
+- Keep reverse proxy and SSL configuration consistent after install and update.
+- Improve operator workflow: ask domain once on first install, reuse it later unless explicitly overridden.
