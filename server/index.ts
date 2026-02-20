@@ -1,10 +1,8 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import MemoryStore from "memorystore";
-import { registerRoutes, backfillTicketAreas, fixLegacyOverdueStatus, fixOrphanedAssignments } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
-import { storage } from "./storage";
 
 const app = express();
 const httpServer = createServer(app);
@@ -79,7 +77,30 @@ app.use((req, res, next) => {
 });
 
 (async () => {
-  await registerRoutes(httpServer, app);
+  const hasDatabase = !!process.env.DATABASE_URL;
+
+  if (!hasDatabase && process.env.NODE_ENV === "production") {
+    throw new Error("DATABASE_URL is required in production mode");
+  }
+
+  if (hasDatabase) {
+    const { registerRoutes } = await import("./routes");
+    await registerRoutes(httpServer, app);
+  } else {
+    log("DATABASE_URL is not set; starting in limited development mode", "startup");
+
+    app.get("/api/health", (_req, res) => {
+      res.json({
+        ok: true,
+        mode: "limited-dev",
+        message: "Set DATABASE_URL to enable full API functionality",
+      });
+    });
+
+    app.get("/api/auth/me", (_req, res) => {
+      res.status(401).json({ message: "Not authenticated (limited mode)" });
+    });
+  }
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -117,27 +138,33 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
-      fixOrphanedAssignments().catch(err => console.error("Fix orphaned assignments error:", err));
-      backfillTicketAreas().catch(err => console.error("Backfill error:", err));
-      fixLegacyOverdueStatus().catch(err => console.error("Fix overdue status error:", err));
+      if (hasDatabase) {
+        import("./routes").then(({ fixOrphanedAssignments, backfillTicketAreas, fixLegacyOverdueStatus }) => {
+          fixOrphanedAssignments().catch(err => console.error("Fix orphaned assignments error:", err));
+          backfillTicketAreas().catch(err => console.error("Backfill error:", err));
+          fixLegacyOverdueStatus().catch(err => console.error("Fix overdue status error:", err));
+        });
 
-      function scheduleMidnightReset() {
-        const now = new Date();
-        const midnight = new Date(now);
-        midnight.setHours(24, 0, 0, 0);
-        const msUntilMidnight = midnight.getTime() - now.getTime();
-        setTimeout(async () => {
-          try {
-            const count = await storage.bulkResetStaleAssignments(24);
-            log(`Midnight reset: ${count} stale assignment(s) cleared`);
-          } catch (err) {
-            console.error("Midnight reset error:", err);
-          }
-          scheduleMidnightReset();
-        }, msUntilMidnight);
-        log(`Midnight reset scheduled in ${Math.round(msUntilMidnight / 60000)} minutes`);
+        const scheduleMidnightReset = () => {
+          const now = new Date();
+          const midnight = new Date(now);
+          midnight.setHours(24, 0, 0, 0);
+          const msUntilMidnight = midnight.getTime() - now.getTime();
+          setTimeout(async () => {
+            try {
+              const { storage } = await import("./storage");
+              const count = await storage.bulkResetStaleAssignments(24);
+              log(`Midnight reset: ${count} stale assignment(s) cleared`);
+            } catch (err) {
+              console.error("Midnight reset error:", err);
+            }
+            scheduleMidnightReset();
+          }, msUntilMidnight);
+          log(`Midnight reset scheduled in ${Math.round(msUntilMidnight / 60000)} minutes`);
+        }
+
+        scheduleMidnightReset();
       }
-      scheduleMidnightReset();
     },
   );
 })();
