@@ -40,7 +40,7 @@ import {
   UserX,
 } from "lucide-react";
 import { format } from "date-fns";
-import { useState, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -188,6 +188,7 @@ export default function TicketDetail() {
   const [reopenTech2, setReopenTech2] = useState<string>("");
   const [reopenRejectedDialogOpen, setReopenRejectedDialogOpen] = useState(false);
   const [reopenRejectedReason, setReopenRejectedReason] = useState("");
+  const [reopenRejectedMode, setReopenRejectedMode] = useState<"current" | "auto">("current");
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [closeData, setCloseData] = useState({
     actionDescription: "",
@@ -283,6 +284,16 @@ export default function TicketDetail() {
   const canManage = user?.role === 'admin' || user?.role === 'superadmin' || user?.role === 'helpdesk';
   const descImages: string[] = ticket.descriptionImages || [];
   const hasMapPreview = ticket.customerLocationUrl && extractCoordinates(ticket.customerLocationUrl);
+
+  const isHelpdesk = user?.role === "helpdesk";
+
+  useEffect(() => {
+    if (!ticket || !reassignDialogOpen) return;
+    const lead = ticket.assignees?.[0]?.id ? String(ticket.assignees[0].id) : "";
+    const partner = ticket.assignees?.[1]?.id ? String(ticket.assignees[1].id) : "none";
+    setReassignTech1(lead);
+    setReassignTech2(partner);
+  }, [ticket, reassignDialogOpen]);
 
   return (
     <div className="container mx-auto p-4 lg:p-6 max-w-4xl space-y-5">
@@ -682,7 +693,10 @@ export default function TicketDetail() {
                   <div className="pt-2">
                     <Dialog open={reopenRejectedDialogOpen} onOpenChange={(open) => {
                       setReopenRejectedDialogOpen(open);
-                      if (!open) setReopenRejectedReason("");
+                      if (!open) {
+                        setReopenRejectedReason("");
+                        setReopenRejectedMode("current");
+                      }
                     }}>
                       <DialogTrigger asChild>
                         <Button variant="outline" size="sm" className="gap-1.5" data-testid="button-reopen-rejected">
@@ -698,8 +712,25 @@ export default function TicketDetail() {
                           </DialogTitle>
                         </DialogHeader>
                         <p className="text-sm text-muted-foreground">
-                          This ticket will be reopened with status <span className="font-medium">Assigned</span> and the same technician team will continue the task.
+                          Choose how this rejected ticket should be reopened.
                         </p>
+                        <div className="space-y-1.5">
+                          <Label className="text-sm">Assignment Mode</Label>
+                          <Select value={reopenRejectedMode} onValueChange={(v: "current" | "auto") => setReopenRejectedMode(v)}>
+                            <SelectTrigger data-testid="select-reopen-rejected-mode">
+                              <SelectValue placeholder="Choose assignment mode" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="current">Current assignment (keep same team)</SelectItem>
+                              <SelectItem value="auto">Auto assignment (open + unassigned)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-xs text-muted-foreground">
+                            {reopenRejectedMode === "current"
+                              ? "Ticket will reopen as Assigned with the current technician team."
+                              : "Ticket will reopen as Open and unassigned, so technicians can pick it via Get Ticket."}
+                          </p>
+                        </div>
                         <div className="space-y-1.5">
                           <Label className="text-sm">Reason for Reopening</Label>
                           <Textarea
@@ -714,10 +745,11 @@ export default function TicketDetail() {
                           <Button
                             onClick={() => {
                               if (!reopenRejectedReason.trim()) return toast({ title: "Error", description: "Please provide a reason", variant: "destructive" });
-                              reopenRejectedTicket({ id: ticketId, reason: reopenRejectedReason.trim() }, {
+                              reopenRejectedTicket({ id: ticketId, reason: reopenRejectedReason.trim(), assignmentMode: reopenRejectedMode }, {
                                 onSuccess: () => {
                                   setReopenRejectedDialogOpen(false);
                                   setReopenRejectedReason("");
+                                  setReopenRejectedMode("current");
                                 }
                               });
                             }}
@@ -1050,7 +1082,6 @@ export default function TicketDetail() {
                   {canManage && !['closed', 'rejected'].includes(ticket.status) && (
                     <Dialog open={reassignDialogOpen} onOpenChange={(open) => {
                       setReassignDialogOpen(open);
-                      if (!open) { setReassignTech1(""); setReassignTech2(""); }
                     }}>
                       <DialogTrigger asChild>
                         <Button variant="outline" size="sm" data-testid="button-reassign">
@@ -1068,7 +1099,7 @@ export default function TicketDetail() {
                           </p>
                           <div className="space-y-2">
                             <Label>Lead Technician *</Label>
-                            <Select value={reassignTech1} onValueChange={setReassignTech1}>
+                            <Select value={reassignTech1} onValueChange={setReassignTech1} disabled={isHelpdesk}>
                               <SelectTrigger data-testid="select-reassign-tech1">
                                 <SelectValue placeholder="Select lead technician..." />
                               </SelectTrigger>
@@ -1076,12 +1107,15 @@ export default function TicketDetail() {
                                 {technicians?.filter((t: any) => t.role === 'technician')
                                   .filter((t: any) => user?.role === 'helpdesk' ? (t.isBackboneSpecialist || t.isVendorSpecialist) : true)
                                   .map((tech: any) => (
-                                  <SelectItem key={tech.id} value={String(tech.id)} disabled={String(tech.id) === reassignTech2}>
+                                  <SelectItem key={tech.id} value={String(tech.id)} disabled={String(tech.id) === reassignTech2 || (isHelpdesk && String(tech.id) !== reassignTech1)}>
                                     {toCapName(tech.name)}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
+                            {isHelpdesk && (
+                              <p className="text-xs text-muted-foreground">Lead technician is locked for helpdesk. You can only change partner.</p>
+                            )}
                           </div>
                           <div className="space-y-2">
                             <Label>Partner (optional)</Label>
