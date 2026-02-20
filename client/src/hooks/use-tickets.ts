@@ -558,6 +558,17 @@ export function usePerformanceSummary(filters?: { dateFrom?: string; dateTo?: st
   });
 }
 
+export function useTechnicianPeriodPerformance() {
+  return useQuery({
+    queryKey: ["/api/reports/technician-period"],
+    queryFn: async () => {
+      const res = await fetch("/api/reports/technician-period", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch technician period data");
+      return res.json();
+    },
+  });
+}
+
 export function useUploadImages() {
   return useMutation({
     mutationFn: async (files: File[]) => {

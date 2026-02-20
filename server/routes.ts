@@ -92,6 +92,46 @@ async function reverseGeocodeArea(lat: number, lng: number): Promise<string | nu
   }
 }
 
+function clampCutoffDay(value?: string | number): number {
+  if (typeof value === "number") {
+    return Math.max(1, Math.min(28, Math.floor(value)));
+  }
+  const parsed = parseInt(String(value ?? ""), 10);
+  if (isNaN(parsed)) return 25;
+  return Math.max(1, Math.min(28, parsed));
+}
+
+function computePerformancePeriod(reference: Date, cutoffDay: number) {
+  const normalizedCutoff = clampCutoffDay(cutoffDay);
+  const today = new Date(reference.getFullYear(), reference.getMonth(), reference.getDate());
+  let end = new Date(reference.getFullYear(), reference.getMonth(), normalizedCutoff);
+  if (today > end) {
+    end = new Date(reference.getFullYear(), reference.getMonth() + 1, normalizedCutoff);
+  }
+  end.setHours(23, 59, 59, 999);
+
+  const prevMonthLast = new Date(end.getFullYear(), end.getMonth(), 0);
+  const daysInPrevMonth = prevMonthLast.getDate();
+  const start = new Date(end);
+  start.setDate(end.getDate() - daysInPrevMonth + 1);
+  start.setHours(0, 0, 0, 0);
+
+  return { start, end };
+}
+
+function generatePeriodDays(start: Date, end: Date) {
+  const days: Array<{ iso: string; label: string }> = [];
+  const cursor = new Date(start);
+  while (cursor <= end) {
+    days.push({
+      iso: cursor.toISOString().slice(0, 10),
+      label: `${cursor.getDate()}/${cursor.getMonth() + 1}`,
+    });
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return days;
+}
+
 const s3Client = new S3Client({
   region: "us-east-1",
   endpoint: process.env.S3_ENDPOINT,
@@ -1528,6 +1568,68 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Performance report error:", err);
       res.status(500).json({ message: "Failed to generate performance report" });
+    }
+  });
+
+  app.get(api.reports.technicianPeriod.path, async (req, res) => {
+    try {
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+      const user = await storage.getUser(userId);
+      if (!user || user.role === UserRole.TECHNICIAN) {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      const cutoffSetting = await storage.getSetting("cutoff_day");
+      const cutoffDay = clampCutoffDay(cutoffSetting?.value);
+      const { start, end } = computePerformancePeriod(new Date(), cutoffDay);
+
+      const maintSetting = await storage.getSetting("preference_ratio_maintenance");
+      const installSetting = await storage.getSetting("preference_ratio_installation");
+      const parsedMaint = parseInt(maintSetting?.value ?? "4", 10);
+      const parsedInstall = parseInt(installSetting?.value ?? "2", 10);
+      const maintValue = Number.isNaN(parsedMaint) ? 4 : parsedMaint;
+      const installValue = Number.isNaN(parsedInstall) ? 2 : parsedInstall;
+      const dailyTarget = Math.max(1, maintValue + installValue);
+
+      const rows = await storage.getTechnicianDailyPerformance(start, end);
+      const days = generatePeriodDays(start, end);
+      const monthlyTarget = dailyTarget * days.length;
+
+      const grouped = new Map<number, { technicianId: number; technicianName: string; dailyCounts: Record<string, number>; total: number }>();
+      rows.forEach((row) => {
+        const bucket = grouped.get(row.technicianId);
+        if (bucket) {
+          bucket.dailyCounts[row.day] = row.solved;
+          bucket.total += row.solved;
+        } else {
+          grouped.set(row.technicianId, {
+            technicianId: row.technicianId,
+            technicianName: row.technicianName,
+            dailyCounts: { [row.day]: row.solved },
+            total: row.solved,
+          });
+        }
+      });
+
+      const resultRows = Array.from(grouped.values())
+        .map((entry) => ({
+          ...entry,
+          performancePercent: monthlyTarget > 0 ? Number(((entry.total / monthlyTarget) * 100).toFixed(2)) : 0,
+        }))
+        .sort((a, b) => b.total - a.total);
+
+      res.json({
+        start: start.toISOString(),
+        end: end.toISOString(),
+        days,
+        dailyTarget,
+        monthlyTarget,
+        rows: resultRows,
+      });
+    } catch (err) {
+      console.error("Technician period report error:", err);
+      res.status(500).json({ message: "Failed to build technician period report" });
     }
   });
 

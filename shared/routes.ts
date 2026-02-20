@@ -308,6 +308,29 @@ export const api = {
         200: z.array(z.any()),
       },
     },
+    technicianPeriod: {
+      method: 'GET' as const,
+      path: '/api/reports/technician-period' as const,
+      responses: {
+        200: z.object({
+          start: z.string(),
+          end: z.string(),
+          days: z.array(z.object({
+            iso: z.string(),
+            label: z.string(),
+          })),
+          dailyTarget: z.number(),
+          monthlyTarget: z.number(),
+          rows: z.array(z.object({
+            technicianId: z.number(),
+            technicianName: z.string(),
+            dailyCounts: z.record(z.number()),
+            total: z.number(),
+            performancePercent: z.number(),
+          })),
+        }),
+      },
+    },
   },
   settings: {
     get: {

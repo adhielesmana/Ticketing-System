@@ -8,7 +8,8 @@ import {
   type Setting, type InsertSetting,
   type TechnicianFee, type InsertTechnicianFee,
   type TechnicianPerformance,
-  TicketStatus
+  TicketStatus,
+  UserRole,
 } from "@shared/schema";
 import { eq, or, and, sql, desc, asc } from "drizzle-orm";
 
@@ -67,6 +68,7 @@ export interface IStorage {
   getBonusSummary(filters?: { dateFrom?: string; dateTo?: string }): Promise<any[]>;
   getPerformanceSummary(filters?: { dateFrom?: string; dateTo?: string }): Promise<any[]>;
   getTechnicianBonusTotal(userId: number): Promise<{ totalBonus: number; ticketCount: number; totalTicketFee: number; totalTransportFee: number }>;
+  getTechnicianDailyPerformance(start: Date, end: Date): Promise<Array<{ technicianId: number; technicianName: string; day: string; solved: number }>>;
 
   getDashboardStats(): Promise<{
     totalOpen: number;
@@ -741,6 +743,33 @@ export class DatabaseStorage implements IStorage {
       });
     }
     return result;
+  }
+
+  async getTechnicianDailyPerformance(start: Date, end: Date): Promise<Array<{ technicianId: number; technicianName: string; day: string; solved: number }>> {
+    const rows = await db.select({
+      technicianId: performanceLogs.userId,
+      technicianName: users.name,
+      day: sql<string>`to_char(${tickets.closedAt}, 'YYYY-MM-DD')`,
+      solved: sql<number>`count(distinct ${performanceLogs.ticketId})`,
+    })
+      .from(performanceLogs)
+      .innerJoin(tickets, eq(tickets.id, performanceLogs.ticketId))
+      .innerJoin(users, eq(users.id, performanceLogs.userId))
+      .where(and(
+        eq(users.role, UserRole.TECHNICIAN),
+        eq(tickets.status, TicketStatus.CLOSED),
+        sql`${tickets.closedAt} >= ${start}`,
+        sql`${tickets.closedAt} <= ${end}`,
+      ))
+      .groupBy(performanceLogs.userId, users.name, sql`to_char(${tickets.closedAt}, 'YYYY-MM-DD')`)
+      .orderBy(users.name, sql<string>`to_char(${tickets.closedAt}, 'YYYY-MM-DD')`);
+
+    return rows.map(r => ({
+      technicianId: r.technicianId,
+      technicianName: r.technicianName,
+      day: r.day,
+      solved: Number(r.solved) || 0,
+    }));
   }
 
   async getTechnicianBonusTotal(userId: number): Promise<{ totalBonus: number; ticketCount: number; totalTicketFee: number; totalTransportFee: number }> {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { useTicketsReport, useBonusSummary, usePerformanceSummary } from "@/hooks/use-tickets";
+import { useTicketsReport, useBonusSummary, usePerformanceSummary, useTechnicianPeriodPerformance } from "@/hooks/use-tickets";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +49,18 @@ function formatCurrency(value: number | string): string {
   return new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(num || 0);
 }
 
+function formatPercent(value: number): string {
+  if (Number.isNaN(value)) return "0%";
+  return `${value.toFixed(1)}%`;
+}
+
+function getPercentColor(value: number): string {
+  if (value >= 100) return "text-emerald-600 dark:text-emerald-400";
+  if (value >= 80) return "text-blue-600 dark:text-blue-400";
+  if (value >= 50) return "text-amber-600 dark:text-amber-400";
+  return "text-red-600 dark:text-red-400";
+}
+
 export default function ReportsPage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("tickets");
@@ -89,6 +101,7 @@ export default function ReportsPage() {
   const { data: ticketsData, isLoading: ticketsLoading } = useTicketsReport(cleanTicketFilters, ticketPage, TICKETS_PER_PAGE);
   const { data: bonusData, isLoading: bonusLoading } = useBonusSummary(cleanBonusFilters);
   const { data: perfData, isLoading: perfLoading } = usePerformanceSummary(cleanPerfFilters);
+  const { data: periodData, isLoading: periodLoading } = useTechnicianPeriodPerformance();
 
   const tickets = ticketsData?.tickets ?? [];
   const totalTickets = ticketsData?.total ?? 0;
@@ -589,6 +602,70 @@ export default function ReportsPage() {
                     </tbody>
                   </table>
                 </div>
+              </CardContent>
+            </Card>
+          )}
+          {periodLoading ? (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Technician Daily Performance</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-48 w-full rounded-md" />
+              </CardContent>
+            </Card>
+          ) : periodData && periodData.rows.length > 0 ? (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Technician Daily Performance</CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  Period {periodData.start.slice(0, 10)} – {periodData.end.slice(0, 10)} · Daily target {periodData.dailyTarget}
+                </p>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs" data-testid="table-daily-performance">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/30">
+                        <th className="px-3 py-2 text-left font-medium text-muted-foreground">Technician</th>
+                        {periodData.days.map((day) => (
+                          <th key={day.iso} className="px-2 py-2 text-center font-medium text-muted-foreground">
+                            {day.label}
+                          </th>
+                        ))}
+                        <th className="px-3 py-2 text-right font-medium text-muted-foreground">Total</th>
+                        <th className="px-3 py-2 text-right font-medium text-muted-foreground">Performance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {periodData.rows.map((row) => (
+                        <tr key={row.technicianId} className="border-b border-border last:border-0">
+                          <td className="px-3 py-2 font-semibold">{row.technicianName}</td>
+                          {periodData.days.map((day) => (
+                            <td key={`${row.technicianId}-${day.iso}`} className="px-2 py-1 text-center font-mono">
+                              {row.dailyCounts[day.iso] ?? 0}
+                            </td>
+                          ))}
+                          <td className="px-3 py-2 text-right font-semibold">{row.total}</td>
+                          <td className={`px-3 py-2 text-right font-semibold ${getPercentColor(row.performancePercent)}`}>
+                            {formatPercent(row.performancePercent)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Technician Daily Performance</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-muted-foreground">
+                  No data available for the current cutoff period.
+                </p>
               </CardContent>
             </Card>
           )}

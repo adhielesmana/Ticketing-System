@@ -75,6 +75,7 @@ export default function SettingsPage() {
   const [isResetting, setIsResetting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
+  const [isSavingCutoff, setIsSavingCutoff] = useState(false);
   const importFileRef = useRef<HTMLInputElement>(null);
 
   const { data: ticketFeeHome } = useSetting("ticket_fee_home_maintenance");
@@ -90,6 +91,7 @@ export default function SettingsPage() {
 
   const { data: ratioMaintSetting } = useSetting("preference_ratio_maintenance");
   const { data: ratioInstallSetting } = useSetting("preference_ratio_installation");
+  const { data: cutoffSetting } = useSetting("cutoff_day");
 
   const [values, setValues] = useState<Record<string, string>>({
     ticket_fee_home_maintenance: "",
@@ -105,6 +107,7 @@ export default function SettingsPage() {
 
   const [initialized, setInitialized] = useState(false);
   const [ratioInitialized, setRatioInitialized] = useState(false);
+  const [cutoffDay, setCutoffDay] = useState("25");
 
   useEffect(() => {
     if (!initialized && ticketFeeHome !== undefined && transportFeeHome !== undefined) {
@@ -127,6 +130,12 @@ export default function SettingsPage() {
       setRatioInitialized(true);
     }
   }, [ratioMaintSetting, ratioInstallSetting, ratioInitialized]);
+
+  useEffect(() => {
+    if (cutoffSetting?.value !== undefined && cutoffSetting !== null) {
+      setCutoffDay(cutoffSetting.value || "25");
+    }
+  }, [cutoffSetting]);
 
   if (!user) return null;
   if (user.role !== UserRole.SUPERADMIN && user.role !== UserRole.ADMIN) {
@@ -162,6 +171,22 @@ export default function SettingsPage() {
     updateSetting({ key: "preference_ratio_maintenance", value: String(m) });
     updateSetting({ key: "preference_ratio_installation", value: String(i) });
     toast({ title: "Saved", description: `Preference ratio updated to ${m}:${i} (maintenance:installation)` });
+  };
+
+  const handleSaveCutoff = () => {
+    const day = parseInt(cutoffDay, 10);
+    if (isNaN(day) || day < 1 || day > 28) {
+      toast({ title: "Invalid Cutoff Day", description: "Choose a number between 1 and 28", variant: "destructive" });
+      return;
+    }
+    setIsSavingCutoff(true);
+    updateSetting(
+      { key: "cutoff_day", value: String(day) },
+      {
+        onSuccess: () => toast({ title: "Saved", description: `Cutoff day updated to ${day}` }),
+        onSettled: () => setIsSavingCutoff(false),
+      },
+    );
   };
 
   const handleExport = async () => {
@@ -397,6 +422,59 @@ export default function SettingsPage() {
                 <p className="text-xs text-muted-foreground">
                   Current: Every {parseInt(ratioMaint) + parseInt(ratioInstall) || 6} tickets, {ratioMaint} will be maintenance and {ratioInstall} will be installation.
                 </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="space-y-4 mt-6">
+        <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+          <Calendar className="w-4 h-4" />
+          Monthly Cutoff Day
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Choose the cutoff day (1–28) for rolling monthly periods. Each period runs from day {Math.min(28, (parseInt(cutoffDay, 10) || 25) + 1)} through day {parseInt(cutoffDay, 10) || 25}.
+        </p>
+        <Card>
+          <CardContent className="p-5">
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-md bg-slate-500 flex items-center justify-center shrink-0">
+                <Calendar className="w-5 h-5 text-white" />
+              </div>
+              <div className="flex-1 space-y-3">
+                <div>
+                  <h3 className="font-semibold text-sm">Cutoff day</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Used by performance reports to determine the day range. Keep the value between 1 and 28 so every month includes the start day.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-muted-foreground">Day of month</label>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="28"
+                      value={cutoffDay}
+                      onChange={(e) => setCutoffDay(e.target.value)}
+                      data-testid="input-cutoff-day"
+                    />
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSaveCutoff}
+                    disabled={isSavingCutoff}
+                    data-testid="button-save-cutoff"
+                  >
+                    {isSavingCutoff ? (
+                      <><Loader2 className="w-4 h-4 animate-spin mr-1" /> Saving...</>
+                    ) : (
+                      <><Save className="w-4 h-4" /> Save</>
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
           </CardContent>
