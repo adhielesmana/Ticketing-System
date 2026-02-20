@@ -95,9 +95,21 @@ is_placeholder_domain() {
   echo "$1" | grep -qE '(yourdomain\.com|localhost|\.local$)'
 }
 
+MISSING_PACKAGES=()
+
+queue_package_install() {
+  local pkg="$1"
+  for existing in "${MISSING_PACKAGES[@]}"; do
+    if [ "$existing" = "$pkg" ]; then
+      return
+    fi
+  done
+  MISSING_PACKAGES+=("$pkg")
+}
+
 ensure_package() {
   local pkg="$1"
-  dpkg -s "$pkg" >/dev/null 2>&1 || apt-get install -y "$pkg"
+  dpkg -s "$pkg" >/dev/null 2>&1 || queue_package_install "$pkg"
 }
 
 ensure_cmd_or_pkg() {
@@ -177,17 +189,24 @@ echo ""
 
 # STEP 1: host dependencies
 step_start 1 "Install/verify host dependencies"
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -y
+MISSING_PACKAGES=()
 ensure_package ca-certificates
 ensure_package curl
 ensure_package openssl
 ensure_cmd_or_pkg docker docker.io
 ensure_cmd_or_pkg nginx nginx
 ensure_cmd_or_pkg certbot certbot
-if ! dpkg -s python3-certbot-nginx >/dev/null 2>&1; then
-  apt-get install -y python3-certbot-nginx
+ensure_package python3-certbot-nginx
+
+if [ ${#MISSING_PACKAGES[@]} -gt 0 ]; then
+  export DEBIAN_FRONTEND=noninteractive
+  log_info "Installing missing packages: ${MISSING_PACKAGES[*]}"
+  apt-get update -y
+  apt-get install -y "${MISSING_PACKAGES[@]}"
+else
+  log_info "All host dependencies already installed."
 fi
+
 systemctl enable --now docker >/dev/null 2>&1 || true
 systemctl enable --now nginx >/dev/null 2>&1 || true
 step_done 1 "Install/verify host dependencies"

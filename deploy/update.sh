@@ -22,7 +22,7 @@ log_ok()    { echo -e "${GREEN}[OK]${NC} $1"; }
 log_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_err()   { echo -e "${RED}[ERROR]${NC} $1"; }
 
-TOTAL_STEPS=7
+TOTAL_STEPS=5
 CHECKLIST_RESULTS=()
 
 step_start() {
@@ -91,16 +91,6 @@ find_free_port() {
   echo "$port"
 }
 
-is_placeholder_domain() {
-  echo "$1" | grep -qE '(yourdomain\.com|localhost|\.local$)'
-}
-
-ensure_cmd_or_pkg() {
-  local cmd="$1"
-  local pkg="$2"
-  command -v "$cmd" >/dev/null 2>&1 || apt-get install -y "$pkg"
-}
-
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
@@ -156,36 +146,22 @@ log_info "Install Dir:   $INSTALL_DIR"
 
 echo ""
 
-# STEP 1: ensure dependencies
-step_start 1 "Install/verify host dependencies"
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -y
-ensure_cmd_or_pkg docker docker.io
-ensure_cmd_or_pkg nginx nginx
-ensure_cmd_or_pkg certbot certbot
-if ! dpkg -s python3-certbot-nginx >/dev/null 2>&1; then
-  apt-get install -y python3-certbot-nginx
-fi
-systemctl enable --now docker >/dev/null 2>&1 || true
-systemctl enable --now nginx >/dev/null 2>&1 || true
-step_done 1 "Install/verify host dependencies"
-
-# STEP 2: copy source
-step_start 2 "Copy updated source files"
+# STEP 1: copy source
+step_start 1 "Copy updated source files"
 cp -a "$PROJECT_DIR/." "$INSTALL_DIR/" 2>/dev/null || true
 rm -rf "$INSTALL_DIR/node_modules" "$INSTALL_DIR/.git"
 cp "$SCRIPT_DIR/Dockerfile" "$INSTALL_DIR/Dockerfile"
 cp "$SCRIPT_DIR/entrypoint.sh" "$INSTALL_DIR/deploy/entrypoint.sh"
-step_done 2 "Copy updated source files"
+step_done 1 "Copy updated source files"
 
-# STEP 3: build image
-step_start 3 "Build Docker image"
+# STEP 2: build image
+step_start 2 "Build Docker image"
 cd "$INSTALL_DIR"
 docker build -t "$APP_NAME" . 2>&1 | tail -20
-step_done 3 "Build Docker image"
+step_done 2 "Build Docker image"
 
-# STEP 4: restart container (with conflict-safe port)
-step_start 4 "Restart container"
+# STEP 3: restart container (with conflict-safe port)
+step_start 3 "Restart container"
 docker stop "$APP_CONTAINER" >/dev/null 2>&1 || true
 docker rm "$APP_CONTAINER" >/dev/null 2>&1 || true
 
@@ -213,10 +189,10 @@ docker run -d \
 
 sleep 5
 docker ps --format '{{.Names}}' | grep -qw "$APP_CONTAINER" || { log_err "Container failed to start"; docker logs "$APP_CONTAINER" --tail 30; exit 1; }
-step_done 4 "Restart container"
+step_done 3 "Restart container"
 
-# STEP 5: verify app
-step_start 5 "Verify app is running"
+# STEP 4: verify app
+step_start 4 "Verify app is running"
 retries=0
 while [ $retries -lt 30 ]; do
   if docker logs "$APP_CONTAINER" 2>&1 | grep -q "Schema push complete\|listening on\|server started\|serving on port"; then
@@ -230,74 +206,10 @@ if [ $retries -ge 30 ]; then
 else
   log_ok "App is ready"
 fi
-step_done 5 "Verify app is running"
+step_done 4 "Verify app is running"
 
-# STEP 6: refresh nginx + ssl
-step_start 6 "Update Nginx and SSL"
-avail_file="/etc/nginx/sites-available/${APP_NAME}"
-enabled_link="/etc/nginx/sites-enabled/${APP_NAME}"
-mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled /etc/nginx/ssl /var/lib/letsencrypt
-
-cat > "$avail_file" <<NGINX_CONF
-server {
-    listen 80;
-    server_name ${DOMAIN};
-
-    location /.well-known/acme-challenge/ {
-        root /var/lib/letsencrypt;
-        allow all;
-    }
-
-    location / {
-        return 301 https://\$host\$request_uri;
-    }
-}
-
-server {
-    listen 443 ssl http2;
-    server_name ${DOMAIN};
-
-    ssl_certificate     /etc/nginx/ssl/${APP_NAME}_self.crt;
-    ssl_certificate_key /etc/nginx/ssl/${APP_NAME}_self.key;
-
-    client_max_body_size 50M;
-
-    location / {
-        proxy_pass http://127.0.0.1:${APP_PORT};
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade \$http_upgrade;
-        proxy_set_header Connection 'upgrade';
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-}
-NGINX_CONF
-
-ln -sf "$avail_file" "$enabled_link"
-rm -f /etc/nginx/sites-enabled/default
-
-if [ ! -f "/etc/nginx/ssl/${APP_NAME}_self.crt" ]; then
-  openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-    -keyout "/etc/nginx/ssl/${APP_NAME}_self.key" \
-    -out "/etc/nginx/ssl/${APP_NAME}_self.crt" \
-    -subj "/CN=${DOMAIN}" >/dev/null 2>&1
-fi
-
-nginx -t
-systemctl reload nginx
-
-if is_placeholder_domain "$DOMAIN"; then
-  log_warn "Placeholder/local domain detected. Keeping self-signed certificate."
-else
-  certbot --nginx -d "$DOMAIN" --non-interactive --agree-tos --email "$SSL_EMAIL" --redirect || \
-    log_warn "Certbot failed. Keeping existing cert configuration."
-fi
-step_done 6 "Update Nginx and SSL"
-
-# STEP 7: persist metadata
-step_start 7 "Persist deployment metadata"
+# STEP 5: persist metadata
+step_start 5 "Persist deployment metadata"
 cat > "$DEPLOY_INFO" <<INFO
 DEPLOY_VERSION=${UPDATE_VERSION}
 DOMAIN=${DOMAIN}
@@ -312,7 +224,7 @@ INSTALL_DIR=${INSTALL_DIR}
 DEPLOYED_AT="$(date +'%Y-%m-%d %H:%M:%S %Z')"
 INFO
 chmod 600 "$DEPLOY_INFO"
-step_done 7 "Persist deployment metadata"
+step_done 5 "Persist deployment metadata"
 
 print_checklist
 
