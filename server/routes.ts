@@ -1073,7 +1073,8 @@ export async function registerRoutes(
         },
       };
 
-      const closedTickets = await storage.getTicketsReport({ status: "closed" });
+      const closedTicketsReport = await storage.getTicketsReport({ status: "closed" });
+      const closedTickets = closedTicketsReport.tickets;
       let updatedCount = 0;
       let perfUpdatedCount = 0;
 
@@ -1473,12 +1474,17 @@ export async function registerRoutes(
         type: req.query.type as string | undefined,
         status: req.query.status as string | undefined,
       };
-      const data = await storage.getTicketsReport(filters);
-      const withAssignees = await Promise.all(data.map(async (t: any) => {
-        const assignees = await storage.getAssigneesForTicket(t.id);
-        return { ...t, assignees: assignees.map((a: any) => ({ id: a.id, name: a.name })) };
-      }));
-      res.json(withAssignees);
+      const page = Math.max(1, parseInt((req.query.page as string | undefined) ?? "") || 1);
+      let perPage = parseInt((req.query.perPage as string | undefined) ?? "");
+      if (isNaN(perPage) || perPage <= 0) perPage = 20;
+      if (perPage > 100) perPage = 100;
+
+      const { tickets, total } = await storage.getTicketsReport(filters, {
+        skip: (page - 1) * perPage,
+        take: perPage,
+      });
+
+      res.json({ tickets, total, page, perPage });
     } catch (err) {
       console.error("Report error:", err);
       res.status(500).json({ message: "Failed to generate report" });

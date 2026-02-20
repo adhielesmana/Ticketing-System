@@ -60,7 +60,10 @@ export interface IStorage {
   getAllSettings(): Promise<Setting[]>;
   bulkResetStaleAssignments(maxAgeHours?: number): Promise<number>;
 
-  getTicketsReport(filters?: { dateFrom?: string; dateTo?: string; type?: string; status?: string }): Promise<any[]>;
+  getTicketsReport(
+    filters?: { dateFrom?: string; dateTo?: string; type?: string; status?: string },
+    pagination?: { skip?: number; take?: number },
+  ): Promise<{ tickets: any[]; total: number }>;
   getBonusSummary(filters?: { dateFrom?: string; dateTo?: string }): Promise<any[]>;
   getPerformanceSummary(filters?: { dateFrom?: string; dateTo?: string }): Promise<any[]>;
   getTechnicianBonusTotal(userId: number): Promise<{ totalBonus: number; ticketCount: number; totalTicketFee: number; totalTransportFee: number }>;
@@ -601,20 +604,42 @@ export class DatabaseStorage implements IStorage {
     return count;
   }
 
-  async getTicketsReport(filters: { dateFrom?: string; dateTo?: string; type?: string; status?: string } = {}): Promise<any[]> {
-    let query = db.select().from(tickets).$dynamic();
+  async getTicketsReport(
+    filters: { dateFrom?: string; dateTo?: string; type?: string; status?: string } = {},
+    pagination: { skip?: number; take?: number } = {},
+  ): Promise<{ tickets: any[]; total: number }> {
+    let baseQuery = db.select().from(tickets);
     const conditions = [];
-    
+
     if (filters.type) conditions.push(eq(tickets.type, filters.type));
     if (filters.status) conditions.push(eq(tickets.status, filters.status));
     if (filters.dateFrom) conditions.push(sql`${tickets.createdAt} >= ${filters.dateFrom}::timestamp`);
     if (filters.dateTo) conditions.push(sql`${tickets.createdAt} <= ${filters.dateTo}::timestamp + interval '1 day'`);
-    
-    if (conditions.length > 0) {
-      query = query.where(and(...conditions));
+
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+    let totalQuery = db.select({
+      total: sql<number>`count(*)`,
+    }).from(tickets);
+    if (whereClause) {
+      totalQuery = totalQuery.where(whereClause);
     }
-    
-    const ticketRows = await query.orderBy(desc(tickets.createdAt));
+    const [totalResult] = await totalQuery;
+    const total = totalResult?.total || 0;
+
+    if (whereClause) {
+      baseQuery = baseQuery.where(whereClause);
+    }
+
+    baseQuery = baseQuery.orderBy(desc(tickets.createdAt));
+    if (typeof pagination.skip === "number") {
+      baseQuery = baseQuery.offset(pagination.skip);
+    }
+    if (typeof pagination.take === "number") {
+      baseQuery = baseQuery.limit(pagination.take);
+    }
+
+    const ticketRows = await baseQuery;
     const result: any[] = [];
     for (const ticket of ticketRows) {
       const assignees = await this.getAssigneesForTicket(ticket.id);
@@ -623,7 +648,7 @@ export class DatabaseStorage implements IStorage {
         assignees: assignees.map(a => ({ id: a.id, name: a.name })),
       });
     }
-    return result;
+    return { tickets: result, total };
   }
 
   async getBonusSummary(filters: { dateFrom?: string; dateTo?: string } = {}): Promise<any[]> {

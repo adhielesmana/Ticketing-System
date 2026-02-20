@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useTicketsReport, useBonusSummary, usePerformanceSummary } from "@/hooks/use-tickets";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,6 +33,8 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 
+const TICKETS_PER_PAGE = 20;
+
 const statusColors: Record<string, string> = {
   open: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
   waiting_assignment: "bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300",
@@ -59,6 +61,7 @@ export default function ReportsPage() {
     type: "",
     status: "",
   });
+  const [ticketPage, setTicketPage] = useState(1);
   const [bonusFilters, setBonusFilters] = useState({
     dateFrom: today,
     dateTo: today,
@@ -67,6 +70,11 @@ export default function ReportsPage() {
     dateFrom: today,
     dateTo: today,
   });
+
+  const updateTicketFilters = (updates: Partial<typeof ticketFilters>) => {
+    setTicketFilters((prev) => ({ ...prev, ...updates }));
+    setTicketPage(1);
+  };
 
   const cleanTicketFilters = Object.fromEntries(
     Object.entries(ticketFilters).filter(([_, v]) => v !== "")
@@ -78,9 +86,21 @@ export default function ReportsPage() {
     Object.entries(perfFilters).filter(([_, v]) => v !== "")
   ) as any;
 
-  const { data: ticketsData, isLoading: ticketsLoading } = useTicketsReport(cleanTicketFilters);
+  const { data: ticketsData, isLoading: ticketsLoading } = useTicketsReport(cleanTicketFilters, ticketPage, TICKETS_PER_PAGE);
   const { data: bonusData, isLoading: bonusLoading } = useBonusSummary(cleanBonusFilters);
   const { data: perfData, isLoading: perfLoading } = usePerformanceSummary(cleanPerfFilters);
+
+  const tickets = ticketsData?.tickets ?? [];
+  const totalTickets = ticketsData?.total ?? 0;
+  const ticketTotalPages = Math.max(1, Math.ceil(totalTickets / TICKETS_PER_PAGE));
+  const ticketRangeStart = totalTickets === 0 ? 0 : (ticketPage - 1) * TICKETS_PER_PAGE + 1;
+  const ticketRangeEnd = Math.min(totalTickets, ticketPage * TICKETS_PER_PAGE);
+
+  useEffect(() => {
+    if (ticketPage > ticketTotalPages) {
+      setTicketPage(ticketTotalPages);
+    }
+  }, [ticketPage, ticketTotalPages]);
 
   if (!user) return null;
   if (user.role === UserRole.TECHNICIAN) {
@@ -146,7 +166,7 @@ export default function ReportsPage() {
                   <Input
                     type="date"
                     value={ticketFilters.dateFrom}
-                    onChange={(e) => setTicketFilters(p => ({ ...p, dateFrom: e.target.value }))}
+                    onChange={(e) => updateTicketFilters({ dateFrom: e.target.value })}
                     data-testid="input-ticket-date-from"
                   />
                 </div>
@@ -155,13 +175,16 @@ export default function ReportsPage() {
                   <Input
                     type="date"
                     value={ticketFilters.dateTo}
-                    onChange={(e) => setTicketFilters(p => ({ ...p, dateTo: e.target.value }))}
+                    onChange={(e) => updateTicketFilters({ dateTo: e.target.value })}
                     data-testid="input-ticket-date-to"
                   />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Type</Label>
-                  <Select value={ticketFilters.type} onValueChange={(v) => setTicketFilters(p => ({ ...p, type: v === "all" ? "" : v }))}>
+                  <Select
+                    value={ticketFilters.type}
+                    onValueChange={(v) => updateTicketFilters({ type: v === "all" ? "" : v })}
+                  >
                     <SelectTrigger className="capitalize" data-testid="select-ticket-type-filter">
                       <SelectValue placeholder="All Types" />
                     </SelectTrigger>
@@ -175,7 +198,10 @@ export default function ReportsPage() {
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Status</Label>
-                  <Select value={ticketFilters.status} onValueChange={(v) => setTicketFilters(p => ({ ...p, status: v === "all" ? "" : v }))}>
+                  <Select
+                    value={ticketFilters.status}
+                    onValueChange={(v) => updateTicketFilters({ status: v === "all" ? "" : v })}
+                  >
                     <SelectTrigger className="capitalize" data-testid="select-ticket-status-filter">
                       <SelectValue placeholder="All Statuses" />
                     </SelectTrigger>
@@ -199,7 +225,7 @@ export default function ReportsPage() {
           ) : (
             <Card>
               <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
-                <CardTitle className="text-base">Ticket Report ({ticketsData?.length || 0} tickets)</CardTitle>
+                <CardTitle className="text-base">Ticket Report ({totalTickets} tickets)</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <div className="overflow-x-auto">
@@ -218,7 +244,7 @@ export default function ReportsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {ticketsData?.map((ticket: any) => (
+                      {tickets.map((ticket: any) => (
                         <tr key={ticket.id} className="border-b border-border last:border-0" data-testid={`row-ticket-${ticket.id}`}>
                           <td className="px-4 py-2.5">
                             <p className="font-mono text-xs">{ticket.ticketIdCustom || ticket.ticketNumber}</p>
@@ -250,7 +276,7 @@ export default function ReportsPage() {
                           </td>
                         </tr>
                       ))}
-                      {(!ticketsData || ticketsData.length === 0) && (
+                      {(tickets.length === 0) && (
                         <tr>
                           <td colSpan={9} className="px-4 py-8 text-center text-muted-foreground text-sm">
                             No tickets found
@@ -259,6 +285,34 @@ export default function ReportsPage() {
                       )}
                     </tbody>
                   </table>
+                </div>
+                <div className="flex flex-col gap-2 px-4 py-3 border-t border-border bg-muted/30 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-muted-foreground">
+                    {totalTickets === 0
+                      ? "No tickets to display"
+                      : `Showing ${ticketRangeStart}-${ticketRangeEnd} of ${totalTickets}`}
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setTicketPage((prev) => Math.max(1, prev - 1))}
+                      disabled={ticketPage <= 1}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Page {ticketPage} of {ticketTotalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setTicketPage((prev) => Math.min(ticketTotalPages, prev + 1))}
+                      disabled={ticketPage >= ticketTotalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>

@@ -499,16 +499,22 @@ export function useTechnicianBonusTotal() {
   });
 }
 
-export function useTicketsReport(filters?: { dateFrom?: string; dateTo?: string; type?: string; status?: string }) {
+export function useTicketsReport(
+  filters?: { dateFrom?: string; dateTo?: string; type?: string; status?: string },
+  page: number = 1,
+  perPage: number = 20,
+) {
   const params = new URLSearchParams();
   if (filters?.dateFrom) params.set("dateFrom", filters.dateFrom);
   if (filters?.dateTo) params.set("dateTo", filters.dateTo);
   if (filters?.type) params.set("type", filters.type);
   if (filters?.status) params.set("status", filters.status);
+  params.set("page", page.toString());
+  params.set("perPage", perPage.toString());
   const qs = params.toString();
 
   return useQuery({
-    queryKey: ["/api/reports/tickets", filters],
+    queryKey: ["/api/reports/tickets", filters, page, perPage],
     queryFn: async () => {
       const url = qs ? `/api/reports/tickets?${qs}` : "/api/reports/tickets";
       const res = await fetch(url, { credentials: "include" });
