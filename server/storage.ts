@@ -835,18 +835,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async saveCachedTile(tile: { z: number; x: number; y: number; tileData: Buffer; contentType: string }): Promise<void> {
+    const encoded = tile.tileData.toString("base64");
     await db.insert(mapTiles)
       .values({
         z: tile.z,
         x: tile.x,
         y: tile.y,
-        tileData: tile.tileData.toString("base64"),
+        tileData: encoded,
         contentType: tile.contentType,
       })
       .onConflictDoUpdate({
         target: [mapTiles.z, mapTiles.x, mapTiles.y],
         set: {
-          tileData: tile.tileData,
+          tileData: encoded,
           contentType: tile.contentType,
           updatedAt: new Date(),
         },
