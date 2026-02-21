@@ -436,6 +436,10 @@ export async function registerRoutes(
     try {
       const sessionUserId = (req as any).session.userId;
       const sessionUser = sessionUserId ? await storage.getUser(sessionUserId) : null;
+      const ticket = await storage.getTicket(ticketId);
+      if (!ticket) {
+        return res.status(404).json({ message: "Ticket not found" });
+      }
 
       const targetTech = await storage.getUser(userId);
       if (!targetTech || targetTech.role !== UserRole.TECHNICIAN) {
@@ -458,9 +462,9 @@ export async function registerRoutes(
 
       await storage.assignTicket(ticketId, userId, "manual");
       await storage.updateTicket(ticketId, { status: TicketStatus.ASSIGNED });
-      const ticket = await storage.getTicket(ticketId);
+      const updatedTicket = await storage.getTicket(ticketId);
       const assignees = await storage.getAssigneesForTicket(ticketId);
-      res.json({ ...ticket, assignee: assignees[0], assignees });
+      res.json({ ...updatedTicket, assignee: assignees[0], assignees });
     } catch (err: any) {
       if (err.message === "Maximum 2 assignees per ticket") {
         return res.status(400).json({ message: err.message });
