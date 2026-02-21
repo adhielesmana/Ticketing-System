@@ -10,6 +10,7 @@ import {
   type TechnicianPerformance,
   TicketStatus,
   UserRole,
+  TicketType,
 } from "@shared/schema";
 import { eq, or, and, sql, desc, asc } from "drizzle-orm";
 
@@ -587,6 +588,10 @@ export class DatabaseStorage implements IStorage {
         or(
           eq(tickets.status, TicketStatus.ASSIGNED),
           eq(tickets.status, TicketStatus.WAITING_ASSIGNMENT)
+        ),
+        or(
+          eq(tickets.type, TicketType.HOME_MAINTENANCE),
+          eq(tickets.type, TicketType.INSTALLATION)
         ),
         sql`${ticketAssignments.assignedAt} < ${cutoff}`
       ));
