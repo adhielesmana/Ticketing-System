@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.heat";
+import "@/lib/leaflet-tilelayer-pouchdbcached";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MapPin } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -55,6 +56,7 @@ interface TicketPoint {
   customerName: string;
   lat: number;
   lng: number;
+  customerLocationUrl?: string;
   isActive: boolean;
   performStatus?: string;
   assignees?: { id: number; name: string }[];
@@ -81,20 +83,15 @@ const typeColorMap: Record<string, { fill: string; stroke: string }> = {
   backbone_maintenance: { fill: "rgba(239, 68, 68, 0.25)", stroke: "#ef4444" },
 };
 
-const priorityRank = ["critical", "high", "medium", "low"];
-const ACTIVE_STATUSES = new Set([
-  TicketStatus.OPEN,
-  TicketStatus.WAITING_ASSIGNMENT,
-  TicketStatus.ASSIGNED,
-  TicketStatus.IN_PROGRESS,
-]);
+const ASSIGNED_STATUSES = new Set([TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS]);
 
 export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<L.Map | null>(null);
   const heatLayerRef = useRef<L.Layer[]>([]);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
-  const techMarkerRef = useRef<L.CircleMarker | null>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const seededRef = useRef(false);
   const [viewMode, setViewMode] = useState<ViewMode>("heatmap");
 
   const points: TicketPoint[] = useMemo(() => {
@@ -124,6 +121,7 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
           priority: t.priority,
           type: t.type,
           customerName: t.customerName,
+          customerLocationUrl: t.customerLocationUrl,
           lat,
           lng,
           isActive: ACTIVE_STATUSES.has(t.status),
@@ -135,17 +133,8 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
     .filter(Boolean) as TicketPoint[];
   }, [tickets]);
 
-  const technicianPoint = useMemo<TicketPoint | null>(() => {
-    const candidates = points.filter((pt) => pt.assignees?.length && pt.isActive);
-    if (candidates.length === 0) return null;
-    return [...candidates].sort((a, b) => {
-      const rankA = priorityRank.indexOf(a.priority);
-      const rankB = priorityRank.indexOf(b.priority);
-      if (rankA !== rankB) return (rankA === -1 ? priorityRank.length : rankA) - (rankB === -1 ? priorityRank.length : rankB);
-      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return dateB - dateA;
-    })[0];
+  const technicianPoints = useMemo(() => {
+    return points.filter((pt) => pt.assignees && pt.assignees.length > 0 && ASSIGNED_STATUSES.has(pt.status));
   }, [points]);
 
   useEffect(() => {
@@ -160,19 +149,37 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
       attributionControl: true,
     });
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    const cachedLayer = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      useCache: true,
+      saveToCache: true,
+      cacheMaxAge: 604800000,
+      crossOrigin: true,
+      userAgent: "NetGuard-OpenMaps/1.0",
     }).addTo(map);
+    tileLayerRef.current = cachedLayer;
 
     markerLayerRef.current = L.layerGroup().addTo(map);
     mapInstance.current = map;
+    map.invalidateSize();
 
     return () => {
       map.remove();
       mapInstance.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (!tileLayerRef.current || seededRef.current || points.length === 0) return;
+    const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng]));
+    const paddedBounds = bounds.pad(0.1);
+    const seedFn = (tileLayerRef.current as any).seed;
+    if (typeof seedFn === "function") {
+      seedFn.call(tileLayerRef.current, paddedBounds, 12, 17);
+    }
+    seededRef.current = true;
+  }, [points]);
 
   useEffect(() => {
     if (!mapInstance.current) return;
@@ -185,18 +192,10 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
     if (markerLayerRef.current) {
       markerLayerRef.current.clearLayers();
     }
-    if (techMarkerRef.current) {
-      map.removeLayer(techMarkerRef.current);
-      techMarkerRef.current = null;
-    }
-
     if (points.length === 0) return;
 
     if (viewMode === "heatmap") {
-      const activePoints = points.filter((pt) => pt.isActive);
-      const inactivePoints = points.filter((pt) => !pt.isActive);
-
-      const heatData: Array<[number, number, number]> = activePoints.map((pt) => {
+      const heatData: Array<[number, number, number]> = technicianPoints.map((pt) => {
         const intensity = priorityIntensity[pt.priority] || 0.5;
         return [pt.lat, pt.lng, intensity];
       });
@@ -222,34 +221,13 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
         heatLayerRef.current.push(heat);
       }
 
-      if (inactivePoints.length > 0) {
-        const greyHeat = L.heatLayer(
-          inactivePoints.map((pt) => [pt.lat, pt.lng, 0.5]),
-          {
-            radius: 20,
-            blur: 10,
-            maxZoom: 17,
-            minOpacity: 0.2,
-            max: 1.0,
-            gradient: {
-              0.0: "rgba(0,0,0,0)",
-              1.0: "rgba(107,114,128,0.8)",
-            },
-          },
-        );
-        greyHeat.addTo(map);
-        heatLayerRef.current.push(greyHeat);
-      }
     } else {
       points.forEach((pt) => {
         const colors = typeColorMap[pt.type] || typeColorMap.installation;
 
-        const marker = L.circleMarker([pt.lat, pt.lng], {
-          radius: 7,
-          fillColor: pt.isActive ? colors.stroke : "#6b7280",
-          fillOpacity: pt.isActive ? 0.95 : 0.55,
-          color: pt.isActive ? "#fff" : "#d1d5db",
-          weight: pt.isActive ? 2 : 1.5,
+        const iconColor = pt.isActive ? colors.stroke : "#6b7280";
+        const marker = L.marker([pt.lat, pt.lng], {
+          icon: createPersonIcon(iconColor),
         }).addTo(markerLayerRef.current!);
 
         const typeLabel = pt.type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -257,64 +235,25 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
         const statusBadgeColor = pt.isActive ? colors.stroke : "#6b7280";
         const statusTextColor = pt.isActive ? "#fff" : "#f3f4f6";
 
+        const team = pt.assignees?.map((a) => a.name).join(", ") || "Unassigned";
+        const locationLink = pt.customerLocationUrl
+          ? `<a href="${pt.customerLocationUrl}" target="_blank" rel="noreferrer" style="color:#0ea5e9;text-decoration:none">Open map</a>`
+          : "—";
         marker.bindPopup(
-          `<div style="font-size:13px;line-height:1.5;min-width:160px">
-            <div style="font-weight:600;margin-bottom:4px">#${pt.ticketIdCustom || pt.ticketNumber || pt.id}</div>
-            <div>${pt.title}</div>
-            <div style="color:#666;font-size:11px;margin-top:2px">${pt.customerName}</div>
-            <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
-              <span style="background:${statusBadgeColor};color:${statusTextColor};padding:1px 8px;border-radius:10px;font-size:11px">${statusLabel}</span>
-              <span style="background:#f3f4f6;color:#374151;padding:1px 8px;border-radius:10px;font-size:11px">${typeLabel}</span>
-            </div>
-          </div>`,
+          `<div style="font-size:13px;line-height:1.5;min-width:200px">
+             <div style="font-weight:600;margin-bottom:4px">No : ${pt.ticketIdCustom || pt.ticketNumber || pt.id}</div>
+             <div style="font-size:12px;margin-bottom:2px">Team : ${team}</div>
+             <div style="font-size:12px;margin-bottom:2px">Customer : ${pt.customerName}</div>
+             <div style="font-size:12px;margin-bottom:2px">Description : ${pt.title}</div>
+             <div style="font-size:12px;margin-bottom:2px">Location : ${locationLink}</div>
+           </div>`,
           { closeButton: false }
         );
-        const shortTitle =
-          pt.title.length > 10 ? `${pt.title.slice(0, 10)}…` : pt.title;
-        const performanceLabel =
-          pt.performStatus === "perform" ? "On Time" : "Overdue";
-        const tooltipContent = `
-          <div style="font-size:12px;line-height:1.3;">
-            <strong>#${pt.ticketIdCustom || pt.ticketNumber || pt.id}</strong><br/>
-            ${shortTitle}<br/>
-            ${performanceLabel}
-          </div>`;
-        marker.bindTooltip(tooltipContent, {
-          direction: "top",
-          offset: [0, -8],
-          opacity: 0.95,
-          className: "map-tooltip",
-        });
-        marker.on("mouseover", () => marker.openTooltip());
-        marker.on("mouseout", () => marker.closeTooltip());
         marker.on("click", () => {
           window.location.href = `/tickets/${pt.id}`;
         });
       });
     }
-
-    if (technicianPoint) {
-      const techMarker = L.circleMarker([technicianPoint.lat, technicianPoint.lng], {
-        radius: 11,
-        fillColor: "rgba(16, 185, 129, 0.35)",
-        fillOpacity: 0.6,
-        color: "#0ea5e9",
-        weight: 2,
-        dashArray: "4",
-      }).addTo(map);
-
-      const popupContent = `
-        <div style="font-size:13px;line-height:1.4;min-width:180px">
-          <div style="font-weight:600;margin-bottom:2px">Top Assignment</div>
-          <div>#${technicianPoint.ticketIdCustom || technicianPoint.ticketNumber || technicianPoint.id}</div>
-          <div>${technicianPoint.customerName}</div>
-          <div style="font-size:12px;color:#475569;margin-top:2px">${technicianPoint.title}</div>
-        </div>
-      `;
-      techMarker.bindPopup(popupContent, { closeButton: false });
-      techMarkerRef.current = techMarker;
-    }
-
     const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng]));
     map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
   }, [points, viewMode]);
@@ -402,4 +341,36 @@ function Legend({ color, label }: { color: string; label: string }) {
       <span className="text-xs text-muted-foreground">{label}</span>
     </div>
   );
+}
+
+const PERSON_ICON_SVG = `
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="8" r="3" />
+    <path d="M5 21c0-3.314 2.686-6 6-6h2c3.314 0 6 2.686 6 6" />
+  </svg>
+`;
+
+function createPersonIcon(color: string, size = 32) {
+  const html = `
+    <span style="
+      display:inline-flex;
+      justify-content:center;
+      align-items:center;
+      width:${size}px;
+      height:${size}px;
+      border-radius:50%;
+      background:${color};
+      box-shadow:0 6px 18px rgba(15,23,42,0.35);
+    ">
+      ${PERSON_ICON_SVG}
+    </span>
+  `;
+
+  return L.divIcon({
+    className: "",
+    html,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size],
+    popupAnchor: [0, -size],
+  });
 }

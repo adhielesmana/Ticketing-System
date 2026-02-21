@@ -56,6 +56,8 @@ import { useForm } from "react-hook-form";
 import { insertTicketSchema, TicketTypeValues, TicketPriorityValues, TicketStatusValues, UserRole } from "@shared/schema";
 import { format } from "date-fns";
 import { Search, Eye, Pencil, Trash2, UserPlus, Ticket, Check, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { isBackboneOrVendorTech, isHelpdeskManualAssignmentAllowed, shouldRestrictDropdownToBackbone } from "@/utils/manualAssignment";
 
 const priorityColors: Record<string, string> = {
   low: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
@@ -123,6 +125,7 @@ export default function TicketsPage() {
   const { mutate: deleteTicket } = useDeleteTicket();
   const { mutate: updateTicket } = useUpdateTicket();
   const { mutate: assignTicket } = useAssignTicket();
+  const { toast } = useToast();
 
   const [editTicket, setEditTicket] = useState<any>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -135,6 +138,7 @@ export default function TicketsPage() {
 
   const canManage = user?.role === UserRole.SUPERADMIN || user?.role === UserRole.ADMIN;
   const canAssign = canManage || user?.role === UserRole.HELPDESK;
+  const showAssignIcon = user?.role === UserRole.SUPERADMIN || user?.role === UserRole.ADMIN;
   const canCreate = canManage || user?.role === UserRole.HELPDESK;
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -200,7 +204,19 @@ export default function TicketsPage() {
     }
   }
 
-  function toggleTechSelection(techId: number) {
+  function toggleTechSelection(tech: any) {
+    if (!tech) return;
+    if (existingAssigneeCount === 0 && user?.role === UserRole.HELPDESK) {
+      if (!isHelpdeskManualAssignmentAllowed(assignDialogTicket?.type, tech)) {
+        toast({
+          title: "Technician not permitted",
+          description: "Helpdesk can only assign backbone or vendor specialists manually.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+    const techId = tech.id;
     setSelectedTechIds((prev) => {
       if (prev.includes(techId)) {
         return prev.filter((id) => id !== techId);
@@ -432,7 +448,7 @@ export default function TicketsPage() {
                               <Eye className="w-3.5 h-3.5" />
                             </Button>
                           </Link>
-                          {canAssign && (!ticket.assignees || ticket.assignees.length < 2) && !["closed", "rejected", "pending_rejection"].includes(ticket.status) && (
+                          {showAssignIcon && (!ticket.assignees || ticket.assignees.length < 2) && !["closed", "rejected", "pending_rejection"].includes(ticket.status) && (
                             <Button
                               size="icon"
                               variant="ghost"
@@ -610,7 +626,10 @@ export default function TicketsPage() {
           <div className="space-y-2 py-2 max-h-[50vh] overflow-y-auto">
             {(() => {
               const existingIds = (assignDialogTicket?.assignees || []).map((a: any) => a.id);
-              const techList = (technicians || []).filter((tech: any) => !existingIds.includes(tech.id));
+              const techListBase = (technicians || []).filter((tech: any) => !existingIds.includes(tech.id));
+              const techList = shouldRestrictDropdownToBackbone(assignDialogTicket?.type)
+                ? techListBase.filter(isBackboneOrVendorTech)
+                : techListBase;
               if (techList.length === 0) {
                 return (
                   <p className="text-sm text-muted-foreground text-center py-4">
@@ -625,7 +644,7 @@ export default function TicketsPage() {
                     key={tech.id}
                     variant={isSelected ? "default" : "outline"}
                     className="w-full justify-start gap-3"
-                    onClick={() => toggleTechSelection(tech.id)}
+                    onClick={() => toggleTechSelection(tech)}
                     data-testid={`button-assign-to-${tech.id}`}
                   >
                     <div className="flex items-center justify-center h-7 w-7 shrink-0">

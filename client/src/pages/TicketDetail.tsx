@@ -44,6 +44,7 @@ import { ChangeEvent, useEffect, useState, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { isBackboneOrVendorTech, isHelpdeskManualAssignmentAllowed, shouldRestrictDropdownToBackbone } from "@/utils/manualAssignment";
 
 const priorityColors: Record<string, string> = {
   low: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
@@ -371,7 +372,11 @@ function ReassignTicketDialog({
   };
 
   const filteredTechnicians = technicians?.filter((t: any) => t.role === "technician") || [];
-  const partnerOptions = filteredTechnicians.filter((tech: any) => String(tech.id) !== leadTech);
+  const isBackboneTicketForReassign = shouldRestrictDropdownToBackbone(ticket?.type);
+  const availableReassignTechnicians = filteredTechnicians.filter((tech: any) =>
+    !isBackboneTicketForReassign || isBackboneOrVendorTech(tech)
+  );
+  const partnerOptions = availableReassignTechnicians.filter((tech: any) => String(tech.id) !== leadTech);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -396,7 +401,7 @@ function ReassignTicketDialog({
                 <SelectValue placeholder="Select lead technician..." />
               </SelectTrigger>
               <SelectContent>
-                {filteredTechnicians
+                {availableReassignTechnicians
                   .filter(tech => !isHelpdesk || tech.isBackboneSpecialist || tech.isVendorSpecialist)
                   .map((tech: any) => (
                     <SelectItem
@@ -1117,6 +1122,28 @@ export default function TicketDetail() {
   const canManage = user?.role === 'admin' || user?.role === 'superadmin' || user?.role === 'helpdesk';
   const descImages: string[] = ticket.descriptionImages || [];
   const hasMapPreview = ticket.customerLocationUrl && extractCoordinates(ticket.customerLocationUrl);
+  const isBackboneTicket = shouldRestrictDropdownToBackbone(ticket.type);
+  const availableTechniciansForAssignment = (technicians || []).filter((tech) =>
+    !isBackboneTicket || isBackboneOrVendorTech(tech)
+  );
+  const existingAssigneeIds = ticket.assignees?.map((a: any) => a.id) || [];
+  const availablePartnerTechnicians = (freeTechnicians || [])
+    .filter((tech) => !existingAssigneeIds.includes(tech.id))
+    .filter((tech) => !isBackboneTicket || isBackboneOrVendorTech(tech));
+
+  const handleManualAssignSelection = (value: string) => {
+    const technicianId = Number(value);
+    const selectedTech = technicians?.find((tech) => tech.id === technicianId);
+    if (user?.role === 'helpdesk' && !isHelpdeskManualAssignmentAllowed(ticket.type, selectedTech)) {
+      toast({
+        title: "Technician not permitted",
+        description: "Helpdesk can only assign backbone or vendor technicians manually.",
+        variant: "destructive",
+      });
+      return;
+    }
+    assignTicket({ id: ticketId, userId: technicianId });
+  };
 
   const isHelpdesk = user?.role === "helpdesk";
 
@@ -1540,24 +1567,20 @@ export default function TicketDetail() {
                   {canManage && ticket.assignees.length < 2 && !['closed', 'rejected', 'pending_rejection'].includes(ticket.status) && (
                     <div className="space-y-1">
                       <p className="text-xs text-muted-foreground">Only technicians without active tickets are shown:</p>
-                      {freeTechnicians && freeTechnicians
-                        .filter((tech: any) => !ticket.assignees.some((a: any) => a.id === tech.id))
-                        .filter((tech: any) => user?.role === 'helpdesk' ? (tech.isBackboneSpecialist || tech.isVendorSpecialist) : true)
-                        .length > 0 ? (
-                        <Select onValueChange={(val) => assignTicket({ id: ticketId, userId: Number(val) })}>
-                          <SelectTrigger data-testid="select-add-second-technician">
-                            <SelectValue placeholder="Add second technician..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {freeTechnicians
-                              .filter((tech: any) => !ticket.assignees.some((a: any) => a.id === tech.id))
-                              .filter((tech: any) => user?.role === 'helpdesk' ? (tech.isBackboneSpecialist || tech.isVendorSpecialist) : true)
-                              .map((tech: any) => (
-                              <SelectItem key={tech.id} value={String(tech.id)}>{tech.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
+                  {availablePartnerTechnicians.length > 0 ? (
+                    <Select onValueChange={(val) => assignTicket({ id: ticketId, userId: Number(val) })}>
+                      <SelectTrigger data-testid="select-add-second-technician">
+                        <SelectValue placeholder="Add second technician..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availablePartnerTechnicians.map((tech: any) => (
+                          <SelectItem key={tech.id} value={String(tech.id)}>
+                            {tech.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
                         <p className="text-xs text-muted-foreground italic">No free technicians available.</p>
                       )}
                     </div>
@@ -1595,15 +1618,15 @@ export default function TicketDetail() {
                     <AlertOctagon className="w-4 h-4 shrink-0" />
                     <span className="text-xs font-medium">Unassigned</span>
                   </div>
-                  <Select onValueChange={(val) => assignTicket({ id: ticketId, userId: Number(val) })}>
+                  <Select onValueChange={handleManualAssignSelection}>
                     <SelectTrigger data-testid="select-assign-technician">
                       <SelectValue placeholder="Select Technician" />
                     </SelectTrigger>
                     <SelectContent>
-                      {technicians
-                        ?.filter((tech: any) => user?.role === 'helpdesk' ? (tech.isBackboneSpecialist || tech.isVendorSpecialist) : true)
-                        .map((tech: any) => (
-                        <SelectItem key={tech.id} value={String(tech.id)}>{tech.name}</SelectItem>
+                      {availableTechniciansForAssignment.map((tech: any) => (
+                        <SelectItem key={tech.id} value={String(tech.id)}>
+                          {tech.name}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
