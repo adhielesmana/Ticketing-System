@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { 
-  users, tickets, ticketAssignments, performanceLogs, settings, technicianFees,
+  users, tickets, ticketAssignments, performanceLogs, settings, technicianFees, mapTiles,
   type User, type InsertUser, 
   type Ticket, type InsertTicket,
   type TicketAssignment, type InsertAssignment,
@@ -78,6 +78,8 @@ export interface IStorage {
     slaBreachCount: number;
     pendingRejection: number;
   }>;
+  getCachedTile(z: number, x: number, y: number): Promise<{ tileData: Buffer; contentType: string } | undefined>;
+  saveCachedTile(tile: { z: number; x: number; y: number; tileData: Buffer; contentType: string }): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -817,6 +819,38 @@ export class DatabaseStorage implements IStorage {
       totalTicketFee,
       totalTransportFee,
     };
+  }
+
+  async getCachedTile(z: number, x: number, y: number): Promise<{ tileData: Buffer; contentType: string } | undefined> {
+    const [tile] = await db.select({
+      tileData: mapTiles.tileData,
+      contentType: mapTiles.contentType,
+    }).from(mapTiles)
+      .where(and(eq(mapTiles.z, z), eq(mapTiles.x, x), eq(mapTiles.y, y)));
+    if (!tile) return undefined;
+    return {
+      tileData: Buffer.from(tile.tileData, "base64"),
+      contentType: tile.contentType,
+    };
+  }
+
+  async saveCachedTile(tile: { z: number; x: number; y: number; tileData: Buffer; contentType: string }): Promise<void> {
+    await db.insert(mapTiles)
+      .values({
+        z: tile.z,
+        x: tile.x,
+        y: tile.y,
+        tileData: tile.tileData.toString("base64"),
+        contentType: tile.contentType,
+      })
+      .onConflictDoUpdate({
+        target: [mapTiles.z, mapTiles.x, mapTiles.y],
+        set: {
+          tileData: tile.tileData,
+          contentType: tile.contentType,
+          updatedAt: new Date(),
+        },
+      });
   }
 
   async getDashboardStats(): Promise<{

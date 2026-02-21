@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, boolean, timestamp, jsonb, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, boolean, timestamp, jsonb, numeric, primaryKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -157,6 +157,22 @@ export const technicianFees = pgTable("technician_fees", {
   ticketFee: numeric("ticket_fee", { precision: 12, scale: 2 }).default("0").notNull(),
   transportFee: numeric("transport_fee", { precision: 12, scale: 2 }).default("0").notNull(),
 });
+
+export const mapTiles = pgTable(
+  "map_tiles",
+  {
+    z: integer("z").notNull(),
+    x: integer("x").notNull(),
+    y: integer("y").notNull(),
+    tileData: text("tile_data").notNull(),
+    contentType: text("content_type").notNull().default("image/png"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    pk: primaryKey(table.z, table.x, table.y),
+  }),
+);
 
 export const insertTechnicianFeeSchema = createInsertSchema(technicianFees).omit({
   id: true,

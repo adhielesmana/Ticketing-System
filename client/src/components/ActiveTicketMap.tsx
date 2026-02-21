@@ -149,7 +149,7 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
       attributionControl: true,
     });
 
-    const cachedLayer = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    const cachedLayer = L.tileLayer("/api/map-tiles/{z}/{x}/{y}", {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       useCache: true,

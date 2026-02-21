@@ -142,6 +142,8 @@ const s3Client = new S3Client({
   forcePathStyle: true,
 });
 
+const TILE_SERVER_URL = process.env.TILE_SERVER_URL || "https://tile.openstreetmap.org";
+
 const uploadsDir = path.resolve(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
@@ -537,6 +539,45 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Unassign error:", err);
       res.status(500).json({ message: err.message || "Failed to unassign ticket" });
+    }
+  });
+
+  app.get("/api/map-tiles/:z/:x/:y", async (req, res) => {
+    const z = Number(req.params.z);
+    const x = Number(req.params.x);
+    const y = Number(req.params.y);
+    if ([z, x, y].some((n) => Number.isNaN(n))) {
+      return res.status(400).json({ message: "Invalid tile coordinates" });
+    }
+
+    try {
+      const cached = await storage.getCachedTile(z, x, y);
+      if (cached) {
+        res.setHeader("Cache-Control", "public, max-age=604800");
+        return res.type(cached.contentType).send(cached.tileData);
+      }
+
+      const tileUrl = `${TILE_SERVER_URL}/${z}/${x}/${y}.png`;
+      const tileRes = await fetch(tileUrl, {
+        headers: {
+          "User-Agent": "NetGuard-OpenMaps/1.0",
+          Accept: "image/png,image/webp,image/*;q=0.9,*/*;q=0.8",
+        },
+      });
+
+      if (!tileRes.ok) {
+        const body = await tileRes.text().catch(() => "");
+        return res.status(tileRes.status).send(body);
+      }
+
+      const buffer = Buffer.from(await tileRes.arrayBuffer());
+      const contentType = tileRes.headers.get("content-type") || "image/png";
+      await storage.saveCachedTile({ z, x, y, tileData: buffer, contentType });
+      res.setHeader("Cache-Control", "public, max-age=604800");
+      res.type(contentType).send(buffer);
+    } catch (err) {
+      console.error("Map tile error:", err);
+      res.status(500).json({ message: "Failed to load map tile" });
     }
   });
 
