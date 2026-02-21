@@ -61,6 +61,15 @@ function getPercentColor(value: number): string {
   return "text-red-600 dark:text-red-400";
 }
 
+function getDailyCountColor(value: number, target: number): string {
+  if (target <= 0) return "";
+  const ratio = target ? value / target : 0;
+  if (ratio < 0.25) return "text-red-600 dark:text-red-400";
+  if (ratio < 0.5) return "text-amber-600 dark:text-amber-400";
+  if (ratio < 0.75) return "text-emerald-600 dark:text-emerald-400";
+  return "text-blue-600 dark:text-blue-400";
+}
+
 export default function ReportsPage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("tickets");
@@ -638,20 +647,28 @@ export default function ReportsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {periodData.rows.map((row) => (
-                        <tr key={row.technicianId} className="border-b border-border last:border-0">
-                          <td className="px-3 py-2 font-semibold">{row.technicianName}</td>
-                          {periodData.days.map((day) => (
-                            <td key={`${row.technicianId}-${day.iso}`} className="px-2 py-1 text-center font-mono">
-                              {row.dailyCounts[day.iso] ?? 0}
-                            </td>
+                          {periodData.rows.map((row) => (
+                            <tr key={row.technicianId} className="border-b border-border last:border-0">
+                              <td className="px-3 py-2 font-semibold">{row.technicianName}</td>
+                              {periodData.days.map((day) => {
+                                const value = row.dailyCounts[day.iso] ?? 0;
+                                const text = value > 0 ? value : "";
+                                const colorClass = value > 0 ? getDailyCountColor(value, periodData.dailyTarget) : "";
+                                return (
+                                  <td
+                                    key={`${row.technicianId}-${day.iso}`}
+                                    className={`px-2 py-1 text-center font-mono ${colorClass}`}
+                                  >
+                                    {text}
+                                  </td>
+                                );
+                              })}
+                              <td className="px-3 py-2 text-right font-semibold">{row.total}</td>
+                              <td className={`px-3 py-2 text-right font-semibold ${getPercentColor(row.performancePercent)}`}>
+                                {formatPercent(row.performancePercent)}
+                              </td>
+                            </tr>
                           ))}
-                          <td className="px-3 py-2 text-right font-semibold">{row.total}</td>
-                          <td className={`px-3 py-2 text-right font-semibold ${getPercentColor(row.performancePercent)}`}>
-                            {formatPercent(row.performancePercent)}
-                          </td>
-                        </tr>
-                      ))}
                     </tbody>
                   </table>
                 </div>
