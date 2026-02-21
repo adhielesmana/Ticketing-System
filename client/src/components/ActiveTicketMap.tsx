@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.heat";
-import "@/lib/leaflet-tilelayer-pouchdbcached";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MapPin } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -90,8 +89,6 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
   const mapInstance = useRef<L.Map | null>(null);
   const heatLayerRef = useRef<L.Layer[]>([]);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
-  const tileLayerRef = useRef<L.TileLayer | null>(null);
-  const seededRef = useRef(false);
   const [viewMode, setViewMode] = useState<ViewMode>("heatmap");
 
   const points: TicketPoint[] = useMemo(() => {
