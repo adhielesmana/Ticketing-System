@@ -228,8 +228,17 @@ export async function registerRoutes(
 
   // === USERS ===
   app.get(api.users.list.path, async (req, res) => {
-    if (!(await requireAdminAccess(req, res))) return;
     const role = req.query.role as string | undefined;
+    const sessionUserId = (req as any).session.userId;
+    if (role === UserRole.TECHNICIAN && sessionUserId) {
+      const sessionUser = await storage.getUser(sessionUserId);
+      if (sessionUser?.role === UserRole.HELPDESK) {
+        const users = await storage.getAllUsers(role);
+        res.json(users);
+        return;
+      }
+    }
+    if (!(await requireAdminAccess(req, res))) return;
     const users = await storage.getAllUsers(role);
     res.json(users);
   });
