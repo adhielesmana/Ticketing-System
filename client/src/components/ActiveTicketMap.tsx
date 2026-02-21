@@ -89,6 +89,8 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
   const mapInstance = useRef<L.Map | null>(null);
   const heatLayerRef = useRef<L.Layer[]>([]);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
+  const tileLayerRef = useRef<L.TileLayer | null>(null);
+  const seededRef = useRef<boolean>(false);
   const [viewMode, setViewMode] = useState<ViewMode>("heatmap");
 
   const points: TicketPoint[] = useMemo(() => {
@@ -164,6 +166,8 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
     return () => {
       map.remove();
       mapInstance.current = null;
+      tileLayerRef.current = null;
+      seededRef.current = false;
     };
   }, []);
 
@@ -171,11 +175,8 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
     if (!tileLayerRef.current || seededRef.current || points.length === 0) return;
     const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng]));
     const paddedBounds = bounds.pad(0.1);
-    const seedFn = (tileLayerRef.current as any).seed;
-    if (typeof seedFn === "function") {
-      seedFn.call(tileLayerRef.current, paddedBounds, 12, 17);
-    }
     seededRef.current = true;
+    void seedServerTiles(paddedBounds, 12, 17);
   }, [points]);
 
   useEffect(() => {
@@ -370,4 +371,50 @@ function createPersonIcon(color: string, size = 32) {
     iconAnchor: [size / 2, size],
     popupAnchor: [0, -size],
   });
+}
+
+const MAX_PREFETCH_TILES = 256;
+
+function clampTileIndex(value: number, maxIndex: number) {
+  if (value < 0) return 0;
+  if (value > maxIndex) return maxIndex;
+  return value;
+}
+
+function latLngToTileIndex(lat: number, lng: number, zoom: number) {
+  const latRad = (lat * Math.PI) / 180;
+  const n = Math.pow(2, zoom);
+  const x = Math.floor(((lng + 180) / 360) * n);
+  const y = Math.floor(
+    (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n,
+  );
+  return {
+    x: clampTileIndex(x, n - 1),
+    y: clampTileIndex(y, n - 1),
+  };
+}
+
+async function seedServerTiles(bounds: L.LatLngBounds, minZoom: number, maxZoom: number) {
+  let fetched = 0;
+  for (let z = minZoom; z <= maxZoom && fetched < MAX_PREFETCH_TILES; z++) {
+    const northWest = bounds.getNorthWest();
+    const southEast = bounds.getSouthEast();
+    const topTile = latLngToTileIndex(northWest.lat, northWest.lng, z);
+    const bottomTile = latLngToTileIndex(southEast.lat, southEast.lng, z);
+    const minX = Math.min(topTile.x, bottomTile.x);
+    const maxX = Math.max(topTile.x, bottomTile.x);
+    const minY = Math.min(topTile.y, bottomTile.y);
+    const maxY = Math.max(topTile.y, bottomTile.y);
+
+    for (let x = minX; x <= maxX && fetched < MAX_PREFETCH_TILES; x++) {
+      for (let y = minY; y <= maxY && fetched < MAX_PREFETCH_TILES; y++) {
+        fetched += 1;
+        try {
+          await fetch(`/api/map-tiles/${z}/${x}/${y}`, { cache: "force-cache" });
+        } catch {
+          // ignore failed requests, the cache is best-effort
+        }
+      }
+    }
+  }
 }

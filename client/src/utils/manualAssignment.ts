@@ -5,7 +5,6 @@ type Technician = { isBackboneSpecialist?: boolean; isVendorSpecialist?: boolean
 const HELP_DESK_RESTRICTED_TYPES = new Set<string>([
   TicketType.HOME_MAINTENANCE,
   TicketType.INSTALLATION,
-  TicketType.BACKBONE_MAINTENANCE,
 ]);
 
 export function isBackboneOrVendorTech(tech?: Technician): boolean {

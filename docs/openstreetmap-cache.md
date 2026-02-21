@@ -1,50 +1,28 @@
-# Technical Specification: Local Tile Caching for OpenStreetMap (OSM)
+# Technical Specification: Server-backed Tile Caching (OpenStreetMap)
 
-## 1. Project Objective
-Implement a local caching layer for the fixed-radius service area so the map no longer stutters, times out, or shows a blank screen when OpenStreetMap tiles cannot be streamed immediately.
+## 1. Objective
+The map should render reliably even when OpenStreetMap rate-limits or drops tiles for a bursty client. Instead of bundling an in-browser database, we cache the tiles in Postgres so every browser can stream them from our API and optionally reuse a pre-seeded cache for the known service area.
 
----
+## 2. Problem Summary
+Blank tiles are typically due to:
 
-## 2. Core Problem Diagnostics
-When the map goes blank it is usually because:
-- **Missing CSS:** `leaflet.css` must load before the JavaScript bundle so the map container sizes correctly.
-- **Container Height:** `#map` (or the leaflet container div) needs an explicit height (e.g., `height: 500px`) because Leaflet will render at 0px otherwise.
-- **Rate Limiting:** OSM blocks bursts of tile requests if they come from a generic `User-Agent`, so a unique identifier plus caching is required.
+- **Rate limiting:** OSM rejects too many concurrent requests without a unique `User-Agent`. Every browser request must travel through our API, which adds a distinct agent string for tracking.
+- **Transient outages:** When a tile request fails, we still keep the previously cached version in Postgres, so refreshing is fast.
+- **Cold starts:** We seed the most common tiles on the client side once (for the bounding box that the technicians usually operate inside), so the subsequent navigation comes from IndexedDB or browser cache instead of hitting OSM again.
 
----
+## 3. Caching Flow
 
-## 3. Implementation Strategy: Leaflet + PouchDB
-Because the app operates within a bounded area, we can cache tiles with `PouchDB` (which uses IndexedDB in the browser) and a Leaflet caching plugin.
+1. **Server route:** `/api/map-tiles/:z/:x/:y` first looks in the `map_tiles` table, returning the `tileData` with a long `Cache-Control` header if present. If the tile is missing, the server fetches it from `https://tile.openstreetmap.org`, stores it (encoded as base64), and then returns the raw binary to the client. Every fetch includes the header `"User-Agent": "NetGuard-OpenMaps/1.0"`.
 
-### A. Required Dependencies
-1. **Leaflet.js** – the base mapping library.
-2. **PouchDB** – stores tiles locally.
-3. **Leaflet.TileLayer.PouchDBCached** – the wrapper that lets Leaflet read/write tiles via PouchDB.
+2. **Client map layer:** `ActiveTicketMap` uses `L.tileLayer("/api/map-tiles/{z}/{x}/{y}")` with `crossOrigin`, `cacheMaxAge`, and the custom `userAgent` options. The component now stores the created tile layer in `tileLayerRef` so we can seed it once the ticket coordinates arrive.
 
-### B. Configuration Script
+3. **Seeding:** Once the map has points, the component calculates a padded `LatLngBounds` covering active ticket locations and calls the `seed` helper that is defined on the layer (it uses the same `L.TileLayer` object but the seeding logic is implemented beside the map so it simply loops over every tile in the range and touches it). Because the layer is served from our own `/api/map-tiles` endpoint, seeding primes the Postgres cache rather than hitting OSM directly.
 
-```javascript
-// 1. Initialize map.
-const map = L.map("map").setView([LAT, LNG], 15);
+4. **Cleanup:** The map clears the `tileLayerRef`/`seededRef` on unmount, enabling future re-initialization when the component remounts.
 
-// 2. Layer with caching.
-const osmLayer = L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-  maxZoom: 18,
-  attribution: "&copy; OpenStreetMap",
-  useCache: true,
-  crossOrigin: true,
-  cacheMaxAge: 604800000, // 7 days
-  userAgent: "MySpecificApp_v1.0",
-});
+## 4. Operational Notes
 
-osmLayer.addTo(map);
+- The `map_tiles` table uses a composite primary key on `(z, x, y)` and stores the tile as base64 so Postgres avoids raw binary issues.
+- Every response sets `Cache-Control: public, max-age=604800` so browsers can reuse cached tiles for seven days.
+- When we deploy to production, ensure the `TILE_SERVER_URL` environment variable points to `https://tile.openstreetmap.org` or a mirrored tile server with usage terms.
 
-// 3. Force Leaflet to recalculate size (fix for hidden containers/ tabs).
-map.invalidateSize();
-
-// 4. Seed the cache for the service area (cover zooms 12–17).
-const bbox = L.latLngBounds(southWestCorner, northEastCorner);
-osmLayer.seed(bbox, 12, 17);
-```
-
-Use the seed call to pre-download tiles for the known service area once so subsequent visits render instantly even if OSM rate limits the live requests.

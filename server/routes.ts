@@ -144,6 +144,15 @@ const s3Client = new S3Client({
 
 const TILE_SERVER_URL = process.env.TILE_SERVER_URL || "https://tile.openstreetmap.org";
 
+const HELP_DESK_MANUAL_ASSIGNMENT_RESTRICTED_TYPES = new Set([
+  TicketType.HOME_MAINTENANCE,
+  TicketType.INSTALLATION,
+]);
+
+function isBackboneOrVendor(tech?: { isBackboneSpecialist?: boolean; isVendorSpecialist?: boolean }) {
+  return Boolean(tech?.isBackboneSpecialist || tech?.isVendorSpecialist);
+}
+
 const uploadsDir = path.resolve(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
@@ -424,13 +433,16 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Target user is not a valid technician" });
       }
 
-      if (sessionUser && sessionUser.role === UserRole.HELPDESK) {
-        if (!targetTech.isBackboneSpecialist && !targetTech.isVendorSpecialist) {
-          return res.status(403).json({ message: "Helpdesk can only manually assign to backbone or vendor specialists. Other technicians must use auto-assign (Get Ticket)." });
-        }
-      }
-
       const existingAssignees = await storage.getAssigneesForTicket(ticketId);
+      const isHelpdesk = sessionUser?.role === UserRole.HELPDESK;
+      const isRestrictedType = HELP_DESK_MANUAL_ASSIGNMENT_RESTRICTED_TYPES.has(ticket.type as TicketType);
+      const isInitialAssignment = existingAssignees.length === 0;
+      if (isHelpdesk && isRestrictedType && isInitialAssignment && !isBackboneOrVendor(targetTech)) {
+        return res.status(403).json({
+          message:
+            "Helpdesk can only manually assign backbone or vendor specialists to home installation and maintenance tickets. Other technicians should use auto-assign (Get Ticket).",
+        });
+      }
       if (existingAssignees.some((a: any) => a.userId === userId || a.id === userId)) {
         return res.status(400).json({ message: "This technician is already assigned to this ticket" });
       }
