@@ -1,11 +1,10 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.heat";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MapPin } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Button } from "@/components/ui/button";
 import { TicketStatus, TicketType } from "@shared/schema";
 
 declare module "leaflet" {
@@ -68,8 +67,6 @@ interface ActiveTicketMapProps {
   isLoading: boolean;
 }
 
-type ViewMode = "heatmap" | "markers";
-
 const priorityIntensity: Record<string, number> = {
   critical: 1.0,
   high: 0.8,
@@ -99,7 +96,6 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const seededRef = useRef<boolean>(false);
-  const [viewMode, setViewMode] = useState<ViewMode>("heatmap");
 
   const points: TicketPoint[] = useMemo(() => {
     if (!tickets) return [];
@@ -195,7 +191,7 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
     const map = mapInstance.current;
 
     if (heatLayerRef.current.length > 0) {
-      heatLayerRef.current.forEach(layer => map.removeLayer(layer));
+      heatLayerRef.current.forEach((layer) => map.removeLayer(layer));
       heatLayerRef.current = [];
     }
     if (markerLayerRef.current) {
@@ -203,80 +199,76 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
     }
     if (points.length === 0) return;
 
-    if (viewMode === "heatmap") {
-      const heatData: Array<[number, number, number]> = technicianPoints.map((pt) => {
-        const intensity = priorityIntensity[pt.priority] || 0.5;
-        return [pt.lat, pt.lng, intensity];
+    const heatData: Array<[number, number, number]> = technicianPoints.map((pt) => {
+      const intensity = priorityIntensity[pt.priority] || 0.5;
+      return [pt.lat, pt.lng, intensity];
+    });
+    if (heatData.length > 0) {
+      const heat = L.heatLayer(heatData, {
+        radius: 30,
+        blur: 20,
+        maxZoom: 17,
+        minOpacity: 0.3,
+        max: 1.0,
+        gradient: {
+          0.0: "#0000ff",
+          0.2: "#00bfff",
+          0.4: "#00ff80",
+          0.6: "#ffff00",
+          0.8: "#ff8000",
+          1.0: "#ff0000",
+        },
       });
-
-      if (heatData.length > 0) {
-        const heat = L.heatLayer(heatData, {
-          radius: 30,
-          blur: 20,
-          maxZoom: 17,
-          minOpacity: 0.3,
-          max: 1.0,
-          gradient: {
-            0.0: "#0000ff",
-            0.2: "#00bfff",
-            0.4: "#00ff80",
-            0.6: "#ffff00",
-            0.8: "#ff8000",
-            1.0: "#ff0000",
-          },
-        });
-
-        heat.addTo(map);
-        heatLayerRef.current.push(heat);
-      }
-
-    } else {
-      const now = Date.now();
-      points.forEach((pt) => {
-        const colors = typeColorMap[pt.type] || typeColorMap.installation;
-        const assigned = ASSIGNED_STATUSES.has(pt.status);
-        const overdue = pt.slaDeadline ? new Date(pt.slaDeadline).getTime() < now : false;
-        const baseColor = overdue ? OVERDUE_COLOR : PENDING_COLOR;
-
-        const icon = assigned
-          ? createPersonIcon(colors.stroke)
-          : pt.type === TicketType.INSTALLATION
-            ? createCircleIcon(baseColor, overdue)
-            : createTriangleIcon(baseColor, overdue);
-
-        const marker = L.marker([pt.lat, pt.lng], { icon }).addTo(markerLayerRef.current!);
-
-        const ticketLabel = escapeHtml(pt.ticketIdCustom || pt.ticketNumber || pt.id);
-        const technicians = pt.assignees?.map((a) => a.name).filter(Boolean) ?? [];
-        const tech1 = escapeHtml(technicians[0] || "Unassigned");
-        const tech2 = escapeHtml(technicians[1] || "—");
-        const customerName = escapeHtml(pt.customerName);
-        const ticketTitle = escapeHtml(pt.title);
-
-        marker.bindPopup(
-          `<a href="/tickets/${pt.id}" class="block text-left text-sm" style="color:inherit;text-decoration:none">
-             <div style="font-weight:600;margin-bottom:4px">Ticket ID: ${ticketLabel}</div>
-             <div style="font-size:12px;margin-bottom:2px">Technician 1: ${tech1}</div>
-             <div style="font-size:12px;margin-bottom:2px">Technician 2: ${tech2}</div>
-             <div style="font-size:12px;margin-bottom:2px">Customer: ${customerName}</div>
-             <div style="font-size:12px;margin-bottom:2px">Title: ${ticketTitle}</div>
-           </a>`,
-          { closeButton: false }
-        );
-        marker.on("click", () => {
-          window.location.href = `/tickets/${pt.id}`;
-        });
-        marker.on("mouseover", () => {
-          marker.openPopup();
-        });
-        marker.on("mouseout", () => {
-          marker.closePopup();
-        });
-      });
+      heat.addTo(map);
+      heatLayerRef.current.push(heat);
     }
+
+    const now = Date.now();
+    points.forEach((pt) => {
+      const colors = typeColorMap[pt.type] || typeColorMap.installation;
+      const assigned = ASSIGNED_STATUSES.has(pt.status);
+      const overdue = pt.slaDeadline ? new Date(pt.slaDeadline).getTime() < now : false;
+      const baseColor = overdue ? OVERDUE_COLOR : PENDING_COLOR;
+
+      const icon = assigned
+        ? createPersonIcon(colors.stroke)
+        : pt.type === TicketType.INSTALLATION
+          ? createCircleIcon(baseColor, overdue)
+          : createTriangleIcon(baseColor, overdue);
+
+      const marker = L.marker([pt.lat, pt.lng], { icon }).addTo(markerLayerRef.current!);
+
+      const ticketLabel = escapeHtml(pt.ticketIdCustom || pt.ticketNumber || pt.id);
+      const technicians = pt.assignees?.map((a) => a.name).filter(Boolean) ?? [];
+      const tech1 = escapeHtml(technicians[0] || "Unassigned");
+      const tech2 = escapeHtml(technicians[1] || "—");
+      const customerName = escapeHtml(pt.customerName);
+      const ticketTitle = escapeHtml(pt.title);
+
+      marker.bindPopup(
+        `<a href="/tickets/${pt.id}" class="block text-left text-sm" style="color:inherit;text-decoration:none">
+           <div style="font-weight:600;margin-bottom:4px">Ticket ID: ${ticketLabel}</div>
+           <div style="font-size:12px;margin-bottom:2px">Technician 1: ${tech1}</div>
+           <div style="font-size:12px;margin-bottom:2px">Technician 2: ${tech2}</div>
+           <div style="font-size:12px;margin-bottom:2px">Customer: ${customerName}</div>
+           <div style="font-size:12px;margin-bottom:2px">Title: ${ticketTitle}</div>
+         </a>`,
+        { closeButton: false }
+      );
+      marker.on("click", () => {
+        window.location.href = `/tickets/${pt.id}`;
+      });
+      marker.on("mouseover", () => {
+        marker.openPopup();
+      });
+      marker.on("mouseout", () => {
+        marker.closePopup();
+      });
+    });
+
     const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng]));
     map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
-  }, [points, viewMode]);
+  }, [points, technicianPoints]);
 
   if (isLoading) {
     return (
@@ -284,7 +276,7 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
             <MapPin className="w-4 h-4" />
-            Problems Heatmap
+            Active Ticket Map
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -300,34 +292,14 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <CardTitle className="text-base flex items-center gap-2">
             <MapPin className="w-4 h-4" />
-            Problems Heatmap
+            Active Ticket Map
           </CardTitle>
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-1" data-testid="map-view-toggle">
-              <Button
-                size="sm"
-                variant={viewMode === "heatmap" ? "default" : "outline"}
-                onClick={() => setViewMode("heatmap")}
-                data-testid="button-heatmap-view"
-              >
-                Heatmap
-              </Button>
-              <Button
-                size="sm"
-                variant={viewMode === "markers" ? "default" : "outline"}
-                onClick={() => setViewMode("markers")}
-                data-testid="button-markers-view"
-              >
-                Markers
-              </Button>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <Legend icon={<TriangleLegendIcon color={LEGEND_SHAPE_COLOR} />} label="Home & Backbone Maintenance" />
+              <Legend icon={<CircleLegendIcon color={LEGEND_SHAPE_COLOR} />} label="Home Installation" />
+              <Legend icon={<PersonLegendIcon color={LEGEND_PERSON_COLOR} />} label="Assigned / In Progress" />
             </div>
-            {viewMode === "markers" && (
-              <div className="flex items-center gap-3 flex-wrap">
-                <Legend icon={<TriangleLegendIcon color={LEGEND_SHAPE_COLOR} />} label="Home & Backbone Maintenance" />
-                <Legend icon={<CircleLegendIcon color={LEGEND_SHAPE_COLOR} />} label="Home Installation" />
-                <Legend icon={<PersonLegendIcon color={LEGEND_PERSON_COLOR} />} label="Assigned / In Progress" />
-              </div>
-            )}
             <span className="text-xs text-muted-foreground" data-testid="text-ticket-count">
               {points.length} active tickets mapped
             </span>
