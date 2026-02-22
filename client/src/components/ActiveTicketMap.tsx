@@ -89,6 +89,8 @@ const OVERDUE_COLOR = "#ef4444";
 const PENDING_COLOR = "#f97316";
 const LEGEND_PERSON_COLOR = "#3b82f6";
 const LEGEND_SHAPE_COLOR = PENDING_COLOR;
+const MARKER_BASE_SIZE = 32;
+const PERSON_MARKER_SIZE = MARKER_BASE_SIZE * 2;
 
 export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
@@ -432,7 +434,7 @@ function escapeHtml(value: string | number | null | undefined) {
     .replace(/'/g, "&#39;");
 }
 
-function createTriangleIcon(color: string, isFlashing = false, size = 38) {
+function createTriangleIcon(color: string, isFlashing = false, size = MARKER_BASE_SIZE + 2) {
   const html = `
     <span class="${isFlashing ? "map-icon-flash" : ""}" style="
       display:inline-block;
@@ -452,7 +454,7 @@ function createTriangleIcon(color: string, isFlashing = false, size = 38) {
   });
 }
 
-function createCircleIcon(color: string, isFlashing = false, size = 36) {
+function createCircleIcon(color: string, isFlashing = false, size = MARKER_BASE_SIZE) {
   const innerSize = Math.max(6, Math.floor(size / 5));
   const html = `
     <span class="${isFlashing ? "map-icon-flash" : ""}" style="
@@ -490,7 +492,7 @@ const PERSON_ICON_SVG = `
   </svg>
 `;
 
-function createPersonIcon(color: string, size = 32) {
+function createPersonIcon(color: string, size = PERSON_MARKER_SIZE) {
   const html = `
     <span style="
       display:inline-flex;
