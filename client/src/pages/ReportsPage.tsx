@@ -70,11 +70,17 @@ function getDailyCountColor(value: number, target: number): string {
   return "text-blue-600 dark:text-blue-400";
 }
 
+function getLocalDateString(date = new Date()): string {
+  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+  const localDate = new Date(date.getTime() - offsetMs);
+  return localDate.toISOString().split("T")[0];
+}
+
 export default function ReportsPage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("tickets");
 
-  const today = new Date().toISOString().split("T")[0];
+  const today = getLocalDateString();
 
   const [ticketFilters, setTicketFilters] = useState({
     dateFrom: "",

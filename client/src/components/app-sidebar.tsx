@@ -73,6 +73,8 @@ export function AppSidebar() {
   ].filter(item => item.show);
   const ticketNavItem = navItems.find(item => item.label === "Tickets");
   const navItemsWithoutTickets = navItems.filter(item => item.label !== "Tickets");
+  const dashboardItem = navItemsWithoutTickets.find(item => item.label === "Dashboard");
+  const otherNavItems = navItemsWithoutTickets.filter(item => item.label !== "Dashboard");
 
   const isTicketsSectionActive = location === "/tickets" || location === "/tickets/open" || location.startsWith("/tickets/");
   const isOpenTicketsActive = location === "/tickets/open";
@@ -147,7 +149,71 @@ export function AppSidebar() {
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItemsWithoutTickets.map((item) => {
+              {dashboardItem && (
+                <SidebarMenuItem key={dashboardItem.href}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={location === dashboardItem.href || location.startsWith(dashboardItem.href + "/")}
+                    data-testid={`nav-link-${dashboardItem.label.toLowerCase()}`}
+                  >
+                    <Link href={dashboardItem.href}>
+                      <dashboardItem.icon className="w-4 h-4" />
+                      <span>{dashboardItem.label}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+              {ticketNavItem && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isTicketsSectionActive}
+                    data-testid="nav-link-tickets"
+                  >
+                    <Link href={ticketNavItem.href}>
+                      <ticketNavItem.icon className="w-4 h-4" />
+                      <span>{ticketNavItem.label}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                  <SidebarMenuSub>
+                    {[{
+                      label: "Open Ticket",
+                      href: "/tickets/open",
+                      isActive: isOpenTicketsActive,
+                    }, {
+                      label: "All Ticket",
+                      href: "/tickets",
+                      isActive: isAllTicketsActive,
+                    }].map((sub) => (
+                      <SidebarMenuSubItem key={sub.label}>
+                        <SidebarMenuSubButton
+                          href={sub.href}
+                          isActive={sub.isActive}
+                          className="capitalize"
+                          data-testid={`nav-sub-${sub.label.replace(/\s+/g, '-').toLowerCase()}`}
+                          onClick={(event) => {
+                            if (
+                              event.button !== 0 ||
+                              event.metaKey ||
+                              event.ctrlKey ||
+                              event.altKey ||
+                              event.shiftKey
+                            ) {
+                              return;
+                            }
+                            event.preventDefault();
+                            setLocation(sub.href);
+                          }}
+                        >
+                          <Ticket className="w-3 h-3" />
+                          {sub.label}
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    ))}
+                  </SidebarMenuSub>
+                </SidebarMenuItem>
+              )}
+              {otherNavItems.map((item) => {
                 const isActive = location === item.href || location.startsWith(item.href + "/");
                 return (
                   <SidebarMenuItem key={item.href}>
