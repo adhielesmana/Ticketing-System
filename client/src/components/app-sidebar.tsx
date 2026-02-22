@@ -45,7 +45,7 @@ import {
 
 export function AppSidebar() {
   const { user, logout } = useAuth();
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   const { data: logoSetting } = useSetting("logo_url");
   const { mutate: updateSetting, isPending: isUploading } = useUpdateSetting();
   const [logoDialogOpen, setLogoDialogOpen] = useState(false);
@@ -197,12 +197,25 @@ export function AppSidebar() {
                     }].map((sub) => (
                       <SidebarMenuSubItem key={sub.label}>
                         <SidebarMenuSubButton
-                          asChild
+                          href={sub.href}
                           isActive={sub.isActive}
                           className="capitalize"
                           data-testid={`nav-sub-${sub.label.replace(/\s+/g, '-').toLowerCase()}`}
+                          onClick={(event) => {
+                            if (
+                              event.button !== 0 ||
+                              event.metaKey ||
+                              event.ctrlKey ||
+                              event.altKey ||
+                              event.shiftKey
+                            ) {
+                              return;
+                            }
+                            event.preventDefault();
+                            setLocation(sub.href);
+                          }}
                         >
-                          <Link href={sub.href}>{sub.label}</Link>
+                          {sub.label}
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>
                     ))}
