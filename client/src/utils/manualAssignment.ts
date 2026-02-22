@@ -21,3 +21,12 @@ export function isHelpdeskManualAssignmentAllowed(ticketType: string | undefined
 export function shouldRestrictDropdownToBackbone(ticketType: string | undefined): boolean {
   return ticketType === TicketType.BACKBONE_MAINTENANCE;
 }
+
+export function getSpecialtyLabel(tech?: Technician): string | null {
+  if (!tech) return null;
+  const parts = [];
+  if (tech.isBackboneSpecialist) parts.push("Backbone");
+  if (tech.isVendorSpecialist) parts.push("Vendor");
+  if (parts.length === 0) return null;
+  return parts.join(" / ");
+}

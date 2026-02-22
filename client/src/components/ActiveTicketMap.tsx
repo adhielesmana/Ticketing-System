@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.heat";
@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MapPin } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { TicketStatus } from "@shared/schema";
+import { TicketStatus, TicketType } from "@shared/schema";
 
 declare module "leaflet" {
   function heatLayer(
@@ -56,6 +56,7 @@ interface TicketPoint {
   lat: number;
   lng: number;
   customerLocationUrl?: string;
+  slaDeadline?: string | null;
   isActive: boolean;
   performStatus?: string;
   assignees?: { id: number; name: string }[];
@@ -83,7 +84,11 @@ const typeColorMap: Record<string, { fill: string; stroke: string }> = {
 };
 
 const ASSIGNED_STATUSES = new Set([TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS]);
-const ACTIVE_STATUSES = new Set([TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS]);
+const INACTIVE_STATUSES = new Set([TicketStatus.CLOSED, TicketStatus.REJECTED]);
+const OVERDUE_COLOR = "#ef4444";
+const PENDING_COLOR = "#f97316";
+const LEGEND_PERSON_COLOR = "#3b82f6";
+const LEGEND_SHAPE_COLOR = PENDING_COLOR;
 
 export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
@@ -112,6 +117,8 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
           }
         }
         if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) return null;
+        const isActive = !INACTIVE_STATUSES.has(t.status);
+        if (!isActive) return null;
         return {
           id: t.id,
           ticketIdCustom: t.ticketIdCustom,
@@ -124,7 +131,8 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
           customerLocationUrl: t.customerLocationUrl,
           lat,
           lng,
-          isActive: ACTIVE_STATUSES.has(t.status),
+          slaDeadline: t.slaDeadline,
+          isActive,
           performStatus: t.performStatus,
           assignees: t.assignees,
           createdAt: t.createdAt,
@@ -221,35 +229,46 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
       }
 
     } else {
+      const now = Date.now();
       points.forEach((pt) => {
         const colors = typeColorMap[pt.type] || typeColorMap.installation;
+        const assigned = ASSIGNED_STATUSES.has(pt.status);
+        const overdue = pt.slaDeadline ? new Date(pt.slaDeadline).getTime() < now : false;
+        const baseColor = overdue ? OVERDUE_COLOR : PENDING_COLOR;
 
-        const iconColor = pt.isActive ? colors.stroke : "#6b7280";
-        const marker = L.marker([pt.lat, pt.lng], {
-          icon: createPersonIcon(iconColor),
-        }).addTo(markerLayerRef.current!);
+        const icon = assigned
+          ? createPersonIcon(colors.stroke)
+          : pt.type === TicketType.INSTALLATION
+            ? createCircleIcon(baseColor, overdue)
+            : createTriangleIcon(baseColor, overdue);
 
-        const typeLabel = pt.type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-        const statusLabel = pt.status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-        const statusBadgeColor = pt.isActive ? colors.stroke : "#6b7280";
-        const statusTextColor = pt.isActive ? "#fff" : "#f3f4f6";
+        const marker = L.marker([pt.lat, pt.lng], { icon }).addTo(markerLayerRef.current!);
 
-        const team = pt.assignees?.map((a) => a.name).join(", ") || "Unassigned";
-        const locationLink = pt.customerLocationUrl
-          ? `<a href="${pt.customerLocationUrl}" target="_blank" rel="noreferrer" style="color:#0ea5e9;text-decoration:none">Open map</a>`
-          : "—";
+        const ticketLabel = escapeHtml(pt.ticketIdCustom || pt.ticketNumber || pt.id);
+        const technicians = pt.assignees?.map((a) => a.name).filter(Boolean) ?? [];
+        const tech1 = escapeHtml(technicians[0] || "Unassigned");
+        const tech2 = escapeHtml(technicians[1] || "—");
+        const customerName = escapeHtml(pt.customerName);
+        const ticketTitle = escapeHtml(pt.title);
+
         marker.bindPopup(
-          `<div style="font-size:13px;line-height:1.5;min-width:200px">
-             <div style="font-weight:600;margin-bottom:4px">No : ${pt.ticketIdCustom || pt.ticketNumber || pt.id}</div>
-             <div style="font-size:12px;margin-bottom:2px">Team : ${team}</div>
-             <div style="font-size:12px;margin-bottom:2px">Customer : ${pt.customerName}</div>
-             <div style="font-size:12px;margin-bottom:2px">Description : ${pt.title}</div>
-             <div style="font-size:12px;margin-bottom:2px">Location : ${locationLink}</div>
-           </div>`,
+          `<a href="/tickets/${pt.id}" class="block text-left text-sm" style="color:inherit;text-decoration:none">
+             <div style="font-weight:600;margin-bottom:4px">Ticket ID: ${ticketLabel}</div>
+             <div style="font-size:12px;margin-bottom:2px">Technician 1: ${tech1}</div>
+             <div style="font-size:12px;margin-bottom:2px">Technician 2: ${tech2}</div>
+             <div style="font-size:12px;margin-bottom:2px">Customer: ${customerName}</div>
+             <div style="font-size:12px;margin-bottom:2px">Title: ${ticketTitle}</div>
+           </a>`,
           { closeButton: false }
         );
         marker.on("click", () => {
           window.location.href = `/tickets/${pt.id}`;
+        });
+        marker.on("mouseover", () => {
+          marker.openPopup();
+        });
+        marker.on("mouseout", () => {
+          marker.closePopup();
         });
       });
     }
@@ -302,13 +321,13 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
             </div>
             {viewMode === "markers" && (
               <div className="flex items-center gap-3 flex-wrap">
-                <Legend color="#3b82f6" label="Installation" />
-                <Legend color="#f59e0b" label="Home Maint." />
-                <Legend color="#ef4444" label="Backbone" />
+                <Legend icon={<TriangleLegendIcon color={LEGEND_SHAPE_COLOR} />} label="Home & Backbone Maintenance" />
+                <Legend icon={<CircleLegendIcon color={LEGEND_SHAPE_COLOR} />} label="Home Installation" />
+                <Legend icon={<PersonLegendIcon color={LEGEND_PERSON_COLOR} />} label="Assigned / In Progress" />
               </div>
             )}
             <span className="text-xs text-muted-foreground" data-testid="text-ticket-count">
-              {points.length} / {tickets?.length || 0} mapped
+              {points.length} active tickets mapped
             </span>
           </div>
         </div>
@@ -330,16 +349,138 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
   );
 }
 
-function Legend({ color, label }: { color: string; label: string }) {
+interface LegendProps {
+  label: string;
+  icon?: ReactNode;
+  color?: string;
+}
+
+function Legend({ icon, color, label }: LegendProps) {
   return (
     <div className="flex items-center gap-1.5">
-      <span
-        className="inline-block w-2.5 h-2.5 rounded-full"
-        style={{ backgroundColor: color }}
-      />
+      {icon ?? (
+        <span
+          className="inline-block w-2.5 h-2.5 rounded-full"
+          style={{ backgroundColor: color ?? LEGEND_SHAPE_COLOR }}
+        />
+      )}
       <span className="text-xs text-muted-foreground">{label}</span>
     </div>
   );
+}
+
+function TriangleLegendIcon({ color }: { color: string }) {
+  return (
+    <span
+      className="inline-block"
+      style={{
+        width: 12,
+        height: 12,
+        clipPath: "polygon(50% 0, 0 100%, 100% 100%)",
+        backgroundColor: color,
+      }}
+    />
+  );
+}
+
+function CircleLegendIcon({ color }: { color: string }) {
+  return (
+    <span
+      className="inline-flex items-center justify-center"
+      style={{
+        width: 12,
+        height: 12,
+        borderRadius: "50%",
+        border: `2px solid ${color}`,
+      }}
+    >
+      <span
+        style={{
+          width: 4,
+          height: 4,
+          borderRadius: "50%",
+          backgroundColor: color,
+        }}
+      />
+    </span>
+  );
+}
+
+function PersonLegendIcon({ color }: { color: string }) {
+  return (
+    <span
+      className="inline-flex items-center justify-center rounded-full"
+      style={{ width: 14, height: 14, backgroundColor: color }}
+    >
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="7" r="3" />
+        <path d="M5 20c0-3.314 2.686-6 6-6h2c3.314 0 6 2.686 6 6" />
+      </svg>
+    </span>
+  );
+}
+
+function escapeHtml(value: string | number | null | undefined) {
+  if (value === null || value === undefined) return "—";
+  const text = String(value).trim();
+  if (text === "") return "—";
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function createTriangleIcon(color: string, isFlashing = false, size = 38) {
+  const html = `
+    <span class="${isFlashing ? "map-icon-flash" : ""}" style="
+      display:inline-block;
+      width:${size}px;
+      height:${size}px;
+      clip-path:polygon(50% 0, 0 100%, 100% 100%);
+      background:${color};
+      box-shadow:0 6px 18px rgba(15,23,42,0.35);
+    "></span>
+  `;
+  return L.divIcon({
+    className: "",
+    html,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size],
+    popupAnchor: [0, -size * 0.75],
+  });
+}
+
+function createCircleIcon(color: string, isFlashing = false, size = 36) {
+  const innerSize = Math.max(6, Math.floor(size / 5));
+  const html = `
+    <span class="${isFlashing ? "map-icon-flash" : ""}" style="
+      display:inline-flex;
+      justify-content:center;
+      align-items:center;
+      width:${size}px;
+      height:${size}px;
+      border-radius:50%;
+      border:3px solid ${color};
+      background:rgba(255,255,255,0.15);
+      box-shadow:0 6px 18px rgba(15,23,42,0.35);
+    ">
+      <span style="
+        width:${innerSize}px;
+        height:${innerSize}px;
+        border-radius:50%;
+        background:${color};
+      "></span>
+    </span>
+  `;
+  return L.divIcon({
+    className: "",
+    html,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size],
+    popupAnchor: [0, -size * 0.75],
+  });
 }
 
 const PERSON_ICON_SVG = `

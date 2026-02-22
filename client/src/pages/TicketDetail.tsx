@@ -44,7 +44,7 @@ import { ChangeEvent, useEffect, useState, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { isBackboneOrVendorTech, isHelpdeskManualAssignmentAllowed, shouldRestrictDropdownToBackbone } from "@/utils/manualAssignment";
+import { getSpecialtyLabel, isBackboneOrVendorTech, isHelpdeskManualAssignmentAllowed, shouldRestrictDropdownToBackbone } from "@/utils/manualAssignment";
 
 const priorityColors: Record<string, string> = {
   low: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
@@ -1567,20 +1567,30 @@ export default function TicketDetail() {
                   {canManage && ticket.assignees.length < 2 && !['closed', 'rejected', 'pending_rejection'].includes(ticket.status) && (
                     <div className="space-y-1">
                       <p className="text-xs text-muted-foreground">Only technicians without active tickets are shown:</p>
-                  {availablePartnerTechnicians.length > 0 ? (
-                    <Select onValueChange={(val) => assignTicket({ id: ticketId, userId: Number(val) })}>
-                      <SelectTrigger data-testid="select-add-second-technician">
-                        <SelectValue placeholder="Add second technician..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {availablePartnerTechnicians.map((tech: any) => (
-                          <SelectItem key={tech.id} value={String(tech.id)}>
-                            {tech.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
+                      {availablePartnerTechnicians.length > 0 ? (
+                        <Select onValueChange={(val) => assignTicket({ id: ticketId, userId: Number(val) })}>
+                          <SelectTrigger data-testid="select-add-second-technician">
+                            <SelectValue placeholder="Add second technician..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availablePartnerTechnicians.map((tech: any) => {
+                              const specialtyLabel = getSpecialtyLabel(tech);
+                              return (
+                                <SelectItem key={tech.id} value={String(tech.id)}>
+                                  <div className="flex flex-col leading-tight">
+                                    <span className="text-sm">{tech.name}</span>
+                                    {specialtyLabel && (
+                                      <span className="text-[11px] uppercase text-muted-foreground tracking-wider">
+                                        {specialtyLabel}
+                                      </span>
+                                    )}
+                                  </div>
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                      ) : (
                         <p className="text-xs text-muted-foreground italic">No free technicians available.</p>
                       )}
                     </div>
@@ -1623,11 +1633,21 @@ export default function TicketDetail() {
                       <SelectValue placeholder="Select Technician" />
                     </SelectTrigger>
                     <SelectContent>
-                      {availableTechniciansForAssignment.map((tech: any) => (
-                        <SelectItem key={tech.id} value={String(tech.id)}>
-                          {tech.name}
-                        </SelectItem>
-                      ))}
+                      {availableTechniciansForAssignment.map((tech: any) => {
+                        const specialtyLabel = getSpecialtyLabel(tech);
+                        return (
+                          <SelectItem key={tech.id} value={String(tech.id)}>
+                            <div className="flex flex-col leading-tight">
+                              <span className="text-sm">{tech.name}</span>
+                              {specialtyLabel && (
+                                <span className="text-[11px] uppercase text-muted-foreground tracking-wider">
+                                  {specialtyLabel}
+                                </span>
+                              )}
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 </div>

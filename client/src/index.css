@@ -200,6 +200,22 @@
   .dark .toggle-elevate.toggle-elevated::before {
     background: rgba(255, 255, 255, 0.08);
   }
+  .map-icon-flash {
+    animation: mapIconPulse 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes mapIconPulse {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-2px) scale(1.08);
+    box-shadow: 0 0 16px rgba(255, 255, 255, 0.35);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
 }
 
 @keyframes attention-pulse {
