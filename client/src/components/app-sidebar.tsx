@@ -206,6 +206,7 @@ export function AppSidebar() {
                             setLocation(sub.href);
                           }}
                         >
+                          <Ticket className="w-3 h-3" />
                           {sub.label}
                         </SidebarMenuSubButton>
                       </SidebarMenuSubItem>
