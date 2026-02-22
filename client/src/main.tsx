@@ -3,3 +3,11 @@ import App from "./App";
 import "./index.css";
 
 createRoot(document.getElementById("root")!).render(<App />);
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    void navigator.serviceWorker
+      .register("/map-tiles-sw.js")
+      .catch((error) => console.error("Map tile service worker failed to register", error));
+  });
+}

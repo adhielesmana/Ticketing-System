@@ -143,6 +143,109 @@ const s3Client = new S3Client({
 });
 
 const TILE_SERVER_URL = process.env.TILE_SERVER_URL || "https://tile.openstreetmap.org";
+const TILE_PREFETCH_BOUNDS = (process.env.TILE_PREFETCH_BOUNDS || "-6.5,106.4,-5.9,107.1").split(",").map((value) => parseFloat(value.trim()));
+const TILE_PREFETCH_ZOOM_RANGE = process.env.TILE_PREFETCH_ZOOM_RANGE || "12-15";
+const TILE_PREFETCH_LIMIT = Math.max(64, Math.min(parseInt(process.env.TILE_PREFETCH_LIMIT || "512", 10), 2048));
+
+function clampTileIndex(value: number, maxIndex: number) {
+  if (value < 0) return 0;
+  if (value > maxIndex) return maxIndex;
+  return value;
+}
+
+function latLngToTileIndex(lat: number, lng: number, zoom: number) {
+  const latRad = (lat * Math.PI) / 180;
+  const n = Math.pow(2, zoom);
+  const x = Math.floor(((lng + 180) / 360) * n);
+  const y = Math.floor(
+    (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n,
+  );
+  return {
+    x: clampTileIndex(x, n - 1),
+    y: clampTileIndex(y, n - 1),
+  };
+}
+
+function parseBounds(values: number[]): { latMin: number; lngMin: number; latMax: number; lngMax: number } {
+  if (values.length !== 4 || values.some((v) => Number.isNaN(v))) {
+    return { latMin: -6.5, lngMin: 106.4, latMax: -5.9, lngMax: 107.1 };
+  }
+  const [lat1, lng1, lat2, lng2] = values;
+  return {
+    latMin: Math.min(lat1, lat2),
+    lngMin: Math.min(lng1, lng2),
+    latMax: Math.max(lat1, lat2),
+    lngMax: Math.max(lng1, lng2),
+  };
+}
+
+function parseZoomRange(value: string): [number, number] {
+  const tokens = value.split("-").map((token) => parseInt(token.trim(), 10)).filter((num) => !Number.isNaN(num));
+  if (tokens.length === 2) {
+    return [Math.min(tokens[0], tokens[1]), Math.max(tokens[0], tokens[1])];
+  }
+  if (tokens.length === 1) {
+    return [tokens[0], tokens[0]];
+  }
+  return [12, 15];
+}
+
+const PRELOAD_TILE_BOUNDS = parseBounds(TILE_PREFETCH_BOUNDS);
+const [PRELOAD_MIN_ZOOM, PRELOAD_MAX_ZOOM] = parseZoomRange(TILE_PREFETCH_ZOOM_RANGE);
+
+async function prefetchMapTiles() {
+  const { latMin, lngMin, latMax, lngMax } = PRELOAD_TILE_BOUNDS;
+  const startTime = Date.now();
+  let cachedCount = 0;
+  const logPrefix = "[OpenMaps]";
+  try {
+    console.log(`${logPrefix} prefetching tiles for [${latMin},${lngMin}] → [${latMax},${lngMax}] zoom ${PRELOAD_MIN_ZOOM}-${PRELOAD_MAX_ZOOM}`);
+    outer: for (let z = PRELOAD_MIN_ZOOM; z <= PRELOAD_MAX_ZOOM; z++) {
+      const northWest = latLngToTileIndex(latMax, lngMin, z);
+      const southEast = latLngToTileIndex(latMin, lngMax, z);
+      const minX = Math.min(northWest.x, southEast.x);
+      const maxX = Math.max(northWest.x, southEast.x);
+      const minY = Math.min(northWest.y, southEast.y);
+      const maxY = Math.max(northWest.y, southEast.y);
+
+      for (let x = minX; x <= maxX; x += 1) {
+        for (let y = minY; y <= maxY; y += 1) {
+          if (cachedCount >= TILE_PREFETCH_LIMIT) {
+            break outer;
+          }
+          const existing = await storage.getCachedTile(z, x, y);
+          if (existing) {
+            continue;
+          }
+          const tileUrl = `${TILE_SERVER_URL}/${z}/${x}/${y}.png`;
+          try {
+            const tileResponse = await fetch(tileUrl, {
+              headers: {
+                "User-Agent": "NetGuard-OpenMaps/1.0",
+                Accept: "image/png,image/webp,image/*;q=0.9,*/*;q=0.8",
+              },
+              signal: AbortSignal.timeout(9000),
+            });
+            if (!tileResponse.ok) {
+              console.warn(`${logPrefix} ${tileUrl} returned ${tileResponse.status}`);
+              continue;
+            }
+            const buffer = Buffer.from(await tileResponse.arrayBuffer());
+            const contentType = tileResponse.headers.get("content-type") || "image/png";
+            await storage.saveCachedTile({ z, x, y, tileData: buffer, contentType });
+            cachedCount += 1;
+          } catch (err) {
+            console.warn(`${logPrefix} prefetch failed for ${z}/${x}/${y}`, err);
+          }
+        }
+      }
+    }
+    const elapsed = Math.round((Date.now() - startTime) / 1000);
+    console.log(`${logPrefix} prefetch complete, cached ${cachedCount} new tiles in ${elapsed}s`);
+  } catch (err) {
+    console.error(`${logPrefix} prefetch encountered an error`, err);
+  }
+}
 
 const HELP_DESK_MANUAL_ASSIGNMENT_RESTRICTED_TYPES = new Set([
   TicketType.HOME_MAINTENANCE,
@@ -603,8 +706,10 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Map tile error:", err);
       res.status(500).json({ message: "Failed to load map tile" });
-    }
-  });
+      }
+    });
+
+  void prefetchMapTiles();
 
   // === FREE TECHNICIANS (no active/in-progress tickets) ===
   app.get("/api/technicians/free", async (req, res) => {

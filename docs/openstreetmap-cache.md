@@ -20,9 +20,16 @@ Blank tiles are typically due to:
 
 4. **Cleanup:** The map clears the `tileLayerRef`/`seededRef` on unmount, enabling future re-initialization when the component remounts.
 
-## 4. Operational Notes
+## 4. Server-side prefetch
+
+The map tile route now kicks off `prefetchMapTiles` every time the server boots. It uses `TILE_PREFETCH_BOUNDS` (default: `-6.5,106.4,-5.9,107.1`) to define a rectangular area around the primary service region, `TILE_PREFETCH_ZOOM_RANGE` (default: `12-15`) to limit which zoom levels it walks, and `TILE_PREFETCH_LIMIT` (default: `512`) to keep the batch under control. The helper skips tiles that already exist in the `map_tiles` table, fetches the missing ones using the same `User-Agent`/Accept headers, and writes them into Postgres so the server can respond from its cache even if OpenStreetMap becomes unreachable.
+
+## 5. Client-side service worker cache
+
+We ship a tiny service worker at `/map-tiles-sw.js` that watches all GET requests whose path starts with `/api/map-tiles/`. When Leaflet requests a tile, the worker first checks the named cache (`openmaps-tiles-v1`); if the tile is there it responds immediately. If it has to fetch the tile from the API, it stores a copy before returning it. The worker is registered inside `src/main.tsx`, so every browser automatically builds up an offline usable cache of the tiles it has ever displayed.
+
+## 6. Operational Notes
 
 - The `map_tiles` table uses a composite primary key on `(z, x, y)` and stores the tile as base64 so Postgres avoids raw binary issues.
 - Every response sets `Cache-Control: public, max-age=604800` so browsers can reuse cached tiles for seven days.
 - When we deploy to production, ensure the `TILE_SERVER_URL` environment variable points to `https://tile.openstreetmap.org` or a mirrored tile server with usage terms.
-

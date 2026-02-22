@@ -1,4 +1,4 @@
-import { useTicket, useCloseTicket, useStartTicket, useAssignTicket, useReassignTicket, useUnassignTicket, useUploadFile, useUploadImages, useFreeTechnicians, useNoResponseTicket, useRejectTicket, useCancelReject, useCloseByHelpdesk, useUpdateTicket, useReopenTicket, useReopenRejectedTicket } from "@/hooks/use-tickets";
+import { useTicket, useCloseTicket, useStartTicket, useAssignTicket, useReassignTicket, useUnassignTicket, useUploadFile, useUploadImages, useNoResponseTicket, useRejectTicket, useCancelReject, useCloseByHelpdesk, useUpdateTicket, useReopenTicket, useReopenRejectedTicket } from "@/hooks/use-tickets";
 import { useUsers } from "@/hooks/use-users";
 import { useAuth } from "@/hooks/use-auth";
 import { useParams, useLocation } from "wouter";
@@ -323,6 +323,20 @@ interface ReassignTicketDialogProps {
   toast: ToastFn;
 }
 
+const renderTechOption = (tech: any, formatName: (name: string) => string = (name) => name) => {
+  const specialtyLabel = getSpecialtyLabel(tech);
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-sm font-medium">{formatName(tech.name)}</span>
+      {specialtyLabel && (
+        <span className="rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-slate-700 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-200">
+          {specialtyLabel}
+        </span>
+      )}
+    </div>
+  );
+};
+
 function ReassignTicketDialog({
   open,
   onOpenChange,
@@ -409,7 +423,7 @@ function ReassignTicketDialog({
                       value={String(tech.id)}
                       disabled={String(tech.id) === partnerTech || (isHelpdesk && String(tech.id) !== leadTech && !!leadTech)}
                     >
-                      {toCapName(tech.name)}
+                      {renderTechOption(tech, toCapName)}
                     </SelectItem>
                   ))}
               </SelectContent>
@@ -426,14 +440,14 @@ function ReassignTicketDialog({
               <SelectTrigger data-testid="select-reassign-tech2">
                 <SelectValue placeholder="Select partner..." />
               </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No partner</SelectItem>
-                {partnerOptions.map((tech: any) => (
-                  <SelectItem key={tech.id} value={String(tech.id)} disabled={String(tech.id) === leadTech}>
-                    {toCapName(tech.name)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
+                <SelectContent>
+                  <SelectItem value="none">No partner</SelectItem>
+                  {partnerOptions.map((tech: any) => (
+                    <SelectItem key={tech.id} value={String(tech.id)} disabled={String(tech.id) === leadTech}>
+                      {renderTechOption(tech, toCapName)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
             </Select>
           </div>
         </div>
@@ -1052,12 +1066,6 @@ export default function TicketDetail() {
   const [, navigate] = useLocation();
   const { data: ticket, isLoading } = useTicket(ticketId);
   const { data: technicians } = useUsers("technician");
-  const hasOneAssignee = ticket?.assignees?.length === 1;
-  const { data: freeTechnicians } = useFreeTechnicians(
-    hasOneAssignee ? ticket?.assignees?.[0]?.id : undefined,
-    hasOneAssignee
-  );
-
   const { mutate: assignTicket } = useAssignTicket();
   const { mutate: reassignTicket, isPending: isReassigning } = useReassignTicket();
   const { mutate: unassignTicket, isPending: isUnassigning } = useUnassignTicket();
@@ -1127,7 +1135,7 @@ export default function TicketDetail() {
     !isBackboneTicket || isBackboneOrVendorTech(tech)
   );
   const existingAssigneeIds = ticket.assignees?.map((a: any) => a.id) || [];
-  const availablePartnerTechnicians = (freeTechnicians || [])
+  const availablePartnerTechnicians = (technicians || [])
     .filter((tech) => !existingAssigneeIds.includes(tech.id))
     .filter((tech) => !isBackboneTicket || isBackboneOrVendorTech(tech));
 
@@ -1573,21 +1581,11 @@ export default function TicketDetail() {
                             <SelectValue placeholder="Add second technician..." />
                           </SelectTrigger>
                           <SelectContent>
-                            {availablePartnerTechnicians.map((tech: any) => {
-                              const specialtyLabel = getSpecialtyLabel(tech);
-                              return (
-                                <SelectItem key={tech.id} value={String(tech.id)}>
-                                  <div className="flex flex-col leading-tight">
-                                    <span className="text-sm">{tech.name}</span>
-                                    {specialtyLabel && (
-                                      <span className="text-[11px] uppercase text-muted-foreground tracking-wider">
-                                        {specialtyLabel}
-                                      </span>
-                                    )}
-                                  </div>
-                                </SelectItem>
-                              );
-                            })}
+                            {availablePartnerTechnicians.map((tech: any) => (
+                              <SelectItem key={tech.id} value={String(tech.id)}>
+                                {renderTechOption(tech)}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       ) : (
@@ -1633,21 +1631,11 @@ export default function TicketDetail() {
                       <SelectValue placeholder="Select Technician" />
                     </SelectTrigger>
                     <SelectContent>
-                      {availableTechniciansForAssignment.map((tech: any) => {
-                        const specialtyLabel = getSpecialtyLabel(tech);
-                        return (
-                          <SelectItem key={tech.id} value={String(tech.id)}>
-                            <div className="flex flex-col leading-tight">
-                              <span className="text-sm">{tech.name}</span>
-                              {specialtyLabel && (
-                                <span className="text-[11px] uppercase text-muted-foreground tracking-wider">
-                                  {specialtyLabel}
-                                </span>
-                              )}
-                            </div>
-                          </SelectItem>
-                        );
-                      })}
+                      {availableTechniciansForAssignment.map((tech: any) => (
+                        <SelectItem key={tech.id} value={String(tech.id)}>
+                          {renderTechOption(tech)}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
