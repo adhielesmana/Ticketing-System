@@ -4,7 +4,7 @@ import { useUsers } from "@/hooks/use-users";
 import { useAuth } from "@/hooks/use-auth";
 import { CreateTicketDialog } from "@/components/CreateTicketDialog";
 import { SLAIndicator } from "@/components/SLAIndicator";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -112,6 +112,7 @@ export default function TicketsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [slaFilter, setSlaFilter] = useState<string>("all");
+  const [location] = useLocation();
   const { data: tickets, isLoading } = useTickets(
     Object.fromEntries(
       Object.entries({
@@ -145,13 +146,29 @@ export default function TicketsPage() {
   const pageSize = 15;
 
   const closedStatuses = new Set(["closed", "rejected"]);
-  const filteredTickets = tickets ? [...tickets].filter((t: any) => {
+  const ticketsViewParam = (() => {
+    try {
+      return new URL(location, "http://example.com").searchParams.get("view");
+    } catch {
+      return null;
+    }
+  })();
+  const ticketsViewMode = ticketsViewParam === "open" ? "open" : "all";
+  const filteredTickets = (tickets ? [...tickets] : []).filter((t: any) => {
     if (slaFilter === "all") return true;
     if (closedStatuses.has(t.status)) return slaFilter === "all";
     const isOverdue = new Date(t.slaDeadline) < new Date();
     return slaFilter === "overdue" ? isOverdue : !isOverdue;
-  }) : [];
-  const sortedTickets = filteredTickets.sort((a: any, b: any) => {
+  }).filter((t: any) => {
+    if (ticketsViewMode === "open") {
+      return !closedStatuses.has(t.status);
+    }
+    return true;
+  });
+  const sortedTickets = [...filteredTickets].sort((a: any, b: any) => {
+    if (ticketsViewMode === "open") {
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    }
     const aIsClosed = closedStatuses.has(a.status) ? 1 : 0;
     const bIsClosed = closedStatuses.has(b.status) ? 1 : 0;
     return aIsClosed - bIsClosed;
