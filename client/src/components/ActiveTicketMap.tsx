@@ -139,10 +139,6 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
     .filter(Boolean) as TicketPoint[];
   }, [tickets]);
 
-  const technicianPoints = useMemo(() => {
-    return points.filter((pt) => pt.assignees && pt.assignees.length > 0 && ASSIGNED_STATUSES.has(pt.status));
-  }, [points]);
-
   useEffect(() => {
     if (!mapRef.current || mapInstance.current) return;
 
@@ -199,7 +195,7 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
     }
     if (points.length === 0) return;
 
-    const heatData: Array<[number, number, number]> = technicianPoints.map((pt) => {
+    const heatData: Array<[number, number, number]> = points.map((pt) => {
       const intensity = priorityIntensity[pt.priority] || 0.5;
       return [pt.lat, pt.lng, intensity];
     });
@@ -268,7 +264,7 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
 
     const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng]));
     map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
-  }, [points, technicianPoints]);
+  }, [points]);
 
   if (isLoading) {
     return (
