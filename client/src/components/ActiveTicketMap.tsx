@@ -87,7 +87,7 @@ const PENDING_COLOR = "#f97316";
 const LEGEND_PERSON_COLOR = "#3b82f6";
 const LEGEND_SHAPE_COLOR = PENDING_COLOR;
 const MARKER_BASE_SIZE = 32;
-const PERSON_MARKER_SIZE = MARKER_BASE_SIZE * 2;
+const PERSON_MARKER_SIZE = MARKER_BASE_SIZE;
 
 export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
   const mapRef = useRef<HTMLDivElement>(null);
