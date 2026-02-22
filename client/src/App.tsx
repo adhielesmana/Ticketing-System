@@ -83,12 +83,12 @@ function Router() {
         {() => <ProtectedRoute component={TechnicianDashboard} />}
       </Route>
 
-      <Route path="/tickets/:id">
-        {() => <ProtectedRoute component={TicketDetail} />}
-      </Route>
-
       <Route path="/tickets/open">
         {() => <ProtectedRoute component={OpenTicketsPage} />}
+      </Route>
+
+      <Route path="/tickets/:id">
+        {() => <ProtectedRoute component={TicketDetail} />}
       </Route>
 
       <Route path="/tickets">
