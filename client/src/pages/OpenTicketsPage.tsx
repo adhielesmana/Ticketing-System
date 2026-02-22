@@ -106,7 +106,7 @@ function AttentionDot({ status, slaOverdue }: { status: string; slaOverdue?: boo
   );
 }
 
-export default function TicketsPage() {
+export default function OpenTicketsPage() {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -145,16 +145,15 @@ export default function TicketsPage() {
   const pageSize = 15;
 
   const closedStatuses = new Set(["closed", "rejected"]);
-  const filteredTickets = (tickets ? [...tickets] : []).filter((t: any) => {
-    if (slaFilter === "all") return true;
-    if (closedStatuses.has(t.status)) return slaFilter === "all";
-    const isOverdue = new Date(t.slaDeadline) < new Date();
-    return slaFilter === "overdue" ? isOverdue : !isOverdue;
-  });
-  const sortedTickets = filteredTickets.sort((a: any, b: any) => {
-    const aIsClosed = closedStatuses.has(a.status) ? 1 : 0;
-    const bIsClosed = closedStatuses.has(b.status) ? 1 : 0;
-    return aIsClosed - bIsClosed;
+  const filteredTickets = (tickets ? [...tickets] : [])
+    .filter((t: any) => !closedStatuses.has(t.status))
+    .filter((t: any) => {
+      if (slaFilter === "all") return true;
+      const isOverdue = new Date(t.slaDeadline) < new Date();
+      return slaFilter === "overdue" ? isOverdue : !isOverdue;
+    });
+  const sortedTickets = [...filteredTickets].sort((a: any, b: any) => {
+    return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
   });
 
   const totalPages = Math.max(1, Math.ceil(sortedTickets.length / pageSize));

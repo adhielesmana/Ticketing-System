@@ -74,18 +74,9 @@ export function AppSidebar() {
   const ticketNavItem = navItems.find(item => item.label === "Tickets");
   const navItemsWithoutTickets = navItems.filter(item => item.label !== "Tickets");
 
-  const parsedLocation = (() => {
-    try {
-      return new URL(location, "http://example.com");
-    } catch {
-      return new URL("/", "http://example.com");
-    }
-  })();
-  const ticketsPathname = parsedLocation.pathname;
-  const ticketsViewParam = parsedLocation.searchParams.get("view");
-  const isTicketsSectionActive = ticketsPathname === "/tickets" || ticketsPathname.startsWith("/tickets/");
-  const isOpenTicketsActive = ticketsPathname === "/tickets" && ticketsViewParam === "open";
-  const isAllTicketsActive = ticketsPathname === "/tickets" && (!ticketsViewParam || ticketsViewParam === "all");
+  const isTicketsSectionActive = location === "/tickets" || location === "/tickets/open" || location.startsWith("/tickets/");
+  const isOpenTicketsActive = location === "/tickets/open";
+  const isAllTicketsActive = location === "/tickets";
 
   const logoUrl = logoSetting?.value;
 
@@ -188,7 +179,7 @@ export function AppSidebar() {
                   <SidebarMenuSub>
                     {[{
                       label: "Open Ticket",
-                      href: "/tickets?view=open",
+                      href: "/tickets/open",
                       isActive: isOpenTicketsActive,
                     }, {
                       label: "All Ticket",
