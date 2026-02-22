@@ -230,56 +230,6 @@ export function AppSidebar() {
                   </SidebarMenuItem>
                 );
               })}
-              {ticketNavItem && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isTicketsSectionActive}
-                    data-testid="nav-link-tickets"
-                  >
-                    <Link href={ticketNavItem.href}>
-                      <ticketNavItem.icon className="w-4 h-4" />
-                      <span>{ticketNavItem.label}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                  <SidebarMenuSub>
-                    {[{
-                      label: "Open Ticket",
-                      href: "/tickets/open",
-                      isActive: isOpenTicketsActive,
-                    }, {
-                      label: "All Ticket",
-                      href: "/tickets",
-                      isActive: isAllTicketsActive,
-                    }].map((sub) => (
-                      <SidebarMenuSubItem key={sub.label}>
-                        <SidebarMenuSubButton
-                          href={sub.href}
-                          isActive={sub.isActive}
-                          className="capitalize"
-                          data-testid={`nav-sub-${sub.label.replace(/\s+/g, '-').toLowerCase()}`}
-                          onClick={(event) => {
-                            if (
-                              event.button !== 0 ||
-                              event.metaKey ||
-                              event.ctrlKey ||
-                              event.altKey ||
-                              event.shiftKey
-                            ) {
-                              return;
-                            }
-                            event.preventDefault();
-                            setLocation(sub.href);
-                          }}
-                        >
-                          <Ticket className="w-3 h-3" />
-                          {sub.label}
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    ))}
-                  </SidebarMenuSub>
-                </SidebarMenuItem>
-              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
