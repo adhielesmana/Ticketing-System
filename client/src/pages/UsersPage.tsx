@@ -440,6 +440,8 @@ export default function UsersPage() {
                               variant="ghost"
                               onClick={() => openFees(u)}
                               data-testid={`button-fees-user-${u.id}`}
+                              aria-label={`Edit bonus for ${u.name}`}
+                              title={`Edit bonus for ${u.name}`}
                             >
                               <DollarSign className="w-3.5 h-3.5" />
                             </Button>
@@ -590,7 +592,7 @@ export default function UsersPage() {
           ) : (
             <div className="space-y-4">
               <p className="text-xs text-muted-foreground">
-                Set individual ticket fee and transport fee for this technician. If left at 0, the global default from Settings will be used.
+                Set individual ticket and transport fees for this technician. These values feed directly into their personal bonus calculations whenever a ticket is closed.
               </p>
               {[
                 { type: "home_maintenance", label: "Home Maintenance", color: "bg-blue-500" },
