@@ -1427,16 +1427,16 @@ export async function registerRoutes(
       const serverTime = new Date();
       const serverTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
       let dockerTime: string | null = null;
-      let hostTime: string | null = null;
+      let dockerTimeUtc: string | null = null;
       try {
-        const result = await execAsync('date -u "+%Y-%m-%d %H:%M:%S %Z"');
+        const result = await execAsync('date "+%Y-%m-%d %H:%M:%S %Z"');
         dockerTime = result.stdout.trim();
       } catch {
         // ignore
       }
       try {
-        const result = await execAsync('date "+%Y-%m-%d %H:%M:%S %Z"');
-        hostTime = result.stdout.trim();
+        const result = await execAsync('date -u "+%Y-%m-%d %H:%M:%S %Z"');
+        dockerTimeUtc = result.stdout.trim();
       } catch {
         // ignore
       }
@@ -1445,7 +1445,7 @@ export async function registerRoutes(
         serverTime: serverTime.toISOString(),
         serverTimezone,
         dockerTime,
-        hostTime,
+        dockerTimeUtc,
         dbTime: dbTime.now,
         dbTimezone: dbTime.timezone,
       });

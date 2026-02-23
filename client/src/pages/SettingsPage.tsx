@@ -621,8 +621,8 @@ export default function SettingsPage() {
                   value={formatIsoLocal(systemTime?.serverTime)}
                   detail={`Timezone ${systemTime?.serverTimezone || "UTC"}`}
                 />
-                <TimeRow label="Docker shell" value={systemTime?.dockerTime || "—"} detail="date -u inside container" />
-                <TimeRow label="Host shell" value={systemTime?.hostTime || "—"} detail="date inside container" />
+                <TimeRow label="Docker shell (local)" value={systemTime?.dockerTime || "—"} detail="date inside container" />
+                <TimeRow label="Docker shell (UTC)" value={systemTime?.dockerTimeUtc || "—"} detail="date -u inside container" />
                 <TimeRow label="Database time" value={formatIsoLocal(systemTime?.dbTime)} detail={`Timezone ${systemTime?.dbTimezone || "UTC"}`} />
               </div>
             )}
