@@ -121,7 +121,7 @@ export default function OpenTicketsPage() {
       }).filter(([_, v]) => v !== undefined)
     )
   );
-  const { data: users: allUsers } = useUsers();
+  const { data: allUsers } = useUsers();
   const technicians = useMemo(() => (allUsers || []).filter(isTechnicianUser), [allUsers]);
   const { mutate: deleteTicket } = useDeleteTicket();
   const { mutate: updateTicket } = useUpdateTicket();

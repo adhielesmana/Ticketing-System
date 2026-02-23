@@ -1,5 +1,5 @@
 import { useMemo, useState, type KeyboardEvent } from "react";
-import { useLocation } from "wouter";
+import { Link, useLocation } from "wouter";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/use-auth";
 import { useTickets } from "@/hooks/use-tickets";
@@ -14,53 +14,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { SLAIndicator } from "@/components/SLAIndicator";
 import { Eye, Ticket } from "lucide-react";
 import { isTechnicianUser } from "@/utils/manualAssignment";
+import { AttentionDot, priorityColors, statusColors, statusLabels, toCapName, toTitleCase } from "@/lib/ticketTableHelpers";
 
-const priorityColors: Record<string, string> = {
-  low: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-  medium: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
-  high: "bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300",
-  critical: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300",
-};
-
-const statusColors: Record<string, string> = {
-  assigned: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-  in_progress: "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
-  pending_rejection: "bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300",
-};
-
-const statusLabels: Record<string, string> = {
-  assigned: "Assigned",
-  in_progress: "In Progress",
-  pending_rejection: "Pending Rejection",
-};
-
-const attentionStatuses = new Set(["pending_rejection", "open"]);
-
-const attentionDotColors: Record<string, string> = {
-  pending_rejection: "bg-orange-500",
-  open: "bg-blue-500",
-};
-
-function AttentionDot({ status, slaOverdue }: { status: string; slaOverdue?: boolean }) {
-  if (slaOverdue) {
-    return <span className="inline-block w-2 h-2 rounded-full bg-red-500 attention-dot" />;
-  }
-  if (!attentionStatuses.has(status)) return null;
-  const color = attentionDotColors[status] || "bg-red-500";
-  return <span className={`inline-block w-2 h-2 rounded-full ${color} attention-dot`} />;
-}
-
-function toCapName(name: string, maxLen = 0): string {
-  if (!name) return "";
-  const capitalized = name.replace(/\b\w/g, (c) => c.toUpperCase());
-  if (maxLen > 0 && capitalized.length > maxLen) return capitalized.slice(0, maxLen) + "...";
-  return capitalized;
-}
-
-function toTitleCase(str: string): string {
-  if (!str) return "";
-  return str.replace(/\b\w/g, (c) => c.toUpperCase());
-}
 
 export default function TechnicianTicketsMonitor() {
   const { user } = useAuth();
@@ -200,9 +155,11 @@ export default function TechnicianTicketsMonitor() {
                           #{ticket.ticketIdCustom || ticket.ticketNumber}
                         </TableCell>
                         <TableCell className="whitespace-nowrap">
-                          <span className="text-sm font-normal cursor-pointer" title={toTitleCase(ticket.title)}>
-                            {toTitleCase(ticket.title).length > 30 ? `${toTitleCase(ticket.title).slice(0, 30)}…` : toTitleCase(ticket.title)}
-                          </span>
+                          <Link href={`/tickets/${ticket.id}`}>
+                            <span className="text-sm font-normal cursor-pointer" title={toTitleCase(ticket.title)}>
+                              {toTitleCase(ticket.title).length > 30 ? `${toTitleCase(ticket.title).slice(0, 30)}…` : toTitleCase(ticket.title)}
+                            </span>
+                          </Link>
                         </TableCell>
                         <TableCell className="whitespace-nowrap">
                           <Badge variant="outline" className="capitalize text-[10px] font-normal">
@@ -294,17 +251,16 @@ export default function TechnicianTicketsMonitor() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-end gap-0.5">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                setLocation(`/tickets/${ticket.id}`);
-                              }}
-                              data-testid={`button-view-ticket-${ticket.id}`}
-                            >
-                              <Eye className="w-3.5 h-3.5" />
-                            </Button>
+                            <Link href={`/tickets/${ticket.id}`}>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={(event) => event.stopPropagation()}
+                                data-testid={`button-view-ticket-${ticket.id}`}
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </Button>
+                            </Link>
                           </div>
                         </TableCell>
                       </TableRow>
