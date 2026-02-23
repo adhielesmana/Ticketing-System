@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTickets, useDeleteTicket, useUpdateTicket, useAssignTicket } from "@/hooks/use-tickets";
 import { useUsers } from "@/hooks/use-users";
 import { useAuth } from "@/hooks/use-auth";
@@ -57,7 +57,7 @@ import { insertTicketSchema, TicketTypeValues, TicketPriorityValues, TicketStatu
 import { format } from "date-fns";
 import { Search, Eye, Pencil, Trash2, UserPlus, Ticket, Check, Loader2, ChevronLeft, ChevronRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { isBackboneOrVendorTech, isHelpdeskManualAssignmentAllowed, shouldRestrictDropdownToBackbone } from "@/utils/manualAssignment";
+import { isBackboneOrVendorTech, isHelpdeskManualAssignmentAllowed, isTechnicianUser, shouldRestrictDropdownToBackbone } from "@/utils/manualAssignment";
 
 const priorityColors: Record<string, string> = {
   low: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
@@ -121,7 +121,8 @@ export default function OpenTicketsPage() {
       }).filter(([_, v]) => v !== undefined)
     )
   );
-  const { data: technicians } = useUsers("technician");
+  const { data: users: allUsers } = useUsers();
+  const technicians = useMemo(() => (allUsers || []).filter(isTechnicianUser), [allUsers]);
   const { mutate: deleteTicket } = useDeleteTicket();
   const { mutate: updateTicket } = useUpdateTicket();
   const { mutate: assignTicket } = useAssignTicket();

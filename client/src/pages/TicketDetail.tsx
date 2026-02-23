@@ -40,11 +40,11 @@ import {
   UserX,
 } from "lucide-react";
 import { format } from "date-fns";
-import { ChangeEvent, useEffect, useState, useRef } from "react";
+import { ChangeEvent, useEffect, useMemo, useState, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { getSpecialtyLabel, isBackboneOrVendorTech, isHelpdeskManualAssignmentAllowed, shouldRestrictDropdownToBackbone } from "@/utils/manualAssignment";
+import { getSpecialtyLabel, isBackboneOrVendorTech, isHelpdeskManualAssignmentAllowed, isTechnicianUser, shouldRestrictDropdownToBackbone } from "@/utils/manualAssignment";
 
 const priorityColors: Record<string, string> = {
   low: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
@@ -1065,7 +1065,8 @@ export default function TicketDetail() {
   const { user } = useAuth();
   const [, navigate] = useLocation();
   const { data: ticket, isLoading } = useTicket(ticketId);
-  const { data: technicians } = useUsers("technician");
+  const { data: allUsers } = useUsers();
+  const technicians = useMemo(() => (allUsers || []).filter(isTechnicianUser), [allUsers]);
   const { mutate: assignTicket } = useAssignTicket();
   const { mutate: reassignTicket, isPending: isReassigning } = useReassignTicket();
   const { mutate: unassignTicket, isPending: isUnassigning } = useUnassignTicket();

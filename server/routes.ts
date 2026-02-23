@@ -791,33 +791,30 @@ export async function registerRoutes(
       }
 
       let preferredType: "maintenance" | "installation" = "maintenance";
+      let maintenancePhase = true;
+      const ratioMaintSetting = await storage.getSetting("preference_ratio_maintenance");
+      const ratioInstallSetting = await storage.getSetting("preference_ratio_installation");
+      const ratioMaint = parseInt(ratioMaintSetting?.value || "4", 10) || 4;
+      const ratioInstall = parseInt(ratioInstallSetting?.value || "2", 10) || 2;
+      const cycleSize = ratioMaint + ratioInstall;
 
-      if (!user.isBackboneSpecialist) {
-        const ratioMaintSetting = await storage.getSetting("preference_ratio_maintenance");
-        const ratioInstallSetting = await storage.getSetting("preference_ratio_installation");
-        const ratioMaint = parseInt(ratioMaintSetting?.value || "4", 10) || 4;
-        const ratioInstall = parseInt(ratioInstallSetting?.value || "2", 10) || 2;
-        const cycleSize = ratioMaint + ratioInstall;
-
-        const counts = await storage.getCompletedTicketsTodayByUser(userId);
-        const totalDone = counts.maintenanceCount + counts.installationCount;
-        const cyclePosition = totalDone % cycleSize;
-        if (cyclePosition < ratioMaint) {
-          preferredType = "maintenance";
-        } else {
-          preferredType = "installation";
-        }
-      }
+      const counts = await storage.getCompletedTicketsTodayByUser(userId);
+      const totalDone = counts.maintenanceCount + counts.installationCount;
+      const cyclePosition = cycleSize > 0 ? totalDone % cycleSize : 0;
+      maintenancePhase = cyclePosition < ratioMaint;
+      preferredType = maintenancePhase ? "maintenance" : "installation";
 
       // Get last completed ticket today for location proximity
       const lastTicket = await storage.getLastCompletedTicketToday(userId);
       const lastLocation = lastTicket?.customerLocationUrl || null;
 
+      const enforceHomeMaintenance = !user.isBackboneSpecialist && !user.isVendorSpecialist;
       const ticket = await storage.getSmartOpenTicket({
         isBackboneSpecialist: user.isBackboneSpecialist ?? false,
         preferredType,
         lastTicketLocation: lastLocation,
-        forceHomeMaintenance: !user.isBackboneSpecialist && !user.isVendorSpecialist,
+        enforceHomeMaintenanceStrategy: enforceHomeMaintenance,
+        maintenancePhase,
       });
 
       if (!ticket) {

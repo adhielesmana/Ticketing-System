@@ -1,6 +1,7 @@
-import { TicketType } from "@shared/schema";
+import { TicketType, UserRole } from "@shared/schema";
 
 type Technician = { isBackboneSpecialist?: boolean; isVendorSpecialist?: boolean };
+type TechnicianWithRole = Technician & { role?: string };
 
 const HELP_DESK_RESTRICTED_TYPES = new Set<string>([
   TicketType.HOME_MAINTENANCE,
@@ -29,4 +30,10 @@ export function getSpecialtyLabel(tech?: Technician): string | null {
   if (tech.isVendorSpecialist) parts.push("Vendor");
   if (parts.length === 0) return null;
   return parts.join(" / ");
+}
+
+export function isTechnicianUser(user?: TechnicianWithRole): boolean {
+  if (!user) return false;
+  if (user.role === UserRole.TECHNICIAN) return true;
+  return isBackboneOrVendorTech(user);
 }

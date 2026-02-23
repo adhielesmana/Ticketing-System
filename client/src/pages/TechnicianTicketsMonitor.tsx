@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { SLAIndicator } from "@/components/SLAIndicator";
 import { Eye, Ticket } from "lucide-react";
+import { isTechnicianUser } from "@/utils/manualAssignment";
 
 const priorityColors: Record<string, string> = {
   low: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
@@ -64,7 +65,8 @@ function toTitleCase(str: string): string {
 export default function TechnicianTicketsMonitor() {
   const { user } = useAuth();
   const [, setLocation] = useLocation();
-  const { data: technicians, isLoading: techLoading } = useUsers("technician");
+  const { data: users, isLoading: techLoading } = useUsers();
+  const technicians = useMemo(() => (users || []).filter(isTechnicianUser), [users]);
   const [selectedTechId, setSelectedTechId] = useState<string>("");
   const technicianId = selectedTechId ? Number(selectedTechId) : undefined;
 

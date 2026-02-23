@@ -418,9 +418,16 @@ export class DatabaseStorage implements IStorage {
     isBackboneSpecialist: boolean;
     preferredType: "maintenance" | "installation";
     lastTicketLocation?: string | null;
-    forceHomeMaintenance?: boolean;
+    enforceHomeMaintenanceStrategy?: boolean;
+    maintenancePhase?: boolean;
   }): Promise<Ticket | undefined> {
-    const { isBackboneSpecialist, preferredType, lastTicketLocation, forceHomeMaintenance = false } = options;
+    const {
+      isBackboneSpecialist,
+      preferredType,
+      lastTicketLocation,
+      enforceHomeMaintenanceStrategy = false,
+      maintenancePhase = true,
+    } = options;
 
     // Backbone specialists only get backbone_maintenance tickets
     if (isBackboneSpecialist) {
@@ -431,8 +438,43 @@ export class DatabaseStorage implements IStorage {
       return this.pickBestCandidate(candidates, lastTicketLocation);
     }
 
-    // Non-backbone: first check for overdue tickets across ALL eligible types
+    // Non-backbone: select open tickets based on the requested strategy
     const now = new Date();
+
+    const homeMaintenanceTickets = await db.select().from(tickets)
+      .where(and(eq(tickets.status, TicketStatus.OPEN), eq(tickets.type, "home_maintenance")))
+      .orderBy(asc(tickets.createdAt));
+    const installationTickets = await db.select().from(tickets)
+      .where(and(eq(tickets.status, TicketStatus.OPEN), eq(tickets.type, "installation")))
+      .orderBy(asc(tickets.createdAt));
+
+    const overdueHome = homeMaintenanceTickets
+      .filter(t => t.slaDeadline && new Date(t.slaDeadline) < now)
+      .sort((a, b) => new Date(a.slaDeadline).getTime() - new Date(b.slaDeadline).getTime());
+    if (overdueHome.length > 0) {
+      return overdueHome[0];
+    }
+
+    if (enforceHomeMaintenanceStrategy) {
+      if (maintenancePhase) {
+        if (homeMaintenanceTickets.length > 0) {
+          return this.pickBestCandidate(homeMaintenanceTickets, lastTicketLocation);
+        }
+        if (installationTickets.length > 0) {
+          return this.pickBestCandidate(installationTickets, lastTicketLocation);
+        }
+        return undefined;
+      }
+
+      if (installationTickets.length > 0) {
+        return this.pickBestCandidate(installationTickets, lastTicketLocation);
+      }
+      if (homeMaintenanceTickets.length > 0) {
+        return this.pickBestCandidate(homeMaintenanceTickets, lastTicketLocation);
+      }
+      return undefined;
+    }
+
     const allEligible = await db.select().from(tickets)
       .where(and(
         eq(tickets.status, TicketStatus.OPEN),
@@ -440,20 +482,13 @@ export class DatabaseStorage implements IStorage {
       ))
       .orderBy(asc(tickets.createdAt));
 
-    if (forceHomeMaintenance) {
-      const homeCandidates = allEligible.filter(t => t.type === "home_maintenance");
-      if (homeCandidates.length > 0) {
-        return this.pickBestCandidate(homeCandidates, lastTicketLocation);
-      }
+    const overdueOthers = allEligible
+      .filter(t => t.slaDeadline && new Date(t.slaDeadline) < now && t.type !== "home_maintenance")
+      .sort((a, b) => new Date(a.slaDeadline).getTime() - new Date(b.slaDeadline).getTime());
+    if (overdueOthers.length > 0) {
+      return overdueOthers[0];
     }
 
-    const overdueTickets = allEligible.filter(t => t.slaDeadline && new Date(t.slaDeadline) < now);
-    if (overdueTickets.length > 0) {
-      overdueTickets.sort((a, b) => new Date(a.slaDeadline).getTime() - new Date(b.slaDeadline).getTime());
-      return overdueTickets[0];
-    }
-
-    // No overdue tickets — apply type preference with 4:2 ratio
     const preferredCondition = preferredType === "installation"
       ? and(eq(tickets.status, TicketStatus.OPEN), eq(tickets.type, "installation"))
       : and(eq(tickets.status, TicketStatus.OPEN), eq(tickets.type, "home_maintenance"));
