@@ -7,6 +7,10 @@ RUN_MIGRATIONS="${RUN_MIGRATIONS:-auto}"
 
 export PGDATA="/var/lib/postgresql/data"
 
+TIMEZONE="${TZ:-Asia/Jakarta}"
+ln -sf "/usr/share/zoneinfo/${TIMEZONE}" /etc/localtime
+echo "${TIMEZONE}" > /etc/timezone
+
 echo "=============================================="
 echo "  NetGuard ISP - Container Starting"
 echo "  Timezone: $(date +%Z) ($(date +%z))"
@@ -61,6 +65,22 @@ host    all       all   ::1/128         md5
 HBAEOF
 fi
 
+ensure_postgres_timezone() {
+    local file="$PGDATA/postgresql.conf"
+    if [ ! -f "$file" ]; then
+        return
+    fi
+    for key in timezone log_timezone; do
+        if grep -q "^${key}" "$file"; then
+            sed -i "s|^${key}.*|${key} = 'Asia/Jakarta'|" "$file"
+        else
+            echo "${key} = 'Asia/Jakarta'" >> "$file"
+        fi
+    done
+}
+
+ensure_postgres_timezone
+
 if [ -f "$PGDATA/postmaster.pid" ]; then
     echo "[WARN] Stale postmaster.pid found, cleaning up..."
     PG_PID=$(head -1 "$PGDATA/postmaster.pid" 2>/dev/null || echo "")
@@ -79,6 +99,16 @@ if ! su-exec postgres pg_ctl -D "$PGDATA" -l /var/log/postgresql.log start -w -t
     exit 1
 fi
 echo "[OK] PostgreSQL started"
+
+enforce_postgres_timezone() {
+    su-exec postgres psql -d template1 -v ON_ERROR_STOP=1 <<'SQL'
+ALTER SYSTEM SET timezone = 'Asia/Jakarta';
+ALTER SYSTEM SET log_timezone = 'Asia/Jakarta';
+SQL
+    su-exec postgres pg_ctl -D "$PGDATA" reload -w
+}
+
+enforce_postgres_timezone
 
 echo "[STEP 5] Creating role and database..."
 su-exec postgres psql -d template1 <<SQL

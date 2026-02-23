@@ -817,6 +817,7 @@ export async function registerRoutes(
         isBackboneSpecialist: user.isBackboneSpecialist ?? false,
         preferredType,
         lastTicketLocation: lastLocation,
+        forceHomeMaintenance: !user.isBackboneSpecialist && !user.isVendorSpecialist,
       });
 
       if (!ticket) {

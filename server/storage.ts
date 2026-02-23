@@ -418,8 +418,9 @@ export class DatabaseStorage implements IStorage {
     isBackboneSpecialist: boolean;
     preferredType: "maintenance" | "installation";
     lastTicketLocation?: string | null;
+    forceHomeMaintenance?: boolean;
   }): Promise<Ticket | undefined> {
-    const { isBackboneSpecialist, preferredType, lastTicketLocation } = options;
+    const { isBackboneSpecialist, preferredType, lastTicketLocation, forceHomeMaintenance = false } = options;
 
     // Backbone specialists only get backbone_maintenance tickets
     if (isBackboneSpecialist) {
@@ -438,6 +439,13 @@ export class DatabaseStorage implements IStorage {
         sql`${tickets.type} != 'backbone_maintenance'`
       ))
       .orderBy(asc(tickets.createdAt));
+
+    if (forceHomeMaintenance) {
+      const homeCandidates = allEligible.filter(t => t.type === "home_maintenance");
+      if (homeCandidates.length > 0) {
+        return this.pickBestCandidate(homeCandidates, lastTicketLocation);
+      }
+    }
 
     const overdueTickets = allEligible.filter(t => t.slaDeadline && new Date(t.slaDeadline) < now);
     if (overdueTickets.length > 0) {

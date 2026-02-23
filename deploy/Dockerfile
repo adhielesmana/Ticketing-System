@@ -2,6 +2,8 @@ FROM node:20-alpine
 
 RUN apk add --no-cache tzdata postgresql16 postgresql16-contrib su-exec bash
 ENV TZ=Asia/Jakarta
+RUN ln -sf /usr/share/zoneinfo/$TZ /etc/localtime \
+ && echo "$TZ" > /etc/timezone
 
 ENV PGDATA=/var/lib/postgresql/data
 
