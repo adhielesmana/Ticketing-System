@@ -12,6 +12,7 @@ import Login from "@/pages/Login";
 import LandingPage from "@/pages/LandingPage";
 import AdminDashboard from "@/pages/AdminDashboard";
 import TechnicianDashboard from "@/pages/TechnicianDashboard";
+import TechnicianTicketsMonitor from "@/pages/TechnicianTicketsMonitor";
 import TicketDetail from "@/pages/TicketDetail";
 import TicketsPage from "@/pages/TicketsPage";
 import OpenTicketsPage from "@/pages/OpenTicketsPage";
@@ -85,6 +86,10 @@ function Router() {
 
       <Route path="/tickets/open">
         {() => <ProtectedRoute component={OpenTicketsPage} />}
+      </Route>
+
+      <Route path="/tickets/monitor">
+        {() => <ProtectedRoute component={TechnicianTicketsMonitor} />}
       </Route>
 
       <Route path="/tickets/:id">

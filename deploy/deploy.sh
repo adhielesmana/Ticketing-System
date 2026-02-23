@@ -135,6 +135,8 @@ APP_CONTAINER="${APP_CONTAINER:-netguard_app}"
 PGDATA_VOLUME="${PGDATA_VOLUME:-netguard_pgdata}"
 UPLOADS_VOLUME="${UPLOADS_VOLUME:-netguard_uploads}"
 
+SKIP_HOST_DEPS="${SKIP_HOST_DEPS:-0}"
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --domain)
@@ -143,6 +145,8 @@ while [ $# -gt 0 ]; do
       SSL_EMAIL="${2:-}"; shift 2 ;;
     --app-port)
       APP_PORT="${2:-}"; shift 2 ;;
+    --skip-host-deps)
+      SKIP_HOST_DEPS="1"; shift ;;
     *)
       log_err "Unknown argument: $1"
       exit 1
@@ -189,26 +193,34 @@ echo ""
 
 # STEP 1: host dependencies
 step_start 1 "Install/verify host dependencies"
-MISSING_PACKAGES=()
-ensure_package ca-certificates
-ensure_package curl
-ensure_package openssl
-ensure_cmd_or_pkg docker docker.io
-ensure_cmd_or_pkg nginx nginx
-ensure_cmd_or_pkg certbot certbot
-ensure_package python3-certbot-nginx
-
-if [ ${#MISSING_PACKAGES[@]} -gt 0 ]; then
-  export DEBIAN_FRONTEND=noninteractive
-  log_info "Installing missing packages: ${MISSING_PACKAGES[*]}"
-  apt-get update -y
-  apt-get install -y "${MISSING_PACKAGES[@]}"
+if [ "$SKIP_HOST_DEPS" = "1" ]; then
+  log_warn "Skipping host dependency bootstrap (--skip-host-deps)"
 else
-  log_info "All host dependencies already installed."
-fi
+  MISSING_PACKAGES=()
+  ensure_package ca-certificates
+  ensure_package curl
+  ensure_package openssl
+  ensure_cmd_or_pkg docker docker.io
+  ensure_cmd_or_pkg nginx nginx
+  ensure_cmd_or_pkg certbot certbot
+  ensure_package python3-certbot-nginx
 
-systemctl enable --now docker >/dev/null 2>&1 || true
-systemctl enable --now nginx >/dev/null 2>&1 || true
+  if [ ${#MISSING_PACKAGES[@]} -gt 0 ]; then
+    export DEBIAN_FRONTEND=noninteractive
+    log_info "Installing missing packages: ${MISSING_PACKAGES[*]}"
+    apt-get update -y
+    apt-get install -y "${MISSING_PACKAGES[@]}"
+  else
+    log_info "All host dependencies already installed."
+  fi
+
+  if command -v docker >/dev/null 2>&1; then
+    systemctl enable --now docker >/dev/null 2>&1 || true
+  fi
+  if command -v nginx >/dev/null 2>&1; then
+    systemctl enable --now nginx >/dev/null 2>&1 || true
+  fi
+fi
 step_done 1 "Install/verify host dependencies"
 
 # STEP 2: stop existing containers

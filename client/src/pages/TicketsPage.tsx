@@ -154,7 +154,10 @@ export default function TicketsPage() {
   const sortedTickets = filteredTickets.sort((a: any, b: any) => {
     const aIsClosed = closedStatuses.has(a.status) ? 1 : 0;
     const bIsClosed = closedStatuses.has(b.status) ? 1 : 0;
-    return aIsClosed - bIsClosed;
+    if (aIsClosed !== bIsClosed) return aIsClosed - bIsClosed;
+    const aTime = new Date(a.createdAt).getTime();
+    const bTime = new Date(b.createdAt).getTime();
+    return aTime - bTime;
   });
 
   const totalPages = Math.max(1, Math.ceil(sortedTickets.length / pageSize));
@@ -398,6 +401,7 @@ export default function TicketsPage() {
                             {ticket.assignmentType && (
                               <Badge className={`text-[9px] ${ticket.assignmentType === 'auto' ? 'bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300' : 'bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300'}`} data-testid={`badge-assign-type-${ticket.id}`}>
                                 {ticket.assignmentType === 'auto' ? 'Auto' : 'Manual'}
+                                {ticket.assignedAt ? ` · ${format(new Date(ticket.assignedAt), "MMM d, HH:mm")}` : ""}
                               </Badge>
                             )}
                           </div>

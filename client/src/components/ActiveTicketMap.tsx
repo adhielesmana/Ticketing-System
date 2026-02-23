@@ -60,6 +60,7 @@ interface TicketPoint {
   performStatus?: string;
   assignees?: { id: number; name: string }[];
   createdAt?: string;
+  assignedAt?: string;
 }
 
 interface ActiveTicketMapProps {
@@ -94,49 +95,84 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
   const mapInstance = useRef<L.Map | null>(null);
   const heatLayerRef = useRef<L.Layer[]>([]);
   const markerLayerRef = useRef<L.LayerGroup | null>(null);
+  const technicianLayerRef = useRef<L.LayerGroup | null>(null);
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const seededRef = useRef<boolean>(false);
 
-  const points: TicketPoint[] = useMemo(() => {
-    if (!tickets) return [];
-    return tickets
-      .map((t: any) => {
-        let lat: number | null = null;
-        let lng: number | null = null;
-        if (t.latitude && t.longitude) {
-          lat = parseFloat(t.latitude);
-          lng = parseFloat(t.longitude);
+  const { allTicketPoints, activeTicketPoints, inactiveTicketPoints, technicianLocations } = useMemo(() => {
+    if (!tickets || tickets.length === 0) {
+      return {
+        allTicketPoints: [] as TicketPoint[],
+        activeTicketPoints: [] as TicketPoint[],
+        inactiveTicketPoints: [] as TicketPoint[],
+        technicianLocations: [] as TicketPoint[],
+      };
+    }
+
+    const all: TicketPoint[] = [];
+    const active: TicketPoint[] = [];
+    const inactive: TicketPoint[] = [];
+    const technicianMap = new Map<number, { point: TicketPoint; timestamp: number }>();
+
+    tickets.forEach((t: any) => {
+      let lat: number | null = null;
+      let lng: number | null = null;
+      if (t.latitude && t.longitude) {
+        lat = parseFloat(t.latitude);
+        lng = parseFloat(t.longitude);
+      }
+      if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) {
+        const coords = extractCoordinates(t.customerLocationUrl || "");
+        if (coords) {
+          lat = coords.lat;
+          lng = coords.lng;
         }
-        if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) {
-          const coords = extractCoordinates(t.customerLocationUrl || "");
-          if (coords) {
-            lat = coords.lat;
-            lng = coords.lng;
-          }
+      }
+      if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) return;
+
+      const point: TicketPoint = {
+        id: t.id,
+        ticketIdCustom: t.ticketIdCustom,
+        ticketNumber: t.ticketNumber,
+        title: t.title,
+        status: t.status,
+        priority: t.priority,
+        type: t.type,
+        customerName: t.customerName,
+        customerLocationUrl: t.customerLocationUrl,
+        lat,
+        lng,
+        slaDeadline: t.slaDeadline,
+        isActive: !INACTIVE_STATUSES.has(t.status),
+        performStatus: t.performStatus,
+        assignees: t.assignees,
+        createdAt: t.createdAt,
+        assignedAt: t.assignedAt,
+      };
+
+      all.push(point);
+      if (point.isActive) {
+        active.push(point);
+      } else {
+        inactive.push(point);
+      }
+
+      point.assignees?.forEach((assignee) => {
+        if (!assignee?.id) return;
+        const stamp = point.assignedAt ? new Date(point.assignedAt).getTime() : 0;
+        const existing = technicianMap.get(assignee.id);
+        if (!existing || stamp > existing.timestamp) {
+          technicianMap.set(assignee.id, { point, timestamp: stamp });
         }
-        if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) return null;
-        const isActive = !INACTIVE_STATUSES.has(t.status);
-        if (!isActive) return null;
-        return {
-          id: t.id,
-          ticketIdCustom: t.ticketIdCustom,
-          ticketNumber: t.ticketNumber,
-          title: t.title,
-          status: t.status,
-          priority: t.priority,
-          type: t.type,
-          customerName: t.customerName,
-          customerLocationUrl: t.customerLocationUrl,
-          lat,
-          lng,
-          slaDeadline: t.slaDeadline,
-          isActive,
-          performStatus: t.performStatus,
-          assignees: t.assignees,
-          createdAt: t.createdAt,
-        };
-      })
-    .filter(Boolean) as TicketPoint[];
+      });
+    });
+
+    return {
+      allTicketPoints: all,
+      activeTicketPoints: active,
+      inactiveTicketPoints: inactive,
+      technicianLocations: Array.from(technicianMap.values()).map((entry) => entry.point),
+    };
   }, [tickets]);
 
   useEffect(() => {
@@ -163,24 +199,27 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
     tileLayerRef.current = cachedLayer;
 
     markerLayerRef.current = L.layerGroup().addTo(map);
+    technicianLayerRef.current = L.layerGroup().addTo(map);
     mapInstance.current = map;
     map.invalidateSize();
 
     return () => {
       map.remove();
       mapInstance.current = null;
+      markerLayerRef.current = null;
+      technicianLayerRef.current = null;
       tileLayerRef.current = null;
       seededRef.current = false;
     };
   }, []);
 
   useEffect(() => {
-    if (!tileLayerRef.current || seededRef.current || points.length === 0) return;
-    const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng]));
+    if (!tileLayerRef.current || seededRef.current || allTicketPoints.length === 0) return;
+    const bounds = L.latLngBounds(allTicketPoints.map((p) => [p.lat, p.lng]));
     const paddedBounds = bounds.pad(0.1);
     seededRef.current = true;
     void seedServerTiles(paddedBounds, 12, 17);
-  }, [points]);
+  }, [allTicketPoints]);
 
   useEffect(() => {
     if (!mapInstance.current) return;
@@ -190,17 +229,36 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
       heatLayerRef.current.forEach((layer) => map.removeLayer(layer));
       heatLayerRef.current = [];
     }
-    if (markerLayerRef.current) {
-      markerLayerRef.current.clearLayers();
-    }
-    if (points.length === 0) return;
+    markerLayerRef.current?.clearLayers();
+    technicianLayerRef.current?.clearLayers();
 
-    const heatData: Array<[number, number, number]> = points.map((pt) => {
+    if (allTicketPoints.length === 0) return;
+
+    const activeHeatData: Array<[number, number, number]> = activeTicketPoints.map((pt) => {
       const intensity = priorityIntensity[pt.priority] || 0.5;
       return [pt.lat, pt.lng, intensity];
     });
-    if (heatData.length > 0) {
-      const heat = L.heatLayer(heatData, {
+    const inactiveHeatData: Array<[number, number, number]> = inactiveTicketPoints.map((pt) => [pt.lat, pt.lng, 0.25]);
+
+    if (inactiveHeatData.length > 0) {
+      const greyHeat = L.heatLayer(inactiveHeatData, {
+        radius: 20,
+        blur: 15,
+        maxZoom: 14,
+        minOpacity: 0.1,
+        max: 0.5,
+        gradient: {
+          0.0: "rgba(244,246,248,0)",
+          0.5: "rgba(148,163,184,0.6)",
+          1.0: "rgba(148,163,184,1)",
+        },
+      });
+      greyHeat.addTo(map);
+      heatLayerRef.current.push(greyHeat);
+    }
+
+    if (activeHeatData.length > 0) {
+      const heat = L.heatLayer(activeHeatData, {
         radius: 30,
         blur: 20,
         maxZoom: 17,
@@ -220,51 +278,76 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
     }
 
     const now = Date.now();
-    points.forEach((pt) => {
+    const statusLabel = (pt: TicketPoint) => {
+      if (['closed', 'rejected'].includes(pt.status)) {
+        return pt.performStatus === "perform" ? "On Time" : "Overdue";
+      }
+      if (!pt.slaDeadline) return "Pending";
+      return new Date(pt.slaDeadline).getTime() > now ? "On Time" : "Overdue";
+    };
+
+    const getPopupHtml = (pt: TicketPoint) => {
+      const ticketLabel = escapeHtml(pt.ticketIdCustom || pt.ticketNumber || pt.id);
+      const customerName = escapeHtml(pt.customerName);
+      const truncatedTitle = escapeHtml(truncateText(pt.title, 10));
+      const timing = escapeHtml(statusLabel(pt));
+      return `
+        <a href="/tickets/${pt.id}" class="block text-left text-sm" style="color:inherit;text-decoration:none">
+          <div style="font-weight:600;margin-bottom:4px">Ticket ID: ${ticketLabel}</div>
+          <div style="font-size:12px;margin-bottom:2px">Customer: ${customerName}</div>
+          <div style="font-size:12px;margin-bottom:2px">Title: ${truncatedTitle}</div>
+          <div style="font-size:12px;margin-bottom:2px">Status: ${timing}</div>
+        </a>`;
+    };
+
+    allTicketPoints.forEach((pt) => {
       const colors = typeColorMap[pt.type] || typeColorMap.installation;
       const assigned = ASSIGNED_STATUSES.has(pt.status);
       const overdue = pt.slaDeadline ? new Date(pt.slaDeadline).getTime() < now : false;
-      const baseColor = overdue ? OVERDUE_COLOR : PENDING_COLOR;
+      const baseColor = pt.isActive ? (overdue ? OVERDUE_COLOR : PENDING_COLOR) : "#94a3b8";
 
-      const icon = assigned
-        ? createPersonIcon(colors.stroke)
-        : pt.type === TicketType.INSTALLATION
-          ? createCircleIcon(baseColor, overdue)
-          : createTriangleIcon(baseColor, overdue);
+      const icon = pt.isActive
+        ? assigned
+          ? createPersonIcon(colors.stroke)
+          : pt.type === TicketType.INSTALLATION
+            ? createCircleIcon(baseColor, overdue)
+            : createTriangleIcon(baseColor, overdue)
+        : createCircleIcon(baseColor, false, MARKER_BASE_SIZE - 6);
 
       const marker = L.marker([pt.lat, pt.lng], { icon }).addTo(markerLayerRef.current!);
 
-      const ticketLabel = escapeHtml(pt.ticketIdCustom || pt.ticketNumber || pt.id);
-      const technicians = pt.assignees?.map((a) => a.name).filter(Boolean) ?? [];
-      const tech1 = escapeHtml(technicians[0] || "Unassigned");
-      const tech2 = escapeHtml(technicians[1] || "—");
-      const customerName = escapeHtml(pt.customerName);
-      const ticketTitle = escapeHtml(pt.title);
-
-      marker.bindPopup(
-        `<a href="/tickets/${pt.id}" class="block text-left text-sm" style="color:inherit;text-decoration:none">
-           <div style="font-weight:600;margin-bottom:4px">Ticket ID: ${ticketLabel}</div>
-           <div style="font-size:12px;margin-bottom:2px">Technician 1: ${tech1}</div>
-           <div style="font-size:12px;margin-bottom:2px">Technician 2: ${tech2}</div>
-           <div style="font-size:12px;margin-bottom:2px">Customer: ${customerName}</div>
-           <div style="font-size:12px;margin-bottom:2px">Title: ${ticketTitle}</div>
-         </a>`,
-        { closeButton: false }
-      );
+      marker.bindPopup(getPopupHtml(pt), { closeButton: false, autoClose: false, closeOnClick: false });
       marker.on("click", () => {
         window.location.href = `/tickets/${pt.id}`;
       });
-      marker.on("mouseover", () => {
-        marker.openPopup();
-      });
-      marker.on("mouseout", () => {
-        marker.closePopup();
-      });
+      marker.on("mouseover", () => marker.openPopup());
+      marker.on("mouseout", () => marker.closePopup());
     });
 
-    const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng]));
+    technicianLocations.forEach((pt) => {
+      const icon = createPersonIcon(LEGEND_PERSON_COLOR, MARKER_BASE_SIZE - 12);
+      const marker = L.marker([pt.lat, pt.lng], { icon }).addTo(technicianLayerRef.current!);
+      const ticketLabel = escapeHtml(pt.ticketIdCustom || pt.ticketNumber || pt.id);
+      const title = escapeHtml(truncateText(pt.title, 20));
+      const customerName = escapeHtml(pt.customerName);
+      marker.bindPopup(`
+        <div class="text-left text-sm">
+          <div style="font-weight:600;margin-bottom:4px">Technician</div>
+          <div style="font-size:12px;margin-bottom:2px">Ticket ID: ${ticketLabel}</div>
+          <div style="font-size:12px;margin-bottom:2px">Customer: ${customerName}</div>
+          <div style="font-size:12px;margin-bottom:2px">Title: ${title}</div>
+        </div>
+      `, { closeButton: false });
+      marker.on("click", () => {
+        window.location.href = `/tickets/${pt.id}`;
+      });
+      marker.on("mouseover", () => marker.openPopup());
+      marker.on("mouseout", () => marker.closePopup());
+    });
+
+    const bounds = L.latLngBounds(allTicketPoints.map((p) => [p.lat, p.lng]));
     map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
-  }, [points]);
+  }, [allTicketPoints, activeTicketPoints, inactiveTicketPoints, technicianLocations]);
 
   if (isLoading) {
     return (
@@ -288,22 +371,23 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <CardTitle className="text-base flex items-center gap-2">
             <MapPin className="w-4 h-4" />
-            Active Ticket Map
+            Ticket Heatmap
           </CardTitle>
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-3 flex-wrap">
               <Legend icon={<TriangleLegendIcon color={LEGEND_SHAPE_COLOR} />} label="Home & Backbone Maintenance" />
               <Legend icon={<CircleLegendIcon color={LEGEND_SHAPE_COLOR} />} label="Home Installation" />
-              <Legend icon={<PersonLegendIcon color={LEGEND_PERSON_COLOR} />} label="Assigned / In Progress" />
+              <Legend icon={<span className="inline-flex items-center justify-center w-2.5 h-2.5 rounded-full" style={{ backgroundColor: "#94a3b8" }} />} label="Inactive / Closed" />
+              <Legend icon={<PersonLegendIcon color={LEGEND_PERSON_COLOR} />} label="Technicians" />
             </div>
             <span className="text-xs text-muted-foreground" data-testid="text-ticket-count">
-              {points.length} active tickets mapped
+              {allTicketPoints.length} tickets · {activeTicketPoints.length} active · {inactiveTicketPoints.length} inactive · {technicianLocations.length} technicians
             </span>
           </div>
         </div>
       </CardHeader>
       <CardContent>
-        {points.length === 0 ? (
+        {allTicketPoints.length === 0 ? (
           <div className="h-[400px] flex items-center justify-center text-muted-foreground text-sm rounded-md border border-dashed">
             No tickets with location data
           </div>
@@ -400,6 +484,12 @@ function escapeHtml(value: string | number | null | undefined) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+function truncateText(value: string | null | undefined, length: number) {
+  if (!value) return "";
+  if (value.length <= length) return value;
+  return `${value.slice(0, length)}…`;
 }
 
 function createTriangleIcon(color: string, isFlashing = false, size = MARKER_BASE_SIZE + 2) {

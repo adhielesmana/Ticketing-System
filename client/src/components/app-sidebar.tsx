@@ -79,6 +79,7 @@ export function AppSidebar() {
   const isTicketsSectionActive = location === "/tickets" || location === "/tickets/open" || location.startsWith("/tickets/");
   const isOpenTicketsActive = location === "/tickets/open";
   const isAllTicketsActive = location === "/tickets";
+  const isMonitorActive = location === "/tickets/monitor";
 
   const logoUrl = logoSetting?.value;
 
@@ -184,6 +185,10 @@ export function AppSidebar() {
                       label: "All Ticket",
                       href: "/tickets",
                       isActive: isAllTicketsActive,
+                    }, {
+                      label: "Technician Monitor",
+                      href: "/tickets/monitor",
+                      isActive: isMonitorActive,
                     }].map((sub) => (
                       <SidebarMenuSubItem key={sub.label}>
                         <SidebarMenuSubButton

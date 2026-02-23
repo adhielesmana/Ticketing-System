@@ -8,8 +8,14 @@ type CreateTicketInput = z.infer<typeof api.tickets.create.input>;
 type UpdateTicketInput = z.infer<typeof api.tickets.update.input>;
 type CloseTicketInput = z.infer<typeof api.tickets.close.input>;
 
-export function useTickets(filters?: TicketFilters) {
+type UseTicketsOptions = {
+  enabled?: boolean;
+  refetchInterval?: number;
+};
+
+export function useTickets(filters?: TicketFilters, options?: UseTicketsOptions) {
   const queryKey = [api.tickets.list.path, filters];
+  const { enabled = true, refetchInterval = 10000 } = options ?? {};
   
   return useQuery({
     queryKey,
@@ -22,7 +28,8 @@ export function useTickets(filters?: TicketFilters) {
       if (!res.ok) throw new Error("Failed to fetch tickets");
       return res.json();
     },
-    refetchInterval: 10000,
+    refetchInterval,
+    enabled,
   });
 }
 

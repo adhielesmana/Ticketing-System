@@ -166,8 +166,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllTickets(filters: any = {}): Promise<Ticket[]> {
-    let query = db.select().from(tickets).$dynamic();
-    
+    const assignedRaw = filters?.assignedTo ?? filters?.assigned_to;
+    const assignedTo = assignedRaw !== undefined && assignedRaw !== null ? Number(assignedRaw) : undefined;
+    const hasAssignedFilter = typeof assignedTo === "number" && !Number.isNaN(assignedTo);
+
     const conditions = [];
     if (filters.status) conditions.push(eq(tickets.status, filters.status));
     if (filters.type) conditions.push(eq(tickets.type, filters.type));
@@ -180,11 +182,27 @@ export class DatabaseStorage implements IStorage {
       ));
     }
 
+    let query: any = db.select().from(tickets);
+    if (hasAssignedFilter) {
+      query = db
+        .select({ ticket: tickets })
+        .from(tickets)
+        .innerJoin(ticketAssignments, eq(ticketAssignments.ticketId, tickets.id))
+        .where(and(
+          eq(ticketAssignments.userId, assignedTo!),
+          eq(ticketAssignments.active, true)
+        ));
+    }
+
     if (conditions.length > 0) {
       query = query.where(and(...conditions));
     }
 
-    return await query.orderBy(desc(tickets.createdAt));
+    const rows = await query.orderBy(desc(tickets.createdAt));
+    if (hasAssignedFilter) {
+      return rows.map((row: any) => row.ticket);
+    }
+    return rows;
   }
 
   async getTicketsByAssignee(userId: number): Promise<Ticket[]> {

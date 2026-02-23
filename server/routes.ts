@@ -5,7 +5,19 @@ import { api, errorSchemas } from "@shared/routes";
 import { z } from "zod";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import multer from "multer";
-import { TicketStatus, UserRole, TicketPriority, TicketType, tickets, ticketAssignments, performanceLogs, technicianFees } from "@shared/schema";
+import {
+  TicketStatus,
+  UserRole,
+  TicketPriority,
+  TicketType,
+  tickets,
+  ticketAssignments,
+  performanceLogs,
+  technicianFees,
+  type Ticket,
+  type TicketAssignment,
+  type User,
+} from "@shared/schema";
 import { hash, compare } from "bcryptjs";
 import path from "path";
 import fs from "fs";
@@ -117,6 +129,34 @@ function computePerformancePeriod(reference: Date, cutoffDay: number) {
   start.setHours(0, 0, 0, 0);
 
   return { start, end };
+}
+
+type AssigneeWithAssignment = User & {
+  assignmentType: string | null;
+  assignedAt: Date | string | null;
+};
+
+async function attachAssignmentsToTicket(ticket: Ticket) {
+  const assignments = await storage.getTicketAssignments(ticket.id);
+  const assignees = await Promise.all(assignments.map(async (assignment) => {
+    const user = await storage.getUser(assignment.userId);
+    if (!user) return null;
+    return {
+      ...user,
+      assignmentType: assignment.assignmentType || null,
+      assignedAt: assignment.assignedAt || null,
+    };
+  }));
+  const assigneesWithMeta = assignees.filter((a): a is AssigneeWithAssignment => Boolean(a));
+
+  return {
+    ...ticket,
+    assignee: assigneesWithMeta[0] || null,
+    assignees: assigneesWithMeta,
+    assignments,
+    assignmentType: assignments[0]?.assignmentType || null,
+    assignedAt: assignments[0]?.assignedAt || null,
+  };
 }
 
 function generatePeriodDays(start: Date, end: Date) {
@@ -404,23 +444,13 @@ export async function registerRoutes(
 
       if (user?.role === UserRole.TECHNICIAN) {
          const myTickets = await storage.getTicketsByAssignee(user.id);
-         const withAssignees = await Promise.all(myTickets.map(async (t) => {
-           const assignees = await storage.getAssigneesForTicket(t.id);
-           const assignments = await storage.getTicketAssignments(t.id);
-           const assignmentType = assignments[0]?.assignmentType || null;
-           return { ...t, assignee: assignees[0], assignees, assignmentType };
-         }));
+         const withAssignees = await Promise.all(myTickets.map((ticket) => attachAssignmentsToTicket(ticket)));
          return res.json(withAssignees);
       }
 
       const tickets = await storage.getAllTickets(req.query);
       
-      const ticketsWithAssignee = await Promise.all(tickets.map(async (ticket) => {
-        const assignees = await storage.getAssigneesForTicket(ticket.id);
-        const assignments = await storage.getTicketAssignments(ticket.id);
-        const assignmentType = assignments[0]?.assignmentType || null;
-        return { ...ticket, assignee: assignees[0], assignees, assignmentType };
-      }));
+      const ticketsWithAssignee = await Promise.all(tickets.map((ticket) => attachAssignmentsToTicket(ticket)));
 
       res.json(ticketsWithAssignee);
     } catch (err) {
@@ -432,9 +462,9 @@ export async function registerRoutes(
     const ticket = await storage.getTicket(Number(req.params.id));
     if (!ticket) return res.status(404).json({ message: "Ticket not found" });
     
-    const assignees = await storage.getAssigneesForTicket(ticket.id);
-    const assignment = await storage.getTicketAssignment(ticket.id);
-    res.json({ ...ticket, assignee: assignees[0], assignees, assignmentType: assignment?.assignmentType, assignedAt: assignment?.assignedAt });
+    const enriched = await attachAssignmentsToTicket(ticket);
+    const assignment = enriched.assignments?.[0] || null;
+    res.json({ ...enriched, assignment });
   });
 
   app.post(api.tickets.create.path, async (req, res) => {

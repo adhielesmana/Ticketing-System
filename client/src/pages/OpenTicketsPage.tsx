@@ -397,6 +397,7 @@ export default function OpenTicketsPage() {
                             {ticket.assignmentType && (
                               <Badge className={`text-[9px] ${ticket.assignmentType === 'auto' ? 'bg-sky-50 text-sky-700 dark:bg-sky-950 dark:text-sky-300' : 'bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300'}`} data-testid={`badge-assign-type-${ticket.id}`}>
                                 {ticket.assignmentType === 'auto' ? 'Auto' : 'Manual'}
+                                {ticket.assignedAt ? ` · ${format(new Date(ticket.assignedAt), "MMM d, HH:mm")}` : ""}
                               </Badge>
                             )}
                           </div>
