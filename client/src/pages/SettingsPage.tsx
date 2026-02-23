@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { useSetting, useUpdateSetting } from "@/hooks/use-tickets";
+import { useSetting, useUpdateSetting, useSystemTime } from "@/hooks/use-tickets";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,7 @@ import {
   Database,
   Calendar,
   Save,
+  Clock,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 export default function SettingsPage() {
@@ -43,6 +44,14 @@ export default function SettingsPage() {
 
   const [ratioInitialized, setRatioInitialized] = useState(false);
   const [cutoffDay, setCutoffDay] = useState("25");
+  const [browserTime, setBrowserTime] = useState(() => new Date());
+
+  const { data: systemTime, isLoading: systemTimeLoading } = useSystemTime();
+
+  useEffect(() => {
+    const ticker = setInterval(() => setBrowserTime(new Date()), 1000);
+    return () => clearInterval(ticker);
+  }, []);
 
   useEffect(() => {
     if (!ratioInitialized && ratioMaintSetting !== undefined) {
@@ -157,6 +166,15 @@ export default function SettingsPage() {
       toast({ title: "Reset Failed", description: err.message || "Something went wrong", variant: "destructive" });
     } finally {
       setIsResetting(false);
+    }
+  };
+
+  const formatIsoLocal = (value?: string | null) => {
+    if (!value) return "—";
+    try {
+      return new Date(value).toLocaleString();
+    } catch {
+      return value;
     }
   };
 
@@ -585,6 +603,47 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       </div>
+      <div className="space-y-4 mt-8 pt-6 border-t">
+        <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+          <Clock className="w-4 h-4" />
+          Time Diagnostics
+        </div>
+        <Card>
+          <CardContent className="p-5">
+            {systemTimeLoading ? (
+              <Skeleton className="h-32 w-full" />
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <TimeRow label="Browser time" value={browserTime.toLocaleString()} detail="Local device clock" />
+                <TimeRow
+                  label="Server / Docker (node)"
+                  value={formatIsoLocal(systemTime?.serverTime)}
+                  detail={`Timezone ${systemTime?.serverTimezone || "UTC"}`}
+                />
+                <TimeRow label="Docker shell" value={systemTime?.dockerTime || "—"} detail="date -u inside container" />
+                <TimeRow label="Host shell" value={systemTime?.hostTime || "—"} detail="date inside container" />
+                <TimeRow label="Database time" value={formatIsoLocal(systemTime?.dbTime)} detail={`Timezone ${systemTime?.dbTimezone || "UTC"}`} />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+interface TimeRowProps {
+  label: string;
+  value: string;
+  detail?: string;
+}
+
+function TimeRow({ label, value, detail }: TimeRowProps) {
+  return (
+    <div className="space-y-1">
+      <p className="text-xs text-muted-foreground uppercase tracking-wider">{label}</p>
+      <p className="text-sm font-mono">{value}</p>
+      {detail && <p className="text-xs text-muted-foreground">{detail}</p>}
     </div>
   );
 }

@@ -21,6 +21,8 @@ import {
 import { hash, compare } from "bcryptjs";
 import path from "path";
 import fs from "fs";
+import { exec } from "child_process";
+import { promisify } from "util";
 
 function toTitleCase(str: string): string {
   return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase());
@@ -186,6 +188,8 @@ const TILE_SERVER_URL = process.env.TILE_SERVER_URL || "https://tile.openstreetm
 const TILE_PREFETCH_BOUNDS = (process.env.TILE_PREFETCH_BOUNDS || "-6.5,106.4,-5.9,107.1").split(",").map((value) => parseFloat(value.trim()));
 const TILE_PREFETCH_ZOOM_RANGE = process.env.TILE_PREFETCH_ZOOM_RANGE || "12-15";
 const TILE_PREFETCH_LIMIT = Math.max(64, Math.min(parseInt(process.env.TILE_PREFETCH_LIMIT || "512", 10), 2048));
+
+const execAsync = promisify(exec);
 
 function clampTileIndex(value: number, maxIndex: number) {
   if (value < 0) return 0;
@@ -1412,6 +1416,43 @@ export async function registerRoutes(
     const { key, value } = req.body;
     const setting = await storage.setSetting(key, value);
     res.json(setting);
+  });
+
+  app.get("/api/system/time", async (req, res) => {
+    try {
+      const userId = (req as any).session.userId;
+      if (!userId) return res.status(401).json({ message: "Not authenticated" });
+
+      const dbTime = await storage.getDatabaseTime();
+      const serverTime = new Date();
+      const serverTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+      let dockerTime: string | null = null;
+      let hostTime: string | null = null;
+      try {
+        const result = await execAsync('date -u "+%Y-%m-%d %H:%M:%S %Z"');
+        dockerTime = result.stdout.trim();
+      } catch {
+        // ignore
+      }
+      try {
+        const result = await execAsync('date "+%Y-%m-%d %H:%M:%S %Z"');
+        hostTime = result.stdout.trim();
+      } catch {
+        // ignore
+      }
+
+      res.json({
+        serverTime: serverTime.toISOString(),
+        serverTimezone,
+        dockerTime,
+        hostTime,
+        dbTime: dbTime.now,
+        dbTimezone: dbTime.timezone,
+      });
+    } catch (err) {
+      console.error("System time error:", err);
+      res.status(500).json({ message: "Failed to read system times" });
+    }
   });
 
   // === TECHNICIAN FEES (per-technician bonus config) ===

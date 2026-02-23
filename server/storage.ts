@@ -80,6 +80,7 @@ export interface IStorage {
   }>;
   getCachedTile(z: number, x: number, y: number): Promise<{ tileData: Buffer; contentType: string } | undefined>;
   saveCachedTile(tile: { z: number; x: number; y: number; tileData: Buffer; contentType: string }): Promise<void>;
+  getDatabaseTime(): Promise<{ now: string; timezone: string }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -638,6 +639,17 @@ export class DatabaseStorage implements IStorage {
 
   async getAllSettings(): Promise<Setting[]> {
     return await db.select().from(settings);
+  }
+
+  async getDatabaseTime(): Promise<{ now: string; timezone: string }> {
+    const [row] = await db.select({
+      now: sql<string>`now()`,
+      timezone: sql<string>`current_setting('TIMEZONE')`,
+    }).from(sql`(SELECT 1) t`);
+    return {
+      now: row?.now?.toISOString ? row.now.toISOString() : String(row?.now ?? new Date().toISOString()),
+      timezone: row?.timezone || "UTC",
+    };
   }
 
   async bulkResetStaleAssignments(maxAgeHours: number = 24): Promise<number> {

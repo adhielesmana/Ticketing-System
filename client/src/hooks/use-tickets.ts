@@ -639,3 +639,15 @@ export function useUpdateSetting() {
     },
   });
 }
+
+export function useSystemTime() {
+  return useQuery({
+    queryKey: ["/api/system/time"],
+    queryFn: async () => {
+      const res = await fetch("/api/system/time", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch system time");
+      return res.json();
+    },
+    refetchInterval: 30000,
+  });
+}
