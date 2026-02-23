@@ -46,6 +46,8 @@ export default function SettingsPage() {
   const [ratioInitialized, setRatioInitialized] = useState(false);
   const [cutoffDay, setCutoffDay] = useState("25");
   const [browserTime, setBrowserTime] = useState(() => new Date());
+  const [tick, setTick] = useState(Date.now());
+  const [lastSystemFetch, setLastSystemFetch] = useState(Date.now());
 
   const { data: systemTime, isLoading: systemTimeLoading } = useSystemTime();
 
@@ -53,6 +55,17 @@ export default function SettingsPage() {
     const ticker = setInterval(() => setBrowserTime(new Date()), 1000);
     return () => clearInterval(ticker);
   }, []);
+
+  useEffect(() => {
+    const ticker = setInterval(() => setTick(Date.now()), 1000);
+    return () => clearInterval(ticker);
+  }, []);
+
+  useEffect(() => {
+    if (systemTime) {
+      setLastSystemFetch(Date.now());
+    }
+  }, [systemTime]);
 
   useEffect(() => {
     if (!ratioInitialized && ratioMaintSetting !== undefined) {
@@ -170,13 +183,12 @@ export default function SettingsPage() {
     }
   };
 
-  const formatIsoLocal = (value?: string | null) => {
+  const formatLiveTime = (value?: string | null) => {
     if (!value) return "—";
-    try {
-      return new Date(value).toLocaleString();
-    } catch {
-      return value;
-    }
+    const base = Date.parse(value);
+    if (Number.isNaN(base)) return value;
+    const offset = tick - lastSystemFetch;
+    return new Date(base + offset).toLocaleString();
   };
 
   return (
@@ -618,12 +630,12 @@ export default function SettingsPage() {
                 <TimeRow label="Browser time" value={browserTime.toLocaleString()} detail="Local device clock" />
                 <TimeRow
                   label="Server / Docker (node)"
-                  value={formatIsoLocal(systemTime?.serverTime)}
+                  value={formatLiveTime(systemTime?.serverTime)}
                   detail={`Timezone ${systemTime?.serverTimezone || "UTC"}`}
                 />
-                <TimeRow label="Docker shell (local)" value={systemTime?.dockerTime || "—"} detail="date inside container" />
-                <TimeRow label="Docker shell (UTC)" value={systemTime?.dockerTimeUtc || "—"} detail="date -u inside container" />
-                <TimeRow label="Database time" value={formatIsoLocal(systemTime?.dbTime)} detail={`Timezone ${systemTime?.dbTimezone || "UTC"}`} />
+                <TimeRow label="Docker shell (local)" value={formatLiveTime(systemTime?.dockerTime)} detail="date inside container" />
+                <TimeRow label="Docker shell (UTC)" value={formatLiveTime(systemTime?.dockerTimeUtc)} detail="date -u inside container" />
+                <TimeRow label="Database time" value={formatLiveTime(systemTime?.dbTime)} detail={`Timezone ${systemTime?.dbTimezone || "UTC"}`} />
               </div>
             )}
           </CardContent>

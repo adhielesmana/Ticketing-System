@@ -160,7 +160,7 @@ export const api = {
     assign: {
       method: 'POST' as const,
       path: '/api/tickets/:id/assign' as const,
-      input: z.object({ userId: z.number().optional() }),
+      input: z.object({ userId: z.number().optional(), assignedAt: z.string().optional() }),
       responses: {
         200: z.custom<typeof tickets.$inferSelect>(),
         400: errorSchemas.validation,

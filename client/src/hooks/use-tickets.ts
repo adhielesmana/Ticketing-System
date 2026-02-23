@@ -118,17 +118,25 @@ export function useDeleteTicket() {
   });
 }
 
+type AssignTicketMutationInput = { id: number; userId?: number; assignedAt?: string };
+
 export function useAssignTicket() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ id, userId }: { id: number; userId?: number }) => {
+    mutationFn: async ({ id, userId, assignedAt }: AssignTicketMutationInput) => {
       const url = buildUrl(api.tickets.assign.path, { id });
+      const payload: Record<string, unknown> = { userId };
+      if (typeof assignedAt === "string") {
+        payload.assignedAt = assignedAt;
+      } else {
+        payload.assignedAt = new Date().toISOString();
+      }
       const res = await fetch(url, {
         method: api.tickets.assign.method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId }),
+        body: JSON.stringify(payload),
         credentials: "include",
       });
       if (!res.ok) {
@@ -154,11 +162,14 @@ export function useReassignTicket() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ id, technicianIds }: { id: number; technicianIds: number[] }) => {
+    mutationFn: async ({ id, technicianIds, assignedAt }: { id: number; technicianIds: number[]; assignedAt?: string }) => {
       const res = await fetch(`/api/tickets/${id}/reassign`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ technicianIds }),
+        body: JSON.stringify({
+          technicianIds,
+          assignedAt: assignedAt ?? new Date().toISOString(),
+        }),
         credentials: "include",
       });
       if (!res.ok) {

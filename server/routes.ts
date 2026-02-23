@@ -564,7 +564,7 @@ export async function registerRoutes(
 
   app.post(api.tickets.assign.path, async (req, res) => {
     const ticketId = Number(req.params.id);
-    const { userId } = req.body;
+    const { userId, assignedAt } = req.body;
 
     if (!userId) {
       return res.status(400).json({ message: "User ID required for manual assignment" });
@@ -597,7 +597,8 @@ export async function registerRoutes(
         return res.status(400).json({ message: "This technician is already assigned to this ticket" });
       }
 
-      await storage.assignTicket(ticketId, userId, "manual");
+      const assignedTimestamp = assignedAt ? new Date(assignedAt) : new Date();
+      await storage.assignTicket(ticketId, userId, "manual", assignedTimestamp);
       await storage.updateTicket(ticketId, { status: TicketStatus.ASSIGNED });
       const updatedTicket = await storage.getTicket(ticketId);
       const assignees = await storage.getAssigneesForTicket(ticketId);
@@ -627,7 +628,7 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Cannot reassign a closed or rejected ticket" });
       }
 
-      const { technicianIds } = req.body;
+    const { technicianIds, assignedAt } = req.body;
       if (!technicianIds || !Array.isArray(technicianIds) || technicianIds.length === 0 || technicianIds.length > 2) {
         return res.status(400).json({ message: "Provide 1 or 2 technician IDs" });
       }
@@ -654,8 +655,9 @@ export async function registerRoutes(
 
       await storage.removeAllAssignments(ticketId);
 
+      const assignedTimestamp = assignedAt ? new Date(assignedAt) : new Date();
       for (const techId of technicianIds) {
-        await storage.assignTicket(ticketId, Number(techId), "manual");
+        await storage.assignTicket(ticketId, Number(techId), "manual", assignedTimestamp);
       }
 
       let newStatus = ticket.status;

@@ -30,8 +30,8 @@ export interface IStorage {
   getTicketsByAssignee(userId: number): Promise<Ticket[]>;
   deleteTicket(id: number): Promise<void>;
 
-  assignTicket(ticketId: number, userId: number, assignmentType?: string): Promise<TicketAssignment>;
-  assignTicketWithPartner(ticketId: number, userId: number, partnerId: number, assignmentType?: string): Promise<void>;
+  assignTicket(ticketId: number, userId: number, assignmentType?: string, assignedAt?: Date): Promise<TicketAssignment>;
+  assignTicketWithPartner(ticketId: number, userId: number, partnerId: number, assignmentType?: string, assignedAt?: Date): Promise<void>;
   removeAllAssignments(ticketId: number): Promise<void>;
   getTicketAssignment(ticketId: number): Promise<TicketAssignment | undefined>;
   getTicketAssignments(ticketId: number): Promise<TicketAssignment[]>;
@@ -225,7 +225,7 @@ export class DatabaseStorage implements IStorage {
     await db.delete(tickets).where(eq(tickets.id, id));
   }
 
-  async assignTicket(ticketId: number, userId: number, assignmentType: string = "manual"): Promise<TicketAssignment> {
+  async assignTicket(ticketId: number, userId: number, assignmentType: string = "manual", assignedAt?: Date): Promise<TicketAssignment> {
     const currentAssignments = await this.getTicketAssignments(ticketId);
     
     if (currentAssignments.some(a => a.userId === userId)) {
@@ -236,8 +236,9 @@ export class DatabaseStorage implements IStorage {
       throw new Error("Maximum 2 assignees per ticket");
     }
     
+    const timestamp = assignedAt && !Number.isNaN(assignedAt.getTime()) ? assignedAt : new Date();
     const [assignment] = await db.insert(ticketAssignments)
-      .values({ ticketId, userId, active: true, assignmentType })
+      .values({ ticketId, userId, active: true, assignmentType, assignedAt: timestamp })
       .returning();
       
     return assignment;
@@ -249,15 +250,16 @@ export class DatabaseStorage implements IStorage {
       .where(eq(ticketAssignments.ticketId, ticketId));
   }
 
-  async assignTicketWithPartner(ticketId: number, userId: number, partnerId: number, assignmentType: string = "auto"): Promise<void> {
+  async assignTicketWithPartner(ticketId: number, userId: number, partnerId: number, assignmentType: string = "auto", assignedAt?: Date): Promise<void> {
     await db.update(ticketAssignments)
       .set({ active: false })
       .where(eq(ticketAssignments.ticketId, ticketId));
 
+    const timestamp = assignedAt && !Number.isNaN(assignedAt.getTime()) ? assignedAt : new Date();
     await db.insert(ticketAssignments)
       .values([
-        { ticketId, userId, active: true, assignmentType },
-        { ticketId, userId: partnerId, active: true, assignmentType },
+        { ticketId, userId, active: true, assignmentType, assignedAt: timestamp },
+        { ticketId, userId: partnerId, active: true, assignmentType, assignedAt: timestamp },
       ]);
   }
 

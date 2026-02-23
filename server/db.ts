@@ -10,5 +10,13 @@ if (!process.env.DATABASE_URL) {
   );
 }
 
+const timezone = (process.env.DB_TIMEZONE || process.env.TZ || "UTC").replace(/'/g, "''");
+
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+pool.on("connect", (client) => {
+  client
+    .query(`SET TIME ZONE '${timezone}'`)
+    .catch((err) => console.error("Failed to set PostgreSQL timezone:", err));
+});
 export const db = drizzle(pool, { schema });
