@@ -134,6 +134,8 @@ INSTALL_DIR="${INSTALL_DIR:-/opt/netguard}"
 APP_CONTAINER="${APP_CONTAINER:-netguard_app}"
 PGDATA_VOLUME="${PGDATA_VOLUME:-netguard_pgdata}"
 UPLOADS_VOLUME="${UPLOADS_VOLUME:-netguard_uploads}"
+HOST_LOCALTIME_FILE="${HOST_LOCALTIME_FILE:-/etc/localtime}"
+HOST_TIMEZONE_FILE="${HOST_TIMEZONE_FILE:-/etc/timezone}"
 
 SKIP_HOST_DEPS="${SKIP_HOST_DEPS:-0}"
 
@@ -282,8 +284,8 @@ SESSION_SECRET=${SESSION_SECRET}
 CREDS
 chmod 600 "$CREDENTIALS_FILE"
 
-docker run -d \
-  --name "$APP_CONTAINER" \
+  docker run -d \
+    --name "$APP_CONTAINER" \
   --restart unless-stopped \
   -e DB_USER="$DB_USER" \
   -e DB_NAME="$DB_NAME" \
@@ -293,9 +295,11 @@ docker run -d \
   -e NODE_ENV=production \
   -e TZ=Asia/Jakarta \
   -p "127.0.0.1:${APP_PORT}:3000" \
-  -v "${PGDATA_VOLUME}:/var/lib/postgresql/data" \
-  -v "${UPLOADS_VOLUME}:/app/uploads" \
-  "$APP_NAME" >/dev/null
+    -v "${PGDATA_VOLUME}:/var/lib/postgresql/data" \
+    -v "${UPLOADS_VOLUME}:/app/uploads" \
+    $( [ -f "$HOST_LOCALTIME_FILE" ] && printf '%s' "-v ${HOST_LOCALTIME_FILE}:/etc/localtime:ro" || printf '' ) \
+    $( [ -f "$HOST_TIMEZONE_FILE" ] && printf '%s' "-v ${HOST_TIMEZONE_FILE}:/etc/timezone:ro" || printf '' ) \
+    "$APP_NAME" >/dev/null
 
 sleep 5
 docker ps --format '{{.Names}}' | grep -qw "$APP_CONTAINER" || { log_err "Container failed to start"; docker logs "$APP_CONTAINER" --tail 30; exit 1; }
