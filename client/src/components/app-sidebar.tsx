@@ -15,6 +15,7 @@ import {
   Loader2,
   FileText,
   List,
+  Monitor,
 } from "lucide-react";
 import { UserRole } from "@shared/schema";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -69,6 +70,7 @@ export function AppSidebar() {
   const isMonitorActive = location === "/tickets/monitor";
   const isTicketsSectionActive = location.startsWith("/tickets");
   const isAllTicketsActive = location === "/tickets" || (location.startsWith("/tickets/") && !isOpenTicketsActive && !isMonitorActive);
+  const isReportsSectionActive = location === "/reports" || location.startsWith("/reports/");
 
   const ticketSubItems = [
     {
@@ -87,11 +89,21 @@ export function AppSidebar() {
     },
   ];
 
+  const reportSubItems = [
+    {
+      label: "Monitoring",
+      href: "/tickets/monitor",
+      icon: Monitor,
+      isActive: isMonitorActive,
+      testId: "nav-sub-monitoring",
+    },
+  ];
+
   const navigationItems = [
     { href: dashboardHref, label: "Dashboard", icon: LayoutDashboard, show: true },
-    { href: "/tickets", label: "Tickets", icon: Ticket, show: !isTechnician, subItems: ticketSubItems },
+    { href: "/tickets", label: "Tickets", icon: Ticket, show: !isTechnician, subItems: ticketSubItems, sectionActive: isTicketsSectionActive },
     { href: "/users", label: "Staff", icon: Users, show: isAdmin },
-    { href: "/reports", label: "Reports", icon: FileText, show: isAdmin || isHelpdesk },
+    { href: "/reports", label: "Reports", icon: FileText, show: isAdmin || isHelpdesk, subItems: reportSubItems, sectionActive: isReportsSectionActive },
     { href: "/settings", label: "Settings", icon: Settings, show: isAdmin },
   ].filter(item => item.show);
 
@@ -168,7 +180,7 @@ export function AppSidebar() {
                 const subItems = item.subItems ?? [];
                 const hasSubItems = subItems.length > 0;
                 const isActive = hasSubItems
-                  ? subItems.some((sub) => sub.isActive) || (item.label === "Tickets" && isTicketsSectionActive)
+                  ? subItems.some((sub) => sub.isActive) || Boolean(item.sectionActive)
                   : location === item.href || location.startsWith(item.href + "/");
                 return (
                   <SidebarMenuItem key={`${item.href}-${item.label}`}>
