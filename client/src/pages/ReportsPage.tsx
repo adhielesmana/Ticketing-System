@@ -98,6 +98,18 @@ export default function ReportsPage() {
     dateTo: today,
   });
 
+  useEffect(() => {
+    const browserToday = getLocalDateString();
+    setBonusFilters((prev) => {
+      if (prev.dateFrom === browserToday && prev.dateTo === browserToday) return prev;
+      return { dateFrom: browserToday, dateTo: browserToday };
+    });
+    setPerfFilters((prev) => {
+      if (prev.dateFrom === browserToday && prev.dateTo === browserToday) return prev;
+      return { dateFrom: browserToday, dateTo: browserToday };
+    });
+  }, []);
+
   const updateTicketFilters = (updates: Partial<typeof ticketFilters>) => {
     setTicketFilters((prev) => ({ ...prev, ...updates }));
     setTicketPage(1);

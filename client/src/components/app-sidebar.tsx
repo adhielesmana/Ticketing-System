@@ -14,6 +14,7 @@ import {
   X,
   Loader2,
   FileText,
+  List,
 } from "lucide-react";
 import { UserRole } from "@shared/schema";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -64,22 +65,35 @@ export function AppSidebar() {
       ? "/dashboard/helpdesk"
       : "/dashboard/admin";
 
-  const navItems = [
+  const isOpenTicketsActive = location === "/tickets/open";
+  const isMonitorActive = location === "/tickets/monitor";
+  const isTicketsSectionActive = location.startsWith("/tickets");
+  const isAllTicketsActive = location === "/tickets" || (location.startsWith("/tickets/") && !isOpenTicketsActive && !isMonitorActive);
+
+  const ticketSubItems = [
+    {
+      label: "Open Ticket",
+      href: "/tickets/open",
+      icon: Ticket,
+      isActive: isOpenTicketsActive,
+      testId: "nav-sub-open-ticket",
+    },
+    {
+      label: "All Ticket",
+      href: "/tickets",
+      icon: List,
+      isActive: isAllTicketsActive,
+      testId: "nav-sub-all-ticket",
+    },
+  ];
+
+  const navigationItems = [
     { href: dashboardHref, label: "Dashboard", icon: LayoutDashboard, show: true },
-    { href: "/tickets", label: "Tickets", icon: Ticket, show: !isTechnician },
+    { href: "/tickets", label: "Tickets", icon: Ticket, show: !isTechnician, subItems: ticketSubItems },
     { href: "/users", label: "Staff", icon: Users, show: isAdmin },
     { href: "/reports", label: "Reports", icon: FileText, show: isAdmin || isHelpdesk },
     { href: "/settings", label: "Settings", icon: Settings, show: isAdmin },
   ].filter(item => item.show);
-  const ticketNavItem = navItems.find(item => item.label === "Tickets");
-  const navItemsWithoutTickets = navItems.filter(item => item.label !== "Tickets");
-  const dashboardItem = navItemsWithoutTickets.find(item => item.label === "Dashboard");
-  const otherNavItems = navItemsWithoutTickets.filter(item => item.label !== "Dashboard");
-
-  const isTicketsSectionActive = location === "/tickets" || location === "/tickets/open" || location.startsWith("/tickets/");
-  const isOpenTicketsActive = location === "/tickets/open";
-  const isAllTicketsActive = location === "/tickets";
-  const isMonitorActive = location === "/tickets/monitor";
 
   const logoUrl = logoSetting?.value;
 
@@ -150,78 +164,14 @@ export function AppSidebar() {
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {dashboardItem && (
-                <SidebarMenuItem key={dashboardItem.href}>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={location === dashboardItem.href || location.startsWith(dashboardItem.href + "/")}
-                    data-testid={`nav-link-${dashboardItem.label.toLowerCase()}`}
-                  >
-                    <Link href={dashboardItem.href}>
-                      <dashboardItem.icon className="w-4 h-4" />
-                      <span>{dashboardItem.label}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )}
-              {ticketNavItem && (
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    asChild
-                    isActive={isTicketsSectionActive}
-                    data-testid="nav-link-tickets"
-                  >
-                    <Link href={ticketNavItem.href}>
-                      <ticketNavItem.icon className="w-4 h-4" />
-                      <span>{ticketNavItem.label}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                  <SidebarMenuSub>
-                    {[{
-                      label: "Open Ticket",
-                      href: "/tickets/open",
-                      isActive: isOpenTicketsActive,
-                    }, {
-                      label: "All Ticket",
-                      href: "/tickets",
-                      isActive: isAllTicketsActive,
-                    }, {
-                      label: "Technician Monitor",
-                      href: "/tickets/monitor",
-                      isActive: isMonitorActive,
-                    }].map((sub) => (
-                      <SidebarMenuSubItem key={sub.label}>
-                        <SidebarMenuSubButton
-                          href={sub.href}
-                          isActive={sub.isActive}
-                          className="capitalize"
-                          data-testid={`nav-sub-${sub.label.replace(/\s+/g, '-').toLowerCase()}`}
-                          onClick={(event) => {
-                            if (
-                              event.button !== 0 ||
-                              event.metaKey ||
-                              event.ctrlKey ||
-                              event.altKey ||
-                              event.shiftKey
-                            ) {
-                              return;
-                            }
-                            event.preventDefault();
-                            setLocation(sub.href);
-                          }}
-                        >
-                          <Ticket className="w-3 h-3" />
-                          {sub.label}
-                        </SidebarMenuSubButton>
-                      </SidebarMenuSubItem>
-                    ))}
-                  </SidebarMenuSub>
-                </SidebarMenuItem>
-              )}
-              {otherNavItems.map((item) => {
-                const isActive = location === item.href || location.startsWith(item.href + "/");
+              {navigationItems.map((item) => {
+                const subItems = item.subItems ?? [];
+                const hasSubItems = subItems.length > 0;
+                const isActive = hasSubItems
+                  ? subItems.some((sub) => sub.isActive) || (item.label === "Tickets" && isTicketsSectionActive)
+                  : location === item.href || location.startsWith(item.href + "/");
                 return (
-                  <SidebarMenuItem key={item.href}>
+                  <SidebarMenuItem key={`${item.href}-${item.label}`}>
                     <SidebarMenuButton
                       asChild
                       isActive={isActive}
@@ -232,6 +182,36 @@ export function AppSidebar() {
                         <span>{item.label}</span>
                       </Link>
                     </SidebarMenuButton>
+                    {hasSubItems && (
+                      <SidebarMenuSub>
+                        {subItems.map((sub) => (
+                          <SidebarMenuSubItem key={sub.href}>
+                            <SidebarMenuSubButton
+                              href={sub.href}
+                              isActive={sub.isActive}
+                              className="capitalize gap-2"
+                              data-testid={sub.testId}
+                              onClick={(event) => {
+                                if (
+                                  event.button !== 0 ||
+                                  event.metaKey ||
+                                  event.ctrlKey ||
+                                  event.altKey ||
+                                  event.shiftKey
+                                ) {
+                                  return;
+                                }
+                                event.preventDefault();
+                                setLocation(sub.href);
+                              }}
+                            >
+                              <sub.icon className="w-4 h-4" />
+                              {sub.label}
+                            </SidebarMenuSubButton>
+                          </SidebarMenuSubItem>
+                        ))}
+                      </SidebarMenuSub>
+                    )}
                   </SidebarMenuItem>
                 );
               })}

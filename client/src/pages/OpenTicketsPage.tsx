@@ -118,6 +118,7 @@ export default function OpenTicketsPage() {
         search: searchTerm || undefined,
         status: statusFilter !== "all" ? statusFilter : undefined,
         type: typeFilter !== "all" ? typeFilter : undefined,
+        excludeStatuses: "closed,rejected",
       }).filter(([_, v]) => v !== undefined)
     )
   );

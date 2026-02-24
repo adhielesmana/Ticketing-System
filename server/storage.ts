@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { 
+import {
   users, tickets, ticketAssignments, performanceLogs, settings, technicianFees, mapTiles,
   type User, type InsertUser, 
   type Ticket, type InsertTicket,
@@ -9,10 +9,11 @@ import {
   type TechnicianFee, type InsertTechnicianFee,
   type TechnicianPerformance,
   TicketStatus,
+  TicketStatusValues,
   UserRole,
   TicketType,
 } from "@shared/schema";
-import { eq, or, and, sql, desc, asc } from "drizzle-orm";
+import { eq, or, and, sql, desc, asc, notInArray } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
@@ -172,6 +173,17 @@ export class DatabaseStorage implements IStorage {
     const hasAssignedFilter = typeof assignedTo === "number" && !Number.isNaN(assignedTo);
 
     const conditions = [];
+    const rawExcludeStatuses = filters?.excludeStatuses ?? filters?.exclude_statuses;
+    const parsedExcludeStatuses = typeof rawExcludeStatuses === "string"
+      ? rawExcludeStatuses.split(",").map((value) => value.trim()).filter(Boolean)
+      : [];
+    const uniqueExcludeStatuses = Array.from(new Set(parsedExcludeStatuses));
+    const filteredExcludeStatuses = uniqueExcludeStatuses.filter((status): status is TicketStatus =>
+      TicketStatusValues.includes(status as TicketStatus),
+    );
+    if (filteredExcludeStatuses.length > 0) {
+      conditions.push(notInArray(tickets.status, filteredExcludeStatuses));
+    }
     if (filters.status) conditions.push(eq(tickets.status, filters.status));
     if (filters.type) conditions.push(eq(tickets.type, filters.type));
     if (filters.priority) conditions.push(eq(tickets.priority, filters.priority));

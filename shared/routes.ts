@@ -36,6 +36,7 @@ export const ticketFilterSchema = z.object({
   priority: z.enum(TicketPriorityValues as [string, ...string[]]).optional(),
   assignedTo: z.coerce.number().optional(),
   search: z.string().optional(),
+  excludeStatuses: z.string().optional(),
 });
 
 export const api = {
