@@ -377,10 +377,10 @@ export async function registerRoutes(
   app.get(api.users.list.path, async (req, res) => {
     const role = req.query.role as string | undefined;
     const sessionUserId = (req as any).session.userId;
-    if (role === UserRole.TECHNICIAN && sessionUserId) {
+    if (sessionUserId) {
       const sessionUser = await storage.getUser(sessionUserId);
-      if (sessionUser?.role === UserRole.HELPDESK) {
-        const users = await storage.getAllUsers(role);
+      if (sessionUser?.role === UserRole.HELPDESK && (!role || role === UserRole.TECHNICIAN)) {
+        const users = await storage.getAllUsers(UserRole.TECHNICIAN);
         res.json(users);
         return;
       }
