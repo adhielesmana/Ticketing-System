@@ -166,19 +166,19 @@ export default function ReportsPage() {
   });
 
   return (
-    <div className="container mx-auto px-4 py-6 space-y-6">
+    <div className="page-shell space-y-6">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-md bg-primary flex items-center justify-center">
           <FileText className="w-5 h-5 text-primary-foreground" />
         </div>
         <div>
-          <h1 className="text-xl font-bold font-display" data-testid="text-reports-title">Reports</h1>
+          <h1 className="page-title" data-testid="text-reports-title">Reports</h1>
           <p className="text-sm text-muted-foreground">Generate and view detailed reports</p>
         </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-3 w-full max-w-lg">
+        <TabsList className="grid h-auto w-full grid-cols-3 gap-1 overflow-x-auto p-1">
           <TabsTrigger value="tickets" className="gap-1.5 text-sm" data-testid="tab-tickets-report">
             <FileText className="w-3.5 h-3.5" />
             Tickets
@@ -268,8 +268,8 @@ export default function ReportsPage() {
                 <CardTitle className="text-base">Ticket Report ({totalTickets} tickets)</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm" data-testid="table-tickets-report">
+                <div className="responsive-table-wrap">
+                  <table className="w-full min-w-[940px] text-sm" data-testid="table-tickets-report">
                     <thead>
                       <tr className="border-b border-border bg-muted/30">
                         <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs">Ticket</th>
@@ -419,8 +419,8 @@ export default function ReportsPage() {
                 <CardTitle className="text-base">Per Technician Summary</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm" data-testid="table-tech-bonus-summary">
+                <div className="responsive-table-wrap">
+                  <table className="w-full min-w-[720px] text-sm" data-testid="table-tech-bonus-summary">
                     <thead>
                       <tr className="border-b border-border bg-muted/30">
                         <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs">Technician</th>
@@ -464,8 +464,8 @@ export default function ReportsPage() {
                 <CardTitle className="text-base">Bonus Details (Per Technician)</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm" data-testid="table-bonus-report">
+                <div className="responsive-table-wrap">
+                  <table className="w-full min-w-[860px] text-sm" data-testid="table-bonus-report">
                     <thead>
                       <tr className="border-b border-border bg-muted/30">
                         <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs">Ticket</th>
@@ -567,8 +567,8 @@ export default function ReportsPage() {
                 <CardTitle className="text-base">Technician Performance</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm" data-testid="table-performance-report">
+                <div className="responsive-table-wrap">
+                  <table className="w-full min-w-[860px] text-sm" data-testid="table-performance-report">
                     <thead>
                       <tr className="border-b border-border bg-muted/30">
                         <th className="px-4 py-2.5 text-left font-medium text-muted-foreground text-xs">Technician</th>
@@ -650,8 +650,8 @@ export default function ReportsPage() {
                 </p>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs" data-testid="table-daily-performance">
+                <div className="responsive-table-wrap">
+                  <table className="w-full min-w-[860px] text-xs" data-testid="table-daily-performance">
                     <thead>
                       <tr className="border-b border-border bg-muted/30">
                         <th className="px-3 py-2 text-left font-medium text-muted-foreground">Technician</th>

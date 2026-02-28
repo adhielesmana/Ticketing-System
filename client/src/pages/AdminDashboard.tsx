@@ -41,10 +41,10 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <div className="container mx-auto p-4 lg:p-6 space-y-6">
+    <div className="page-shell space-y-5 sm:space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold font-display" data-testid="text-dashboard-title">Dashboard</h1>
+          <h1 className="page-title" data-testid="text-dashboard-title">Dashboard</h1>
           <p className="text-sm text-muted-foreground">System performance and ticket overview</p>
         </div>
         <CreateTicketDialog />

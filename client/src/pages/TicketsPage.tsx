@@ -260,17 +260,17 @@ export default function TicketsPage() {
   }
 
   return (
-    <div className="container mx-auto p-4 lg:p-6 space-y-5">
+    <div className="page-shell space-y-5">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold font-display" data-testid="text-page-title">Tickets</h1>
+          <h1 className="page-title" data-testid="text-page-title">Tickets</h1>
           <p className="text-sm text-muted-foreground">Manage and track all support tickets</p>
         </div>
         {canCreate && <CreateTicketDialog />}
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
+      <div className="toolbar-grid">
+        <div className="relative sm:col-span-2 lg:col-span-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Search by title, customer, or ticket number..."
@@ -281,7 +281,7 @@ export default function TicketsPage() {
           />
         </div>
         <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
-          <SelectTrigger className="w-[150px] capitalize" data-testid="select-status-filter">
+          <SelectTrigger className="w-full capitalize" data-testid="select-status-filter">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -294,7 +294,7 @@ export default function TicketsPage() {
           </SelectContent>
         </Select>
         <Select value={typeFilter} onValueChange={(v) => { setTypeFilter(v); setCurrentPage(1); }}>
-          <SelectTrigger className="w-[170px] capitalize" data-testid="select-type-filter">
+          <SelectTrigger className="w-full capitalize" data-testid="select-type-filter">
             <SelectValue placeholder="Type" />
           </SelectTrigger>
           <SelectContent>
@@ -307,7 +307,7 @@ export default function TicketsPage() {
           </SelectContent>
         </Select>
         <Select value={slaFilter} onValueChange={(v) => { setSlaFilter(v); setCurrentPage(1); }}>
-          <SelectTrigger className="w-[140px]" data-testid="select-sla-filter">
+          <SelectTrigger className="w-full" data-testid="select-sla-filter">
             <SelectValue placeholder="SLA" />
           </SelectTrigger>
           <SelectContent>
@@ -320,8 +320,8 @@ export default function TicketsPage() {
 
       <Card>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
+          <div className="responsive-table-wrap">
+            <Table className="min-w-[980px]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[90px]">Ticket</TableHead>
@@ -493,11 +493,11 @@ export default function TicketsPage() {
             </Table>
           </div>
           {sortedTickets.length > 0 && (
-            <div className="flex items-center justify-between gap-4 border-t px-4 py-3">
+            <div className="flex flex-col gap-2 border-t px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
               <p className="text-sm text-muted-foreground" data-testid="text-ticket-count">
                 Showing {((currentPage - 1) * pageSize) + 1}–{Math.min(currentPage * pageSize, sortedTickets.length)} of {sortedTickets.length} tickets
               </p>
-              <div className="flex items-center gap-1">
+              <div className="flex flex-wrap items-center gap-1">
                 <Button
                   size="icon"
                   variant="outline"
@@ -550,7 +550,7 @@ export default function TicketsPage() {
             <DialogTitle>Edit Ticket {editTicket?.ticketNumber}</DialogTitle>
           </DialogHeader>
           <form onSubmit={editForm.handleSubmit(handleEditSubmit)} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Type</label>
                 <Select value={editForm.watch("type")} onValueChange={(v) => editForm.setValue("type", v)}>
@@ -582,7 +582,7 @@ export default function TicketsPage() {
               <label className="text-sm font-medium">Description</label>
               <Textarea className="min-h-[80px]" {...editForm.register("description")} />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">Customer Name</label>
                 <Input {...editForm.register("customerName")} />
@@ -592,7 +592,7 @@ export default function TicketsPage() {
                 <Input {...editForm.register("customerPhone")} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <label className="text-sm font-medium">ODP Info</label>
                 <Input {...editForm.register("odpInfo")} placeholder="ODP-XXX-YYY" data-testid="input-edit-odp-info" />

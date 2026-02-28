@@ -214,10 +214,10 @@ export default function UsersPage() {
   }
 
   return (
-    <div className="container mx-auto p-4 lg:p-6 space-y-5">
+    <div className="page-shell space-y-5">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold font-display" data-testid="text-page-title">Staff Management</h1>
+          <h1 className="page-title" data-testid="text-page-title">Staff Management</h1>
           <p className="text-sm text-muted-foreground">Manage technicians, helpdesk, and admin users</p>
         </div>
 
@@ -245,7 +245,7 @@ export default function UsersPage() {
                     </FormItem>
                   )}
                 />
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <FormField
                     control={createForm.control}
                     name="username"
@@ -358,8 +358,8 @@ export default function UsersPage() {
 
       <Card>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
+          <div className="responsive-table-wrap">
+            <Table className="min-w-[900px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
@@ -609,7 +609,7 @@ export default function UsersPage() {
                       <div className={`w-2.5 h-2.5 rounded-full ${cfg.color}`} />
                       <span className="text-sm font-medium">{cfg.label}</span>
                     </div>
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <div className="space-y-1">
                         <label className="text-xs text-muted-foreground">Ticket Fee</label>
                         <div className="relative">

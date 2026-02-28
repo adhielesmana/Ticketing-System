@@ -43,11 +43,13 @@ import {
   SidebarHeader,
   SidebarFooter,
   SidebarSeparator,
+  useSidebar,
 } from "@/components/ui/sidebar";
 
 export function AppSidebar() {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
+  const { isMobile, setOpenMobile } = useSidebar();
   const { data: logoSetting } = useSetting("logo_url");
   const { mutate: updateSetting, isPending: isUploading } = useUpdateSetting();
   const [logoDialogOpen, setLogoDialogOpen] = useState(false);
@@ -108,6 +110,11 @@ export function AppSidebar() {
   ].filter(item => item.show);
 
   const logoUrl = logoSetting?.value;
+  const closeMobileSidebar = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
 
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -189,7 +196,7 @@ export function AppSidebar() {
                       isActive={isActive}
                       data-testid={`nav-link-${item.label.toLowerCase()}`}
                     >
-                      <Link href={item.href}>
+                      <Link href={item.href} onClick={closeMobileSidebar}>
                         <item.icon className="w-4 h-4" />
                         <span>{item.label}</span>
                       </Link>
@@ -215,6 +222,7 @@ export function AppSidebar() {
                                 }
                                 event.preventDefault();
                                 setLocation(sub.href);
+                                closeMobileSidebar();
                               }}
                             >
                               <sub.icon className="w-4 h-4" />
@@ -310,7 +318,10 @@ export function AppSidebar() {
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => logout()}
+            onClick={() => {
+              closeMobileSidebar();
+              logout();
+            }}
             data-testid="button-logout"
           >
             <LogOut className="w-4 h-4" />

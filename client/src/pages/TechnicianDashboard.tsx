@@ -307,7 +307,7 @@ export default function TechnicianDashboard() {
   };
 
   return (
-    <div className="container mx-auto max-w-lg pb-20">
+    <div className="container mx-auto max-w-lg px-3 pb-20 sm:px-4">
       {showScanOverlay && (
         <TicketScanOverlay
           onFound={handleScanComplete}

@@ -53,9 +53,9 @@ export default function TechnicianTicketsMonitor() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-6">
+    <div className="page-shell">
       <div className="mb-5">
-        <h1 className="text-2xl font-bold font-display">Technician Assignment Monitor</h1>
+        <h1 className="page-title">Technician Assignment Monitor</h1>
         <p className="text-sm text-muted-foreground">Select a technician to see their active assigned tickets (oldest on top).</p>
       </div>
 
@@ -95,8 +95,8 @@ export default function TechnicianTicketsMonitor() {
         </CardHeader>
 
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
+          <div className="responsive-table-wrap">
+            <Table className="min-w-[980px]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[90px]">Ticket</TableHead>
