@@ -3,11 +3,11 @@ set -euo pipefail
 
 #====================================================================
 # NetGuard ISP - Update Script (Single Container)
-# Version: 7
+# Version: 9
 # Rebuilds image, restarts container, and refreshes nginx/ssl config
 #====================================================================
 
-UPDATE_VERSION="7"
+UPDATE_VERSION="9"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -21,6 +21,39 @@ log_info()  { echo -e "${BLUE}[INFO]${NC} $1"; }
 log_ok()    { echo -e "${GREEN}[OK]${NC} $1"; }
 log_warn()  { echo -e "${YELLOW}[WARN]${NC} $1"; }
 log_err()   { echo -e "${RED}[ERROR]${NC} $1"; }
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+self_update_before_run() {
+  # Pull latest script before any deployment action and re-exec once if updated.
+  if [ "${UPDATE_BOOTSTRAP_DONE:-0}" = "1" ]; then
+    return
+  fi
+
+  if ! command -v git >/dev/null 2>&1; then
+    export UPDATE_BOOTSTRAP_DONE=1
+    return
+  fi
+
+  if ! git -C "$PROJECT_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    export UPDATE_BOOTSTRAP_DONE=1
+    return
+  fi
+
+  local previous_head latest_head
+  previous_head="$(git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/null || true)"
+  git -C "$PROJECT_DIR" fetch origin main --prune
+  git -C "$PROJECT_DIR" merge --ff-only origin/main
+  latest_head="$(git -C "$PROJECT_DIR" rev-parse HEAD 2>/dev/null || true)"
+
+  export UPDATE_BOOTSTRAP_DONE=1
+  if [ -n "$previous_head" ] && [ "$previous_head" != "$latest_head" ]; then
+    exec "$SCRIPT_DIR/update.sh" "$@"
+  fi
+}
+
+self_update_before_run "$@"
 
 TOTAL_STEPS=5
 CHECKLIST_RESULTS=()
@@ -90,9 +123,6 @@ find_free_port() {
   done
   echo "$port"
 }
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 CLI_DOMAIN=""
 while [ $# -gt 0 ]; do
