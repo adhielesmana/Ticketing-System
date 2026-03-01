@@ -3,11 +3,11 @@ set -euo pipefail
 
 #====================================================================
 # NetGuard ISP Ticketing System - Debian/Ubuntu Deployment Script
-# Version: 9
+# Version: 10
 # Single container (App + PostgreSQL) with host Nginx reverse proxy
 #====================================================================
 
-DEPLOY_VERSION="9"
+DEPLOY_VERSION="10"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -284,7 +284,7 @@ step_done 4 "Copy source files"
 # STEP 5: build docker image
 step_start 5 "Build Docker image"
 cd "$INSTALL_DIR"
-DOCKER_BUILDKIT=1 docker build -t "$APP_NAME" . 2>&1 | tail -20
+DOCKER_BUILDKIT=1 docker build --progress=plain -t "$APP_NAME" .
 step_done 5 "Build Docker image"
 
 # STEP 6: start container

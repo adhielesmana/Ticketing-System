@@ -3,11 +3,11 @@ set -euo pipefail
 
 #====================================================================
 # NetGuard ISP - Update Script (Single Container)
-# Version: 11
+# Version: 12
 # Rebuilds image, restarts container, and refreshes nginx/ssl config
 #====================================================================
 
-UPDATE_VERSION="11"
+UPDATE_VERSION="12"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -214,7 +214,7 @@ step_done 1 "Copy updated source files"
 # STEP 2: build image
 step_start 2 "Build Docker image"
 cd "$INSTALL_DIR"
-DOCKER_BUILDKIT=1 docker build -t "$APP_NAME" . 2>&1 | tail -20
+DOCKER_BUILDKIT=1 docker build --progress=plain -t "$APP_NAME" .
 step_done 2 "Build Docker image"
 
 # STEP 3: restart container (with conflict-safe port)
