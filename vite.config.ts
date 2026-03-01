@@ -3,10 +3,12 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
+const isProduction = process.env.NODE_ENV === "production";
+
 export default defineConfig({
   plugins: [
     react(),
-    runtimeErrorOverlay(),
+    ...(isProduction ? [] : [runtimeErrorOverlay()]),
     ...(process.env.NODE_ENV !== "production" &&
     process.env.REPL_ID !== undefined
       ? [
@@ -30,6 +32,21 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return;
+          if (id.includes("leaflet") || id.includes("leaflet.heat")) {
+            return "vendor-maps";
+          }
+          if (id.includes("recharts")) {
+            return "vendor-charts";
+          }
+          return "vendor";
+        },
+      },
+    },
   },
   server: {
     fs: {

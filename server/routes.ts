@@ -185,6 +185,7 @@ const s3Client = new S3Client({
 });
 
 const TILE_SERVER_URL = process.env.TILE_SERVER_URL || "https://tile.openstreetmap.org";
+const MAP_TILE_CACHE_CONTROL = "public, max-age=604800, stale-while-revalidate=86400";
 const TILE_PREFETCH_BOUNDS = (process.env.TILE_PREFETCH_BOUNDS || "-6.5,106.4,-5.9,107.1").split(",").map((value) => parseFloat(value.trim()));
 const TILE_PREFETCH_ZOOM_RANGE = process.env.TILE_PREFETCH_ZOOM_RANGE || "12-15";
 const TILE_PREFETCH_LIMIT = Math.max(64, Math.min(parseInt(process.env.TILE_PREFETCH_LIMIT || "512", 10), 2048));
@@ -323,7 +324,10 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
-  app.use('/uploads', (await import('express')).default.static(uploadsDir));
+  app.use('/uploads', (await import('express')).default.static(uploadsDir, {
+    immutable: true,
+    maxAge: "30d",
+  }));
 
   // === AUTH ===
   app.post(api.auth.login.path, async (req, res) => {
@@ -720,7 +724,7 @@ export async function registerRoutes(
     try {
       const cached = await storage.getCachedTile(z, x, y);
       if (cached) {
-        res.setHeader("Cache-Control", "public, max-age=604800");
+        res.setHeader("Cache-Control", MAP_TILE_CACHE_CONTROL);
         return res.type(cached.contentType).send(cached.tileData);
       }
 
@@ -740,7 +744,7 @@ export async function registerRoutes(
       const buffer = Buffer.from(await tileRes.arrayBuffer());
       const contentType = tileRes.headers.get("content-type") || "image/png";
       await storage.saveCachedTile({ z, x, y, tileData: buffer, contentType });
-      res.setHeader("Cache-Control", "public, max-age=604800");
+      res.setHeader("Cache-Control", MAP_TILE_CACHE_CONTROL);
       res.type(contentType).send(buffer);
     } catch (err) {
       console.error("Map tile error:", err);

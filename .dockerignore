@@ -1,0 +1,13 @@
+.git
+.gitignore
+.codex
+node_modules
+dist
+uploads
+*.log
+npm-debug.log*
+CODEX_TESTING.md
+CODE_REVIEW_REPORT.md
+NetGuard-Documentation.md
+docs
+attached_assets

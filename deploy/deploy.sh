@@ -3,11 +3,11 @@ set -euo pipefail
 
 #====================================================================
 # NetGuard ISP Ticketing System - Debian/Ubuntu Deployment Script
-# Version: 8
+# Version: 9
 # Single container (App + PostgreSQL) with host Nginx reverse proxy
 #====================================================================
 
-DEPLOY_VERSION="8"
+DEPLOY_VERSION="9"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -89,6 +89,28 @@ find_free_port() {
     port=$((port + 1))
   done
   echo "$port"
+}
+
+sync_project_files() {
+  local source_dir="$1"
+  local target_dir="$2"
+
+  mkdir -p "$target_dir"
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a --delete \
+      --exclude ".git" \
+      --exclude ".credentials" \
+      --exclude ".deploy-info" \
+      --exclude ".codex" \
+      --exclude "node_modules" \
+      --exclude "dist" \
+      --exclude "uploads" \
+      --exclude "attached_assets" \
+      "$source_dir/" "$target_dir/"
+  else
+    cp -a "$source_dir/." "$target_dir/" 2>/dev/null || true
+    rm -rf "$target_dir/node_modules" "$target_dir/.git" "$target_dir/.codex" "$target_dir/dist" "$target_dir/attached_assets"
+  fi
 }
 
 is_placeholder_domain() {
@@ -254,8 +276,7 @@ step_done 3 "Port scanning & auto-assignment"
 # STEP 4: copy source
 step_start 4 "Copy source files"
 mkdir -p "$INSTALL_DIR"
-cp -a "$PROJECT_DIR/." "$INSTALL_DIR/" 2>/dev/null || true
-rm -rf "$INSTALL_DIR/node_modules" "$INSTALL_DIR/.git"
+sync_project_files "$PROJECT_DIR" "$INSTALL_DIR"
 cp "$SCRIPT_DIR/Dockerfile" "$INSTALL_DIR/Dockerfile"
 cp "$SCRIPT_DIR/entrypoint.sh" "$INSTALL_DIR/deploy/entrypoint.sh"
 step_done 4 "Copy source files"
@@ -263,7 +284,7 @@ step_done 4 "Copy source files"
 # STEP 5: build docker image
 step_start 5 "Build Docker image"
 cd "$INSTALL_DIR"
-docker build -t "$APP_NAME" . 2>&1 | tail -20
+DOCKER_BUILDKIT=1 docker build -t "$APP_NAME" . 2>&1 | tail -20
 step_done 5 "Build Docker image"
 
 # STEP 6: start container
@@ -351,6 +372,11 @@ server {
     ssl_certificate_key /etc/nginx/ssl/${APP_NAME}_self.key;
 
     client_max_body_size 50M;
+    gzip on;
+    gzip_comp_level 5;
+    gzip_min_length 1024;
+    gzip_vary on;
+    gzip_types text/plain text/css application/json application/javascript application/xml text/xml image/svg+xml;
 
     location / {
         proxy_pass http://127.0.0.1:${APP_PORT};

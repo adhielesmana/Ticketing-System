@@ -1,6 +1,7 @@
 import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import MemoryStore from "memorystore";
+import compression from "compression";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 
@@ -38,6 +39,7 @@ app.use(
 
 app.use(express.urlencoded({ extended: false, limit: '50mb' }));
 app.use(express.raw({ type: 'application/octet-stream', limit: '50mb', verify: (req, _res, buf) => { (req as any).rawBody = buf; } }));
+app.use(compression({ threshold: 1024 }));
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -51,21 +53,27 @@ export function log(message: string, source = "express") {
 }
 
 app.use((req, res, next) => {
+  const shouldLogApiRequests =
+    process.env.NODE_ENV !== "production" || process.env.ENABLE_API_LOGS === "true";
+  const includeApiResponseBody =
+    process.env.NODE_ENV !== "production" && process.env.ENABLE_API_BODY_LOGS !== "false";
   const start = Date.now();
   const path = req.path;
   let capturedJsonResponse: Record<string, any> | undefined = undefined;
 
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
+    if (includeApiResponseBody) {
+      capturedJsonResponse = bodyJson;
+    }
     return originalResJson.apply(res, [bodyJson, ...args]);
   };
 
   res.on("finish", () => {
     const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
+    if (path.startsWith("/api") && shouldLogApiRequests) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
+      if (capturedJsonResponse && includeApiResponseBody) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
 

@@ -10,7 +10,7 @@ ENV PGDATA=/var/lib/postgresql/data
 WORKDIR /app
 
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --no-audit --no-fund --prefer-offline
 
 COPY . .
 RUN npm run build

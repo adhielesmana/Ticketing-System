@@ -3,11 +3,11 @@ set -euo pipefail
 
 #====================================================================
 # NetGuard ISP - Update Script (Single Container)
-# Version: 9
+# Version: 10
 # Rebuilds image, restarts container, and refreshes nginx/ssl config
 #====================================================================
 
-UPDATE_VERSION="9"
+UPDATE_VERSION="10"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -124,6 +124,28 @@ find_free_port() {
   echo "$port"
 }
 
+sync_project_files() {
+  local source_dir="$1"
+  local target_dir="$2"
+
+  mkdir -p "$target_dir"
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -a --delete \
+      --exclude ".git" \
+      --exclude ".credentials" \
+      --exclude ".deploy-info" \
+      --exclude ".codex" \
+      --exclude "node_modules" \
+      --exclude "dist" \
+      --exclude "uploads" \
+      --exclude "attached_assets" \
+      "$source_dir/" "$target_dir/"
+  else
+    cp -a "$source_dir/." "$target_dir/" 2>/dev/null || true
+    rm -rf "$target_dir/node_modules" "$target_dir/.git" "$target_dir/.codex" "$target_dir/dist" "$target_dir/attached_assets"
+  fi
+}
+
 CLI_DOMAIN=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -178,8 +200,7 @@ echo ""
 
 # STEP 1: copy source
 step_start 1 "Copy updated source files"
-cp -a "$PROJECT_DIR/." "$INSTALL_DIR/" 2>/dev/null || true
-rm -rf "$INSTALL_DIR/node_modules" "$INSTALL_DIR/.git"
+sync_project_files "$PROJECT_DIR" "$INSTALL_DIR"
 cp "$SCRIPT_DIR/Dockerfile" "$INSTALL_DIR/Dockerfile"
 cp "$SCRIPT_DIR/entrypoint.sh" "$INSTALL_DIR/deploy/entrypoint.sh"
 step_done 1 "Copy updated source files"
@@ -187,7 +208,7 @@ step_done 1 "Copy updated source files"
 # STEP 2: build image
 step_start 2 "Build Docker image"
 cd "$INSTALL_DIR"
-docker build -t "$APP_NAME" . 2>&1 | tail -20
+DOCKER_BUILDKIT=1 docker build -t "$APP_NAME" . 2>&1 | tail -20
 step_done 2 "Build Docker image"
 
 # STEP 3: restart container (with conflict-safe port)

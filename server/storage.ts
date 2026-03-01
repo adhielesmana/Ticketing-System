@@ -13,6 +13,7 @@ import {
   UserRole,
 } from "@shared/schema";
 import { eq, or, and, sql, desc, asc, notInArray } from "drizzle-orm";
+import { gzipSync, gunzipSync } from "zlib";
 
 export interface IStorage {
   getUser(id: number): Promise<User | undefined>;
@@ -908,13 +909,13 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(mapTiles.z, z), eq(mapTiles.x, x), eq(mapTiles.y, y)));
     if (!tile) return undefined;
     return {
-      tileData: Buffer.from(tile.tileData, "base64"),
+      tileData: decodeCachedTileData(tile.tileData),
       contentType: tile.contentType,
     };
   }
 
   async saveCachedTile(tile: { z: number; x: number; y: number; tileData: Buffer; contentType: string }): Promise<void> {
-    const encoded = tile.tileData.toString("base64");
+    const encoded = encodeCachedTileData(tile.tileData);
     await db.insert(mapTiles)
       .values({
         z: tile.z,
@@ -983,6 +984,28 @@ function parseGoogleMapsCoords(url: string | null | undefined): { lat: number; l
     return null;
   } catch {
     return null;
+  }
+}
+
+const COMPRESSED_TILE_PREFIX = "gz:";
+
+function encodeCachedTileData(tileData: Buffer): string {
+  const compressed = gzipSync(tileData, { level: 6 });
+  if (compressed.length >= tileData.length) {
+    return tileData.toString("base64");
+  }
+  return `${COMPRESSED_TILE_PREFIX}${compressed.toString("base64")}`;
+}
+
+function decodeCachedTileData(encoded: string): Buffer {
+  if (!encoded.startsWith(COMPRESSED_TILE_PREFIX)) {
+    return Buffer.from(encoded, "base64");
+  }
+  const payload = encoded.slice(COMPRESSED_TILE_PREFIX.length);
+  try {
+    return gunzipSync(Buffer.from(payload, "base64"));
+  } catch {
+    return Buffer.from(payload, "base64");
   }
 }
 

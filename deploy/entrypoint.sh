@@ -50,6 +50,7 @@ listen_addresses = 'localhost'
 port = 5432
 timezone = 'Asia/Jakarta'
 log_timezone = 'Asia/Jakarta'
+wal_compression = on
 max_connections = 50
 shared_buffers = 128MB
 EOF
@@ -70,11 +71,20 @@ ensure_postgres_timezone() {
     if [ ! -f "$file" ]; then
         return
     fi
-    for key in timezone log_timezone; do
+    for key in timezone log_timezone wal_compression; do
+        local value
+        case "$key" in
+            timezone|log_timezone)
+                value="'Asia/Jakarta'"
+                ;;
+            *)
+                value="on"
+                ;;
+        esac
         if grep -q "^${key}" "$file"; then
-            sed -i "s|^${key}.*|${key} = 'Asia/Jakarta'|" "$file"
+            sed -i "s|^${key}.*|${key} = ${value}|" "$file"
         else
-            echo "${key} = 'Asia/Jakarta'" >> "$file"
+            echo "${key} = ${value}" >> "$file"
         fi
     done
 }
@@ -104,6 +114,7 @@ enforce_postgres_timezone() {
     su-exec postgres psql -d template1 -v ON_ERROR_STOP=1 <<'SQL'
 ALTER SYSTEM SET timezone = 'Asia/Jakarta';
 ALTER SYSTEM SET log_timezone = 'Asia/Jakarta';
+ALTER SYSTEM SET wal_compression = 'on';
 SQL
     su-exec postgres pg_ctl -D "$PGDATA" reload -w
 }
