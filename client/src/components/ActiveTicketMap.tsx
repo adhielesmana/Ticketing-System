@@ -176,15 +176,28 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
   }, [tickets]);
 
   useEffect(() => {
+    if (isLoading) return;
     if (!mapRef.current || mapInstance.current) return;
 
     const defaultCenter: [number, number] = [-6.2, 106.8];
+    const isSmallScreen = window.matchMedia("(max-width: 767px)").matches;
+    const container = mapRef.current as HTMLDivElement & { _leaflet_id?: number };
+    if (container._leaflet_id) {
+      container._leaflet_id = undefined;
+      container.innerHTML = "";
+    }
 
-    const map = L.map(mapRef.current, {
+    const map = L.map(container, {
       center: defaultCenter,
       zoom: 12,
       zoomControl: true,
       attributionControl: true,
+      dragging: !isSmallScreen,
+      touchZoom: !isSmallScreen,
+      scrollWheelZoom: !isSmallScreen,
+      doubleClickZoom: !isSmallScreen,
+      boxZoom: !isSmallScreen,
+      keyboard: !isSmallScreen,
     });
 
     const cachedLayer = L.tileLayer("/api/map-tiles/{z}/{x}/{y}", {
@@ -201,9 +214,17 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
     markerLayerRef.current = L.layerGroup().addTo(map);
     technicianLayerRef.current = L.layerGroup().addTo(map);
     mapInstance.current = map;
-    map.invalidateSize();
+    const notifyResize = () => map.invalidateSize({ pan: false });
+    const resizeObserver = new ResizeObserver(notifyResize);
+    resizeObserver.observe(container);
+    window.addEventListener("resize", notifyResize);
+    window.addEventListener("orientationchange", notifyResize);
+    requestAnimationFrame(notifyResize);
 
     return () => {
+      window.removeEventListener("resize", notifyResize);
+      window.removeEventListener("orientationchange", notifyResize);
+      resizeObserver.disconnect();
       map.remove();
       mapInstance.current = null;
       markerLayerRef.current = null;
@@ -211,7 +232,7 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
       tileLayerRef.current = null;
       seededRef.current = false;
     };
-  }, []);
+  }, [isLoading]);
 
   useEffect(() => {
     if (!tileLayerRef.current || seededRef.current || allTicketPoints.length === 0) return;
@@ -347,6 +368,7 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
 
     const bounds = L.latLngBounds(allTicketPoints.map((p) => [p.lat, p.lng]));
     map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+    map.invalidateSize({ pan: false });
   }, [allTicketPoints, activeTicketPoints, inactiveTicketPoints, technicianLocations]);
 
   if (isLoading) {
@@ -387,17 +409,18 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
         </div>
       </CardHeader>
       <CardContent>
-        {allTicketPoints.length === 0 ? (
-          <div className="h-[400px] flex items-center justify-center text-muted-foreground text-sm rounded-md border border-dashed">
-            No tickets with location data
-          </div>
-        ) : (
+        <div className="relative h-[400px]">
           <div
             ref={mapRef}
-            className="h-[400px] w-full rounded-md overflow-hidden border border-border"
+            className="h-full w-full rounded-md overflow-hidden border border-border"
             data-testid="map-active-tickets"
           />
-        )}
+          {allTicketPoints.length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center rounded-md border border-dashed bg-background/85 text-sm text-muted-foreground">
+              No tickets with location data
+            </div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

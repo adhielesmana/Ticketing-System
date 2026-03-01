@@ -11,7 +11,6 @@ import {
   TicketStatus,
   TicketStatusValues,
   UserRole,
-  TicketType,
 } from "@shared/schema";
 import { eq, or, and, sql, desc, asc, notInArray } from "drizzle-orm";
 
@@ -674,14 +673,7 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(tickets, eq(tickets.id, ticketAssignments.ticketId))
       .where(and(
         eq(ticketAssignments.active, true),
-        or(
-          eq(tickets.status, TicketStatus.ASSIGNED),
-          eq(tickets.status, TicketStatus.WAITING_ASSIGNMENT)
-        ),
-        or(
-          eq(tickets.type, TicketType.HOME_MAINTENANCE),
-          eq(tickets.type, TicketType.INSTALLATION)
-        ),
+        eq(tickets.status, TicketStatus.ASSIGNED),
         sql`${ticketAssignments.assignedAt} < ${cutoff}`
       ));
 

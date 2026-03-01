@@ -185,7 +185,7 @@ export function TicketCard({ ticket, compact = false }: TicketCardProps) {
             </div>
           </div>
 
-          <div className="flex justify-between items-center pt-1 border-t border-border">
+          <div className="pt-2 border-t border-border">
             {ticket.assignee ? (
               <div className="flex items-center gap-2">
                 <Avatar className="h-6 w-6">
@@ -204,34 +204,38 @@ export function TicketCard({ ticket, compact = false }: TicketCardProps) {
               <span className="text-xs text-muted-foreground italic">Unassigned</span>
             )}
 
-            <div className="flex gap-1.5 flex-wrap">
-              <Link href={`/tickets/${ticket.id}`}>
-                <Button variant="outline" size="sm" data-testid={`button-details-${ticket.id}`}>
-                  <ExternalLink className="w-3 h-3 mr-1" />
-                  Details
-                </Button>
-              </Link>
-              {ticket.status === 'assigned' && (
-                <Button
-                  size="sm"
-                  onClick={() => startTicket(ticket.id)}
-                  disabled={isStarting}
-                  data-testid={`button-start-${ticket.id}`}
-                >
-                  Start
-                </Button>
-              )}
-              {isAssignedToMe && ['assigned', 'in_progress'].includes(ticket.status) && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowNoResponseDialog(true)}
-                  data-testid={`button-no-response-${ticket.id}`}
-                >
-                  <PhoneOff className="w-3 h-3 mr-1" />
-                  No Response
-                </Button>
-              )}
+            <div className="mt-3 border-t border-border/70 pt-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+                <Link href={`/tickets/${ticket.id}`} className="w-full sm:w-auto">
+                  <Button variant="outline" size="sm" className="w-full" data-testid={`button-details-${ticket.id}`}>
+                    <ExternalLink className="w-3 h-3 mr-1" />
+                    Details
+                  </Button>
+                </Link>
+                {ticket.status === 'assigned' && (
+                  <Button
+                    size="sm"
+                    className="w-full sm:w-auto"
+                    onClick={() => startTicket(ticket.id)}
+                    disabled={isStarting}
+                    data-testid={`button-start-${ticket.id}`}
+                  >
+                    Start
+                  </Button>
+                )}
+                {isAssignedToMe && ['assigned', 'in_progress'].includes(ticket.status) && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full sm:w-auto"
+                    onClick={() => setShowNoResponseDialog(true)}
+                    data-testid={`button-no-response-${ticket.id}`}
+                  >
+                    <PhoneOff className="w-3 h-3 mr-1" />
+                    No Response
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         </CardContent>

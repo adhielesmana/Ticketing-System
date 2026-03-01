@@ -130,41 +130,61 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
-  httpServer.listen(
-    {
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    },
-    () => {
-      log(`serving on port ${port}`);
-      if (hasDatabase) {
-        import("./routes").then(({ fixOrphanedAssignments, backfillTicketAreas, fixLegacyOverdueStatus }) => {
-          fixOrphanedAssignments().catch(err => console.error("Fix orphaned assignments error:", err));
-          backfillTicketAreas().catch(err => console.error("Backfill error:", err));
-          fixLegacyOverdueStatus().catch(err => console.error("Fix overdue status error:", err));
-        });
+  const onServerStarted = () => {
+    log(`serving on port ${port}`);
+    if (hasDatabase) {
+      import("./routes").then(({ fixOrphanedAssignments, backfillTicketAreas, fixLegacyOverdueStatus }) => {
+        fixOrphanedAssignments().catch(err => console.error("Fix orphaned assignments error:", err));
+        backfillTicketAreas().catch(err => console.error("Backfill error:", err));
+        fixLegacyOverdueStatus().catch(err => console.error("Fix overdue status error:", err));
+      });
 
-        const scheduleMidnightReset = () => {
-          const now = new Date();
-          const midnight = new Date(now);
-          midnight.setHours(24, 0, 0, 0);
-          const msUntilMidnight = midnight.getTime() - now.getTime();
-          setTimeout(async () => {
-            try {
-              const { storage } = await import("./storage");
-              const count = await storage.bulkResetStaleAssignments(24);
-              log(`Midnight reset: ${count} stale assignment(s) cleared`);
-            } catch (err) {
-              console.error("Midnight reset error:", err);
-            }
-            scheduleMidnightReset();
-          }, msUntilMidnight);
-          log(`Midnight reset scheduled in ${Math.round(msUntilMidnight / 60000)} minutes`);
+      const staleAssignmentMaxAgeHours = Math.max(
+        1,
+        parseInt(process.env.STALE_ASSIGNMENT_MAX_AGE_HOURS || "24", 10) || 24,
+      );
+      const staleAssignmentCheckIntervalMinutes = Math.max(
+        1,
+        parseInt(process.env.STALE_ASSIGNMENT_CHECK_INTERVAL_MINUTES || "15", 10) || 15,
+      );
+      let staleResetRunning = false;
+      const runStaleAssignmentReset = async (source: string) => {
+        if (staleResetRunning) return;
+        staleResetRunning = true;
+        try {
+          const { storage } = await import("./storage");
+          const count = await storage.bulkResetStaleAssignments(staleAssignmentMaxAgeHours);
+          log(`${source}: ${count} stale assignment(s) cleared`);
+        } catch (err) {
+          console.error(`${source} error:`, err);
+        } finally {
+          staleResetRunning = false;
         }
+      };
 
-        scheduleMidnightReset();
-      }
-    },
-  );
+      void runStaleAssignmentReset("Stale assignment reset (startup)");
+      setInterval(() => {
+        void runStaleAssignmentReset("Stale assignment reset (scheduled)");
+      }, staleAssignmentCheckIntervalMinutes * 60 * 1000);
+      log(
+        `Stale assignment scheduler every ${staleAssignmentCheckIntervalMinutes} minutes (max age ${staleAssignmentMaxAgeHours}h)`,
+      );
+    }
+  };
+
+  const shouldUseReusePort = process.env.ENABLE_REUSE_PORT === "true";
+  const listenOptions: {
+    port: number;
+    host: string;
+    reusePort?: boolean;
+  } = {
+    port,
+    host: "0.0.0.0",
+  };
+
+  if (shouldUseReusePort) {
+    listenOptions.reusePort = true;
+  }
+
+  httpServer.listen(listenOptions, onServerStarted);
 })();

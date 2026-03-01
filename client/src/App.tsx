@@ -43,13 +43,13 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <SidebarProvider style={style as React.CSSProperties}>
-      <div className="flex min-h-svh w-full">
+      <div className="flex h-svh w-full overflow-hidden">
         <AppSidebar />
-        <div className="flex flex-col flex-1 min-w-0">
+        <div className="flex min-h-0 flex-1 min-w-0 flex-col">
           <header className="sticky top-0 z-50 flex items-center gap-2 border-b border-border bg-background/95 px-2 py-2 backdrop-blur supports-[padding:max(0px)]:pl-[max(0.5rem,env(safe-area-inset-left))] supports-[padding:max(0px)]:pr-[max(0.5rem,env(safe-area-inset-right))]" data-testid="navigation-header">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
           </header>
-          <main className="flex-1 overflow-auto overscroll-contain">
+          <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
             {children}
           </main>
         </div>

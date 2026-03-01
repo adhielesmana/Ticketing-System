@@ -573,6 +573,9 @@ export async function registerRoutes(
     try {
       const sessionUserId = (req as any).session.userId;
       const sessionUser = sessionUserId ? await storage.getUser(sessionUserId) : null;
+      if (!sessionUser || ![UserRole.SUPERADMIN, UserRole.ADMIN, UserRole.HELPDESK].includes(sessionUser.role as any)) {
+        return res.status(403).json({ message: "Only superadmin, admin, or helpdesk can manually assign tickets" });
+      }
       const ticket = await storage.getTicket(ticketId);
       if (!ticket) {
         return res.status(404).json({ message: "Ticket not found" });
@@ -1732,7 +1735,8 @@ export async function registerRoutes(
       if (!user || (user.role !== UserRole.SUPERADMIN && user.role !== UserRole.ADMIN)) {
         return res.status(403).json({ message: "Admin access required" });
       }
-      const maxAgeHours = req.body.maxAgeHours || 24;
+      const parsedMaxAge = Number(req.body?.maxAgeHours);
+      const maxAgeHours = Number.isFinite(parsedMaxAge) && parsedMaxAge > 0 ? parsedMaxAge : 24;
       const count = await storage.bulkResetStaleAssignments(maxAgeHours);
       res.json({ reset: count, message: `${count} ticket(s) unassigned` });
     } catch (err) {

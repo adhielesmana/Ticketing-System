@@ -24,7 +24,7 @@ export function useTickets(filters?: TicketFilters, options?: UseTicketsOptions)
         ? `${api.tickets.list.path}?${new URLSearchParams(filters as any)}`
         : api.tickets.list.path;
       
-      const res = await fetch(url, { credentials: "include" });
+      const res = await fetch(url, { credentials: "include", cache: "no-store" });
       if (!res.ok) throw new Error("Failed to fetch tickets");
       return res.json();
     },
@@ -488,7 +488,7 @@ export function useDashboardStats() {
   return useQuery({
     queryKey: [api.dashboard.stats.path],
     queryFn: async () => {
-      const res = await fetch(api.dashboard.stats.path, { credentials: "include" });
+      const res = await fetch(api.dashboard.stats.path, { credentials: "include", cache: "no-store" });
       if (!res.ok) throw new Error("Failed to fetch stats");
       return res.json();
     },
