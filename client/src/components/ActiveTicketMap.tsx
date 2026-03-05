@@ -231,7 +231,7 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
 
   useEffect(() => {
     if (!tileLayerRef.current || seededRef.current || allTicketPoints.length === 0) return;
-    const bounds = L.latLngBounds(allTicketPoints.map((p) => [p.lat, p.lng]));
+    const bounds = L.latLngBounds(activeTicketPoints.map((p) => [p.lat, p.lng]));
     const paddedBounds = bounds.pad(0.1);
     seededRef.current = true;
     void seedServerTiles(paddedBounds, 12, 17);
@@ -248,7 +248,7 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
     markerLayerRef.current?.clearLayers();
     technicianLayerRef.current?.clearLayers();
 
-    if (allTicketPoints.length === 0) return;
+    if (activeTicketPoints.length === 0) return;
 
     const activeHeatData: Array<[number, number, number]> = activeTicketPoints.map((pt) => {
       const intensity = priorityIntensity[pt.priority] || 0.5;
@@ -297,19 +297,16 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
         </a>`;
     };
 
-    allTicketPoints.forEach((pt) => {
+    activeTicketPoints.forEach((pt) => {
       const colors = typeColorMap[pt.type] || typeColorMap.installation;
       const assigned = ASSIGNED_STATUSES.has(pt.status);
       const overdue = pt.slaDeadline ? new Date(pt.slaDeadline).getTime() < now : false;
-      const baseColor = pt.isActive ? (overdue ? OVERDUE_COLOR : PENDING_COLOR) : "#94a3b8";
-
-      const icon = pt.isActive
-        ? assigned
-          ? createPersonIcon(colors.stroke)
-          : pt.type === TicketType.INSTALLATION
-            ? createCircleIcon(baseColor, overdue)
-            : createTriangleIcon(baseColor, overdue)
-        : createCircleIcon(baseColor, false, MARKER_BASE_SIZE - 6);
+      const baseColor = overdue ? OVERDUE_COLOR : PENDING_COLOR;
+      const icon = assigned
+        ? createPersonIcon(colors.stroke)
+        : pt.type === TicketType.INSTALLATION
+          ? createCircleIcon(baseColor, overdue)
+          : createTriangleIcon(baseColor, overdue);
 
       const marker = L.marker([pt.lat, pt.lng], { icon }).addTo(markerLayerRef.current!);
 
@@ -345,7 +342,7 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
     const bounds = L.latLngBounds(allTicketPoints.map((p) => [p.lat, p.lng]));
     map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
     map.invalidateSize({ pan: false });
-  }, [allTicketPoints, activeTicketPoints, technicianLocations]);
+  }, [activeTicketPoints, technicianLocations]);
 
   if (isLoading) {
     return (
@@ -378,7 +375,7 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
               <Legend icon={<PersonLegendIcon color={LEGEND_PERSON_COLOR} />} label="Technicians" />
             </div>
             <span className="text-xs text-muted-foreground" data-testid="text-ticket-count">
-              {allTicketPoints.length} tickets · {activeTicketPoints.length} active · {technicianLocations.length} technicians
+              {activeTicketPoints.length} tickets · {technicianLocations.length} technicians
             </span>
           </div>
         </div>
@@ -390,9 +387,9 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
             className="h-full w-full rounded-md overflow-hidden border border-border"
             data-testid="map-active-tickets"
           />
-          {allTicketPoints.length === 0 && (
+          {activeTicketPoints.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center rounded-md border border-dashed bg-background/85 text-sm text-muted-foreground">
-              No tickets with location data
+              No active tickets with location data
             </div>
           )}
         </div>
