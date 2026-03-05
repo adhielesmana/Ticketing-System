@@ -19,7 +19,6 @@ import {
 import {
   ArrowLeft,
   MapPin,
-  Phone,
   Mail,
   User,
   AlertOctagon,
@@ -41,6 +40,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { ChangeEvent, useEffect, useMemo, useState, useRef } from "react";
+import { FaWhatsapp } from "react-icons/fa";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
@@ -71,6 +71,15 @@ function toCapName(name: string): string {
 function toTitleCase(str: string): string {
   if (!str) return "";
   return str.replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function toWhatsAppNumber(phone: string): string | null {
+  const digits = phone.replace(/\D/g, "");
+  if (!digits) return null;
+  if (digits.startsWith("00")) return digits.slice(2);
+  if (digits.startsWith("0")) return `62${digits.slice(1)}`;
+  if (digits.startsWith("8")) return `62${digits}`;
+  return digits;
 }
 
 const attentionStatuses = new Set(["pending_rejection", "open"]);
@@ -1477,8 +1486,23 @@ export default function TicketDetail() {
                 <span className="text-sm font-medium">{toCapName(ticket.customerName)}</span>
               </div>
               <div className="flex items-center gap-2.5">
-                <Phone className="w-4 h-4 text-muted-foreground shrink-0" />
-                <a href={`tel:${ticket.customerPhone}`} className="text-sm">{ticket.customerPhone}</a>
+                <FaWhatsapp className="w-4 h-4 text-muted-foreground shrink-0" />
+                {(() => {
+                  const whatsappNumber = toWhatsAppNumber(ticket.customerPhone);
+                  if (!whatsappNumber) {
+                    return <span className="text-sm">{ticket.customerPhone}</span>;
+                  }
+                  return (
+                    <a
+                      href={`https://wa.me/${whatsappNumber}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm"
+                    >
+                      {ticket.customerPhone}
+                    </a>
+                  );
+                })()}
               </div>
               {ticket.customerEmail && (
                 <div className="flex items-center gap-2.5">

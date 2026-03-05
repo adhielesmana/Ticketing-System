@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -112,12 +113,16 @@ export default function TicketsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [slaFilter, setSlaFilter] = useState<string>("all");
+  const [dateFromFilter, setDateFromFilter] = useState("");
+  const [dateToFilter, setDateToFilter] = useState("");
   const { data: tickets, isLoading } = useTickets(
     Object.fromEntries(
       Object.entries({
         search: searchTerm || undefined,
         status: statusFilter !== "all" ? statusFilter : undefined,
         type: typeFilter !== "all" ? typeFilter : undefined,
+        dateFrom: dateFromFilter || undefined,
+        dateTo: dateToFilter || undefined,
       }).filter(([_, v]) => v !== undefined)
     )
   );
@@ -316,6 +321,26 @@ export default function TicketsPage() {
             <SelectItem value="overdue">Overdue</SelectItem>
           </SelectContent>
         </Select>
+        <div className="space-y-1">
+          <Label className="text-xs">From</Label>
+          <Input
+            type="date"
+            value={dateFromFilter}
+            onChange={(e) => { setDateFromFilter(e.target.value); setCurrentPage(1); }}
+            className="w-full"
+            data-testid="input-date-from"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">To</Label>
+          <Input
+            type="date"
+            value={dateToFilter}
+            onChange={(e) => { setDateToFilter(e.target.value); setCurrentPage(1); }}
+            className="w-full"
+            data-testid="input-date-to"
+          />
+        </div>
       </div>
 
       <Card>

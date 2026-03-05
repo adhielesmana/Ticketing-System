@@ -12,7 +12,7 @@ import {
   TicketStatusValues,
   UserRole,
 } from "@shared/schema";
-import { eq, or, and, sql, desc, asc, notInArray } from "drizzle-orm";
+import { eq, or, and, sql, desc, asc, notInArray, gte, lte } from "drizzle-orm";
 import { gzipSync, gunzipSync } from "zlib";
 
 export interface IStorage {
@@ -193,6 +193,21 @@ export class DatabaseStorage implements IStorage {
         sql`${tickets.ticketNumber} ILIKE ${`%${filters.search}%`}`,
         sql`${tickets.customerName} ILIKE ${`%${filters.search}%`}`
       ));
+    }
+
+    const rawDateFrom = filters?.dateFrom ?? filters?.date_from;
+    const rawDateTo = filters?.dateTo ?? filters?.date_to;
+    const parsedDateFrom = rawDateFrom ? new Date(rawDateFrom) : null;
+    const parsedDateTo = rawDateTo ? new Date(rawDateTo) : null;
+    if (parsedDateFrom && !Number.isNaN(parsedDateFrom.getTime())) {
+      const startOfDay = new Date(parsedDateFrom);
+      startOfDay.setHours(0, 0, 0, 0);
+      conditions.push(gte(tickets.createdAt, startOfDay));
+    }
+    if (parsedDateTo && !Number.isNaN(parsedDateTo.getTime())) {
+      const endOfDay = new Date(parsedDateTo);
+      endOfDay.setHours(23, 59, 59, 999);
+      conditions.push(lte(tickets.createdAt, endOfDay));
     }
 
     let query: any = db.select().from(tickets);

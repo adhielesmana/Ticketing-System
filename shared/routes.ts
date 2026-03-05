@@ -37,6 +37,8 @@ export const ticketFilterSchema = z.object({
   assignedTo: z.coerce.number().optional(),
   search: z.string().optional(),
   excludeStatuses: z.string().optional(),
+  dateFrom: z.string().optional(),
+  dateTo: z.string().optional(),
 });
 
 export const api = {
