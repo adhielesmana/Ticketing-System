@@ -61,9 +61,9 @@ export default function TechnicianTicketsMonitor() {
 
       <Card>
         <CardHeader className="flex flex-col gap-3">
-          <div className="grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div className="flex flex-col gap-1">
-              <span className="text-xs uppercase tracking-wide text-muted-foreground">Technician</span>
+              <span className="text-xs uppercase tracking-wide text-muted-foreground">Select Technician</span>
               <Select value={selectedTechId} onValueChange={setSelectedTechId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Choose technician" />
@@ -77,18 +77,14 @@ export default function TechnicianTicketsMonitor() {
                         {tech.name}
                       </SelectItem>
                     ))
-                  ) : (
-                    <div className="px-3 py-2 text-sm text-muted-foreground">No technicians found</div>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-xs uppercase tracking-wide text-muted-foreground">Active technician</span>
-              <p className="text-sm font-medium">{technicianName || "None"}</p>
-            </div>
-            <div className="flex flex-col gap-1">
-              <span className="text-xs uppercase tracking-wide text-muted-foreground">Tickets tracked</span>
+              ) : (
+                <div className="px-3 py-2 text-sm text-muted-foreground">No technicians found</div>
+              )}
+            </SelectContent>
+          </Select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <span className="text-xs uppercase tracking-wide text-muted-foreground">Tickets tracked</span>
               <p className="text-sm font-medium">{technicianId ? activeTickets.length : 0}</p>
             </div>
           </div>
