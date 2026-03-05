@@ -40,7 +40,12 @@ const formSchema = z.object({
   customerName: z.string().min(1, "Customer name is required"),
   customerPhone: z.string().min(1, "Phone is required"),
   customerEmail: z.string().optional(),
-  customerLocationUrl: z.string().optional(),
+  customerLocationUrl: z
+    .string()
+    .refine(
+      (value) => !value || /^https?:\/\//i.test(value),
+      { message: "Location must start with http:// or https://" },
+    ),
   odpInfo: z.string().optional(),
   odpLocation: z.string().optional(),
   ticketIdCustom: z.string().optional(),

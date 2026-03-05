@@ -477,7 +477,7 @@ export async function registerRoutes(
 
   app.post(api.tickets.create.path, async (req, res) => {
     try {
-      const input = req.body;
+      const input = api.tickets.create.input.parse(req.body);
       
       if (input.customerName) input.customerName = toTitleCase(input.customerName);
 

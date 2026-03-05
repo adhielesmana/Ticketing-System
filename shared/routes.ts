@@ -41,6 +41,14 @@ export const ticketFilterSchema = z.object({
   dateTo: z.string().optional(),
 });
 
+const locationUrlPattern = /^https?:\/\//i;
+const mapUrlSchema = z
+  .string()
+  .refine(
+    (value) => value === "" || locationUrlPattern.test(value),
+    { message: "Location URL must start with http:// or https://" },
+  );
+
 export const api = {
   auth: {
     login: {
@@ -137,7 +145,9 @@ export const api = {
     create: {
       method: 'POST' as const,
       path: '/api/tickets' as const,
-      input: insertTicketSchema,
+      input: insertTicketSchema.extend({
+        customerLocationUrl: mapUrlSchema,
+      }),
       responses: {
         201: z.custom<typeof tickets.$inferSelect>(),
         400: errorSchemas.validation,
