@@ -339,8 +339,26 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
       marker.on("mouseout", () => marker.closePopup());
     });
 
-    const bounds = L.latLngBounds(allTicketPoints.map((p) => [p.lat, p.lng]));
+    const bounds = L.latLngBounds(activeTicketPoints.map((p) => [p.lat, p.lng]));
     map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
+    const weightedFocus = activeTicketPoints.reduce(
+      (acc, pt) => {
+        const intensity = priorityIntensity[pt.priority] || 0.5;
+        acc.lat += pt.lat * intensity;
+        acc.lng += pt.lng * intensity;
+        acc.weight += intensity;
+        return acc;
+      },
+      { lat: 0, lng: 0, weight: 0 },
+    );
+    if (weightedFocus.weight > 0) {
+      const focusCenter: [number, number] = [
+        weightedFocus.lat / weightedFocus.weight,
+        weightedFocus.lng / weightedFocus.weight,
+      ];
+      const currentZoom = map.getZoom();
+      map.setView(focusCenter, Math.min(currentZoom, 13), { animate: true });
+    }
     map.invalidateSize({ pan: false });
   }, [activeTicketPoints, technicianLocations]);
 
