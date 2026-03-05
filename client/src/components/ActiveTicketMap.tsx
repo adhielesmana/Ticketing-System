@@ -99,19 +99,17 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const seededRef = useRef<boolean>(false);
 
-  const { allTicketPoints, activeTicketPoints, inactiveTicketPoints, technicianLocations } = useMemo(() => {
+  const { allTicketPoints, activeTicketPoints, technicianLocations } = useMemo(() => {
     if (!tickets || tickets.length === 0) {
       return {
         allTicketPoints: [] as TicketPoint[],
         activeTicketPoints: [] as TicketPoint[],
-        inactiveTicketPoints: [] as TicketPoint[],
         technicianLocations: [] as TicketPoint[],
       };
     }
 
     const all: TicketPoint[] = [];
     const active: TicketPoint[] = [];
-    const inactive: TicketPoint[] = [];
     const technicianMap = new Map<number, { point: TicketPoint; timestamp: number }>();
 
     tickets.forEach((t: any) => {
@@ -153,8 +151,6 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
       all.push(point);
       if (point.isActive) {
         active.push(point);
-      } else {
-        inactive.push(point);
       }
 
       point.assignees?.forEach((assignee) => {
@@ -170,7 +166,6 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
     return {
       allTicketPoints: all,
       activeTicketPoints: active,
-      inactiveTicketPoints: inactive,
       technicianLocations: Array.from(technicianMap.values()).map((entry) => entry.point),
     };
   }, [tickets]);
@@ -259,25 +254,6 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
       const intensity = priorityIntensity[pt.priority] || 0.5;
       return [pt.lat, pt.lng, intensity];
     });
-    const inactiveHeatData: Array<[number, number, number]> = inactiveTicketPoints.map((pt) => [pt.lat, pt.lng, 0.25]);
-
-    if (inactiveHeatData.length > 0) {
-      const greyHeat = L.heatLayer(inactiveHeatData, {
-        radius: 20,
-        blur: 15,
-        maxZoom: 14,
-        minOpacity: 0.1,
-        max: 0.5,
-        gradient: {
-          0.0: "rgba(244,246,248,0)",
-          0.5: "rgba(148,163,184,0.6)",
-          1.0: "rgba(148,163,184,1)",
-        },
-      });
-      greyHeat.addTo(map);
-      heatLayerRef.current.push(greyHeat);
-    }
-
     if (activeHeatData.length > 0) {
       const heat = L.heatLayer(activeHeatData, {
         radius: 30,
@@ -369,7 +345,7 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
     const bounds = L.latLngBounds(allTicketPoints.map((p) => [p.lat, p.lng]));
     map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 });
     map.invalidateSize({ pan: false });
-  }, [allTicketPoints, activeTicketPoints, inactiveTicketPoints, technicianLocations]);
+  }, [allTicketPoints, activeTicketPoints, technicianLocations]);
 
   if (isLoading) {
     return (
@@ -399,11 +375,10 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
             <div className="flex items-center gap-3 flex-wrap">
               <Legend icon={<TriangleLegendIcon color={LEGEND_SHAPE_COLOR} />} label="Home & Backbone Maintenance" />
               <Legend icon={<CircleLegendIcon color={LEGEND_SHAPE_COLOR} />} label="Home Installation" />
-              <Legend icon={<span className="inline-flex items-center justify-center w-2.5 h-2.5 rounded-full" style={{ backgroundColor: "#94a3b8" }} />} label="Inactive / Closed" />
               <Legend icon={<PersonLegendIcon color={LEGEND_PERSON_COLOR} />} label="Technicians" />
             </div>
             <span className="text-xs text-muted-foreground" data-testid="text-ticket-count">
-              {allTicketPoints.length} tickets · {activeTicketPoints.length} active · {inactiveTicketPoints.length} inactive · {technicianLocations.length} technicians
+              {allTicketPoints.length} tickets · {activeTicketPoints.length} active · {technicianLocations.length} technicians
             </span>
           </div>
         </div>
