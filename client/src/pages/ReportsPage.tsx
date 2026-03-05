@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { KeyboardEvent, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useTicketsReport, useBonusSummary, usePerformanceSummary, useTechnicianPeriodPerformance } from "@/hooks/use-tickets";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Redirect } from "wouter";
+import { Redirect, useLocation } from "wouter";
 import { UserRole, TicketStatus, TicketType } from "@shared/schema";
 import {
   FileText,
@@ -34,6 +34,7 @@ import {
 import { format } from "date-fns";
 
 const TICKETS_PER_PAGE = 20;
+const TECH_SUMMARY_PAGE_SIZE = 6;
 
 const ticketStatusPriority: Record<string, number> = {
   [TicketStatus.ASSIGNED]: 0,
@@ -90,6 +91,7 @@ function getLocalDateString(date = new Date()): string {
 export default function ReportsPage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("tickets");
+  const [, setLocation] = useLocation();
 
   const today = getLocalDateString();
 
@@ -109,6 +111,7 @@ export default function ReportsPage() {
     dateFrom: today,
     dateTo: today,
   });
+  const [summaryPage, setSummaryPage] = useState(1);
 
   useEffect(() => {
     const browserToday = getLocalDateString();
@@ -169,6 +172,38 @@ export default function ReportsPage() {
       return timestampA - timestampB;
     });
   }, [tickets, ticketFilters.sortBy]);
+
+  const techSummaryList = useMemo(() => {
+    return Object.entries(techBonusSummary).map(([id, tech]) => ({
+      id,
+      name: tech.name,
+      ticketCount: tech.ticketCount,
+      ticketFee: tech.ticketFee,
+      transportFee: tech.transportFee,
+      totalBonus: tech.totalBonus,
+    })).sort((a, b) => a.name.localeCompare(b.name));
+  }, [techBonusSummary]);
+
+  const summaryPageCount = Math.max(1, Math.ceil(techSummaryList.length / TECH_SUMMARY_PAGE_SIZE));
+  useEffect(() => {
+    if (summaryPage > summaryPageCount) {
+      setSummaryPage(summaryPageCount);
+    }
+  }, [summaryPage, summaryPageCount]);
+  const pagedTechSummary = techSummaryList.slice(
+    (summaryPage - 1) * TECH_SUMMARY_PAGE_SIZE,
+    summaryPage * TECH_SUMMARY_PAGE_SIZE,
+  );
+
+  const handleTicketRowClick = (id: number) => {
+    setLocation(`/tickets/${id}`);
+  };
+  const handleTicketRowKeyDown = (event: KeyboardEvent<HTMLTableRowElement>, id: number) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      handleTicketRowClick(id);
+    }
+  };
 
   useEffect(() => {
     if (ticketPage > ticketTotalPages) {
@@ -334,7 +369,15 @@ export default function ReportsPage() {
                     </thead>
                     <tbody>
                       {orderedTickets.map((ticket: any) => (
-                        <tr key={ticket.id} className="border-b border-border last:border-0" data-testid={`row-ticket-${ticket.id}`}>
+                        <tr
+                          key={ticket.id}
+                          className="border-b border-border last:border-0 cursor-pointer hover:bg-muted/50 transition-colors"
+                          data-testid={`row-ticket-${ticket.id}`}
+                          onClick={() => handleTicketRowClick(ticket.id)}
+                          onKeyDown={(event) => handleTicketRowKeyDown(event, ticket.id)}
+                          tabIndex={0}
+                          role="button"
+                        >
                           <td className="px-4 py-2.5">
                             <p className="font-mono text-xs">{ticket.ticketIdCustom || ticket.ticketNumber}</p>
                             <p className="text-xs text-muted-foreground truncate max-w-[150px]">{ticket.title}</p>
@@ -480,8 +523,8 @@ export default function ReportsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {Object.entries(techBonusSummary).map(([id, tech]) => (
-                        <tr key={id} className="border-b border-border last:border-0" data-testid={`row-tech-summary-${id}`}>
+                      {pagedTechSummary.map((tech) => (
+                        <tr key={tech.id} className="border-b border-border last:border-0" data-testid={`row-tech-summary-${tech.id}`}>
                           <td className="px-4 py-2.5">
                             <div className="flex items-center gap-2">
                               <Users className="w-4 h-4 text-muted-foreground" />
@@ -498,6 +541,31 @@ export default function ReportsPage() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/30 text-xs text-muted-foreground">
+                  <span>
+                    Showing page {summaryPage} of {summaryPageCount}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="px-3"
+                      disabled={summaryPage <= 1}
+                      onClick={() => setSummaryPage((prev) => Math.max(1, prev - 1))}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="px-3"
+                      disabled={summaryPage >= summaryPageCount}
+                      onClick={() => setSummaryPage((prev) => Math.min(summaryPageCount, prev + 1))}
+                    >
+                      Next
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -529,7 +597,15 @@ export default function ReportsPage() {
                     </thead>
                     <tbody>
                       {bonusData?.map((row: any, idx: number) => (
-                        <tr key={`${row.ticketId}-${row.technicianId}-${idx}`} className="border-b border-border last:border-0" data-testid={`row-bonus-${row.ticketId}-${row.technicianId}`}>
+                        <tr
+                          key={`${row.ticketId}-${row.technicianId}-${idx}`}
+                          className="border-b border-border last:border-0 cursor-pointer hover:bg-muted/50 transition-colors"
+                          data-testid={`row-bonus-${row.ticketId}-${row.technicianId}`}
+                          onClick={() => handleTicketRowClick(row.ticketId)}
+                          onKeyDown={(event) => handleTicketRowKeyDown(event, row.ticketId)}
+                          tabIndex={0}
+                          role="button"
+                        >
                           <td className="px-4 py-2.5">
                             <p className="font-mono text-xs">{row.ticketIdCustom || row.ticketNumber}</p>
                             <p className="text-xs text-muted-foreground truncate max-w-[150px]">{row.title}</p>
