@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useTicketsReport, useBonusSummary, usePerformanceSummary, useTechnicianPeriodPerformance } from "@/hooks/use-tickets";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,6 +34,17 @@ import {
 import { format } from "date-fns";
 
 const TICKETS_PER_PAGE = 20;
+
+const ticketStatusPriority: Record<string, number> = {
+  [TicketStatus.ASSIGNED]: 0,
+  [TicketStatus.IN_PROGRESS]: 0,
+  [TicketStatus.OPEN]: 1,
+  [TicketStatus.WAITING_ASSIGNMENT]: 2,
+  [TicketStatus.PENDING_REJECTION]: 2,
+  [TicketStatus.REJECTED]: 3,
+  [TicketStatus.CLOSED]: 3,
+};
+const assignedStatusSet = new Set([TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS]);
 
 const statusColors: Record<string, string> = {
   open: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
@@ -87,6 +98,7 @@ export default function ReportsPage() {
     dateTo: "",
     type: "",
     status: "",
+    sortBy: "created",
   });
   const [ticketPage, setTicketPage] = useState(1);
   const [bonusFilters, setBonusFilters] = useState({
@@ -116,7 +128,7 @@ export default function ReportsPage() {
   };
 
   const cleanTicketFilters = Object.fromEntries(
-    Object.entries(ticketFilters).filter(([_, v]) => v !== "")
+    Object.entries(ticketFilters).filter(([key, v]) => v !== "" && key !== "sortBy")
   ) as any;
   const cleanBonusFilters = Object.fromEntries(
     Object.entries(bonusFilters).filter(([_, v]) => v !== "")
@@ -135,6 +147,28 @@ export default function ReportsPage() {
   const ticketTotalPages = Math.max(1, Math.ceil(totalTickets / TICKETS_PER_PAGE));
   const ticketRangeStart = totalTickets === 0 ? 0 : (ticketPage - 1) * TICKETS_PER_PAGE + 1;
   const ticketRangeEnd = Math.min(totalTickets, ticketPage * TICKETS_PER_PAGE);
+
+  const orderedTickets = useMemo(() => {
+    const sortBy = ticketFilters.sortBy;
+    const getTimestamp = (ticket: any) => {
+      const baseField = sortBy === "closed" ? (ticket.closedAt || ticket.createdAt) : ticket.createdAt;
+      const baseTime = new Date(baseField).getTime();
+      if (assignedStatusSet.has(ticket.status)) {
+        const assignedTime = ticket.assignedAt ? new Date(ticket.assignedAt).getTime() : baseTime;
+        return Number.isFinite(assignedTime) ? assignedTime : baseTime;
+      }
+      return Number.isFinite(baseTime) ? baseTime : Date.now();
+    };
+
+    return [...tickets].sort((a, b) => {
+      const priorityA = ticketStatusPriority[a.status] ?? 2;
+      const priorityB = ticketStatusPriority[b.status] ?? 2;
+      if (priorityA !== priorityB) return priorityA - priorityB;
+      const timestampA = getTimestamp(a);
+      const timestampB = getTimestamp(b);
+      return timestampA - timestampB;
+    });
+  }, [tickets, ticketFilters.sortBy]);
 
   useEffect(() => {
     if (ticketPage > ticketTotalPages) {
@@ -200,7 +234,7 @@ export default function ReportsPage() {
                 <Filter className="w-4 h-4" />
                 Filters
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">From Date</Label>
                   <Input
@@ -254,6 +288,21 @@ export default function ReportsPage() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Sort By</Label>
+                  <Select
+                    value={ticketFilters.sortBy}
+                    onValueChange={(v) => updateTicketFilters({ sortBy: v })}
+                  >
+                    <SelectTrigger className="capitalize" data-testid="select-ticket-sort">
+                      <SelectValue placeholder="Created Date" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="created">Created Date</SelectItem>
+                      <SelectItem value="closed">Closed Date</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -284,7 +333,7 @@ export default function ReportsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {tickets.map((ticket: any) => (
+                      {orderedTickets.map((ticket: any) => (
                         <tr key={ticket.id} className="border-b border-border last:border-0" data-testid={`row-ticket-${ticket.id}`}>
                           <td className="px-4 py-2.5">
                             <p className="font-mono text-xs">{ticket.ticketIdCustom || ticket.ticketNumber}</p>
