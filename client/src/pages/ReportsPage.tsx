@@ -173,6 +173,26 @@ export default function ReportsPage() {
     });
   }, [tickets, ticketFilters.sortBy]);
 
+  const techBonusSummary = useMemo(() => {
+    const summary: Record<number, { name: string; ticketFee: number; transportFee: number; totalBonus: number; ticketCount: number }> = {};
+    bonusData?.forEach((row: any) => {
+      if (!summary[row.technicianId]) {
+        summary[row.technicianId] = {
+          name: row.technicianName,
+          ticketFee: 0,
+          transportFee: 0,
+          totalBonus: 0,
+          ticketCount: 0,
+        };
+      }
+      summary[row.technicianId].ticketFee += parseFloat(row.ticketFee || "0");
+      summary[row.technicianId].transportFee += parseFloat(row.transportFee || "0");
+      summary[row.technicianId].totalBonus += parseFloat(row.bonus || "0");
+      summary[row.technicianId].ticketCount += 1;
+    });
+    return summary;
+  }, [bonusData]);
+
   const techSummaryList = useMemo(() => {
     return Object.entries(techBonusSummary).map(([id, tech]) => ({
       id,
@@ -222,17 +242,6 @@ export default function ReportsPage() {
   const overdueRows = bonusData?.filter((r: any) => r.performStatus === "not_perform") || [];
   const uniqueOverdueTickets = new Set(overdueRows.map((r: any) => r.ticketId));
   const overdueTickets = uniqueOverdueTickets.size;
-
-  const techBonusSummary: Record<number, { name: string; ticketFee: number; transportFee: number; totalBonus: number; ticketCount: number }> = {};
-  bonusData?.forEach((row: any) => {
-    if (!techBonusSummary[row.technicianId]) {
-      techBonusSummary[row.technicianId] = { name: row.technicianName, ticketFee: 0, transportFee: 0, totalBonus: 0, ticketCount: 0 };
-    }
-    techBonusSummary[row.technicianId].ticketFee += parseFloat(row.ticketFee || "0");
-    techBonusSummary[row.technicianId].transportFee += parseFloat(row.transportFee || "0");
-    techBonusSummary[row.technicianId].totalBonus += parseFloat(row.bonus || "0");
-    techBonusSummary[row.technicianId].ticketCount += 1;
-  });
 
   return (
     <div className="page-shell space-y-6">

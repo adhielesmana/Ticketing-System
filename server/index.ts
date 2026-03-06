@@ -170,6 +170,37 @@ app.use((req, res, next) => {
         }
       };
 
+      let midnightResetRunning = false;
+      const runMidnightAssignmentReset = async (source: string) => {
+        if (midnightResetRunning) return;
+        midnightResetRunning = true;
+        try {
+          const { storage } = await import("./storage");
+          const count = await storage.bulkResetOvernightAssignments();
+          log(`${source}: ${count} overnight maintenance ticket(s) cleared`);
+        } catch (err) {
+          console.error(`${source} error:`, err);
+        } finally {
+          midnightResetRunning = false;
+        }
+      };
+
+      const scheduleMidnightReset = () => {
+        const now = new Date();
+        const nextMidnight = new Date(now);
+        nextMidnight.setDate(now.getDate() + 1);
+        nextMidnight.setHours(0, 0, 0, 0, 0);
+        const delay = Math.max(0, nextMidnight.getTime() - now.getTime());
+        const oneDayMs = 24 * 60 * 60 * 1000;
+        setTimeout(() => {
+          void runMidnightAssignmentReset("Midnight assignment reset");
+          setInterval(() => {
+            void runMidnightAssignmentReset("Midnight assignment reset");
+          }, oneDayMs);
+        }, delay);
+        log(`Midnight assignment reset scheduled for ${nextMidnight.toLocaleString()} (local time)`);
+      };
+
       void runStaleAssignmentReset("Stale assignment reset (startup)");
       setInterval(() => {
         void runStaleAssignmentReset("Stale assignment reset (scheduled)");
@@ -177,6 +208,7 @@ app.use((req, res, next) => {
       log(
         `Stale assignment scheduler every ${staleAssignmentCheckIntervalMinutes} minutes (max age ${staleAssignmentMaxAgeHours}h)`,
       );
+      scheduleMidnightReset();
     }
   };
 

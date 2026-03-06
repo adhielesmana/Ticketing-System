@@ -1,7 +1,7 @@
 import { db } from "./db";
 import {
   users, tickets, ticketAssignments, performanceLogs, settings, technicianFees, mapTiles,
-  type User, type InsertUser, 
+  type User, type InsertUser,
   type Ticket, type InsertTicket,
   type TicketAssignment, type InsertAssignment,
   type PerformanceLog, type InsertPerformanceLog,
@@ -10,6 +10,7 @@ import {
   type TechnicianPerformance,
   TicketStatus,
   TicketStatusValues,
+  TicketType,
   UserRole,
 } from "@shared/schema";
 import { eq, or, and, sql, desc, asc, notInArray, gte, lte } from "drizzle-orm";
@@ -62,6 +63,7 @@ export interface IStorage {
   setSetting(key: string, value: string | null): Promise<Setting>;
   getAllSettings(): Promise<Setting[]>;
   bulkResetStaleAssignments(maxAgeHours?: number): Promise<number>;
+  bulkResetOvernightAssignments(): Promise<number>;
 
   getTicketsReport(
     filters?: { dateFrom?: string; dateTo?: string; type?: string; status?: string },
@@ -700,6 +702,32 @@ export class DatabaseStorage implements IStorage {
       await db.update(ticketAssignments)
         .set({ active: false })
         .where(and(eq(ticketAssignments.ticketId, ticketId), eq(ticketAssignments.active, true)));
+      await db.update(tickets)
+        .set({ status: TicketStatus.OPEN })
+        .where(eq(tickets.id, ticketId));
+      count++;
+    }
+    return count;
+  }
+
+  async bulkResetOvernightAssignments(): Promise<number> {
+    const targetStatuses = [TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS];
+    const targetTypes = [TicketType.HOME_MAINTENANCE, TicketType.INSTALLATION];
+
+    const rows = await db.select({
+      ticketId: ticketAssignments.ticketId,
+    }).from(ticketAssignments)
+      .innerJoin(tickets, eq(tickets.id, ticketAssignments.ticketId))
+      .where(and(
+        eq(ticketAssignments.active, true),
+        or(...targetStatuses.map((status) => eq(tickets.status, status))),
+        or(...targetTypes.map((type) => eq(tickets.type, type))),
+      ));
+
+    const ticketIds = Array.from(new Set(rows.map((row) => row.ticketId)));
+    let count = 0;
+    for (const ticketId of ticketIds) {
+      await this.removeAllAssignments(ticketId);
       await db.update(tickets)
         .set({ status: TicketStatus.OPEN })
         .where(eq(tickets.id, ticketId));
