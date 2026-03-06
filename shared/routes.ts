@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { 
+import {
   insertUserSchema, 
   insertTicketSchema, 
   insertAssignmentSchema,
@@ -44,10 +44,27 @@ export const ticketFilterSchema = z.object({
 const locationUrlPattern = /^https?:\/\//i;
 const mapUrlSchema = z
   .string()
+  .optional()
+  .transform((value) => (value ? value.trim() : ""))
   .refine(
     (value) => value === "" || locationUrlPattern.test(value),
     { message: "Location URL must start with http:// or https://" },
   );
+
+const createTicketInputSchema = z.object({
+  type: z.enum(TicketTypeValues as [string, ...string[]]),
+  priority: z.enum(TicketPriorityValues as [string, ...string[]]),
+  customerName: z.string().min(1),
+  customerPhone: z.string().min(1),
+  customerEmail: z.string().optional(),
+  customerLocationUrl: mapUrlSchema,
+  odpInfo: z.string().optional(),
+  odpLocation: z.string().optional(),
+  ticketIdCustom: z.string().optional(),
+  title: z.string().min(1),
+  description: z.string().min(1),
+  descriptionImages: z.array(z.string()).optional(),
+});
 
 export const api = {
   auth: {
@@ -145,9 +162,7 @@ export const api = {
     create: {
       method: 'POST' as const,
       path: '/api/tickets' as const,
-      input: insertTicketSchema.extend({
-        customerLocationUrl: mapUrlSchema,
-      }),
+      input: createTicketInputSchema,
       responses: {
         201: z.custom<typeof tickets.$inferSelect>(),
         400: errorSchemas.validation,

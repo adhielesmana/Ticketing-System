@@ -42,6 +42,7 @@ const formSchema = z.object({
   customerEmail: z.string().optional(),
   customerLocationUrl: z
     .string()
+    .optional()
     .refine(
       (value) => !value || /^https?:\/\//i.test(value),
       { message: "Location must start with http:// or https://" },
