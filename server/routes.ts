@@ -768,7 +768,6 @@ export async function registerRoutes(
     res.setHeader("Cache-Control", "public, max-age=60");
     res.type(FALLBACK_TILE_CONTENT_TYPE).send(FALLBACK_TILE_DATA);
   }
-    });
 
   void prefetchMapTiles();
 
