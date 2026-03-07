@@ -192,6 +192,11 @@ const MAP_TILE_CACHE_CONTROL = "public, max-age=604800, stale-while-revalidate=8
 const TILE_PREFETCH_BOUNDS = (process.env.TILE_PREFETCH_BOUNDS || "-6.5,106.4,-5.9,107.1").split(",").map((value) => parseFloat(value.trim()));
 const TILE_PREFETCH_ZOOM_RANGE = process.env.TILE_PREFETCH_ZOOM_RANGE || "12-15";
 const TILE_PREFETCH_LIMIT = Math.max(64, Math.min(parseInt(process.env.TILE_PREFETCH_LIMIT || "512", 10), 2048));
+const FALLBACK_TILE_DATA = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAHElEQVR42mP8z/C/HwMDAwMJAQcnJwMAAD4AAe1Ac6YAAAAASUVORK5CYII=",
+  "base64"
+);
+const FALLBACK_TILE_CONTENT_TYPE = "image/png";
 
 const execAsync = promisify(exec);
 
@@ -744,8 +749,8 @@ export async function registerRoutes(
       });
 
       if (!tileRes.ok) {
-        const body = await tileRes.text().catch(() => "");
-        return res.status(tileRes.status).send(body);
+        console.warn("OpenStreetMap returned", tileRes.status, "for", tileUrl);
+        return sendFallbackTile(res);
       }
 
       const buffer = Buffer.from(await tileRes.arrayBuffer());
@@ -755,8 +760,14 @@ export async function registerRoutes(
       res.type(contentType).send(buffer);
     } catch (err) {
       console.error("Map tile error:", err);
-      res.status(500).json({ message: "Failed to load map tile" });
-      }
+      sendFallbackTile(res);
+    }
+  });
+
+  function sendFallbackTile(res: Response) {
+    res.setHeader("Cache-Control", "public, max-age=60");
+    res.type(FALLBACK_TILE_CONTENT_TYPE).send(FALLBACK_TILE_DATA);
+  }
     });
 
   void prefetchMapTiles();
