@@ -551,31 +551,6 @@ export default function ReportsPage() {
                     </tbody>
                   </table>
                 </div>
-                <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/30 text-xs text-muted-foreground">
-                  <span>
-                    Showing page {summaryPage} of {summaryPageCount}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="px-3"
-                      disabled={summaryPage <= 1}
-                      onClick={() => setSummaryPage((prev) => Math.max(1, prev - 1))}
-                    >
-                      Previous
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="px-3"
-                      disabled={summaryPage >= summaryPageCount}
-                      onClick={() => setSummaryPage((prev) => Math.min(summaryPageCount, prev + 1))}
-                    >
-                      Next
-                    </Button>
-                  </div>
-                </div>
               </CardContent>
             </Card>
           )}

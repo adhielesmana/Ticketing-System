@@ -1317,6 +1317,13 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Admin access required" });
       }
 
+      const cutoffDaySetting = await storage.getSetting("cutoff_day");
+      const cutoffDayValue = cutoffDaySetting?.value ? parseInt(cutoffDaySetting.value, 10) : 25;
+      const normalizedCutoffDay = Number.isNaN(cutoffDayValue) ? 25 : Math.max(1, Math.min(28, cutoffDayValue));
+      const period = computePerformancePeriod(new Date(), normalizedCutoffDay);
+      const dateFrom = period.start.toISOString().split("T")[0];
+      const dateTo = period.end.toISOString().split("T")[0];
+
       const globalFeeMap: Record<string, { ticketFee: string; transportFee: string }> = {
         home_maintenance: {
           ticketFee: (await storage.getSetting("ticket_fee_home_maintenance"))?.value || "0",
@@ -1332,7 +1339,11 @@ export async function registerRoutes(
         },
       };
 
-      const closedTicketsReport = await storage.getTicketsReport({ status: "closed" });
+      const closedTicketsReport = await storage.getTicketsReport({
+        status: "closed",
+        dateFrom,
+        dateTo,
+      });
       const closedTickets = closedTicketsReport.tickets;
       let updatedCount = 0;
       let perfUpdatedCount = 0;
