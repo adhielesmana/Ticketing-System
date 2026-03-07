@@ -1,6 +1,6 @@
 import { KeyboardEvent, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { useTicketsReport, useBonusSummary, usePerformanceSummary, useTechnicianPeriodPerformance } from "@/hooks/use-tickets";
+import { useTicketsReport, useBonusSummary, usePerformanceSummary, useTechnicianPeriodPerformance, useSetting } from "@/hooks/use-tickets";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -88,10 +88,44 @@ function getLocalDateString(date = new Date()): string {
   return localDate.toISOString().split("T")[0];
 }
 
+function formatLocalDate(date: Date): string {
+  const offsetMs = date.getTimezoneOffset() * 60 * 1000;
+  const localDate = new Date(date.getTime() - offsetMs);
+  return localDate.toISOString().split("T")[0];
+}
+
+function clampCutoffDay(value?: string | number | null): number {
+  if (typeof value === "number") {
+    return Math.max(1, Math.min(28, Math.floor(value)));
+  }
+  const parsed = parseInt(String(value ?? ""), 10);
+  if (isNaN(parsed)) return 25;
+  return Math.max(1, Math.min(28, parsed));
+}
+
+function computePerformancePeriod(reference: Date, cutoffDay: number) {
+  const normalizedCutoff = clampCutoffDay(cutoffDay);
+  const today = new Date(reference.getFullYear(), reference.getMonth(), reference.getDate());
+  let end = new Date(reference.getFullYear(), reference.getMonth(), normalizedCutoff);
+  if (today > end) {
+    end = new Date(reference.getFullYear(), reference.getMonth() + 1, normalizedCutoff);
+  }
+  end.setHours(23, 59, 59, 999);
+
+  const prevMonthLast = new Date(end.getFullYear(), end.getMonth(), 0);
+  const daysInPrevMonth = prevMonthLast.getDate();
+  const start = new Date(end);
+  start.setDate(end.getDate() - daysInPrevMonth + 1);
+  start.setHours(0, 0, 0, 0);
+
+  return { start, end };
+}
+
 export default function ReportsPage() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("tickets");
   const [, setLocation] = useLocation();
+  const { data: cutoffSetting } = useSetting("cutoff_day");
 
   const today = getLocalDateString();
 
@@ -108,8 +142,8 @@ export default function ReportsPage() {
     dateTo: today,
   });
   const [perfFilters, setPerfFilters] = useState({
-    dateFrom: today,
-    dateTo: today,
+    dateFrom: "",
+    dateTo: "",
   });
   const [bonusPage, setBonusPage] = useState(1);
 
@@ -119,11 +153,19 @@ export default function ReportsPage() {
       if (prev.dateFrom === browserToday && prev.dateTo === browserToday) return prev;
       return { dateFrom: browserToday, dateTo: browserToday };
     });
-    setPerfFilters((prev) => {
-      if (prev.dateFrom === browserToday && prev.dateTo === browserToday) return prev;
-      return { dateFrom: browserToday, dateTo: browserToday };
-    });
   }, []);
+
+  useEffect(() => {
+    if (!cutoffSetting) return;
+    const cutoffDay = clampCutoffDay(cutoffSetting.value);
+    const period = computePerformancePeriod(new Date(), cutoffDay);
+    const startDate = formatLocalDate(period.start);
+    const endDate = formatLocalDate(period.end);
+    setPerfFilters((prev) => {
+      if (prev.dateFrom === startDate && prev.dateTo === endDate) return prev;
+      return { dateFrom: startDate, dateTo: endDate };
+    });
+  }, [cutoffSetting]);
 
   const updateTicketFilters = (updates: Partial<typeof ticketFilters>) => {
     setTicketFilters((prev) => ({ ...prev, ...updates }));

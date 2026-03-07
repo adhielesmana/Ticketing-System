@@ -835,38 +835,39 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPerformanceSummary(filters: { dateFrom?: string; dateTo?: string } = {}): Promise<any[]> {
-    const conditions: any[] = [];
-    if (filters.dateFrom) conditions.push(sql`${performanceLogs.createdAt} >= ${filters.dateFrom}::timestamp`);
-    if (filters.dateTo) conditions.push(sql`${performanceLogs.createdAt} <= ${filters.dateTo}::timestamp + interval '1 day'`);
-
     const techs = await db.select().from(users).where(eq(users.role, "technician"));
     
     const result: any[] = [];
     for (const tech of techs) {
-      const techConditions = [eq(performanceLogs.userId, tech.id), ...conditions];
+      const logConditions: any[] = [
+        eq(performanceLogs.userId, tech.id),
+        eq(tickets.status, TicketStatus.CLOSED),
+      ];
+      if (filters.dateFrom) {
+        logConditions.push(sql`${tickets.closedAt} >= ${filters.dateFrom}::timestamp`);
+      }
+      if (filters.dateTo) {
+        logConditions.push(sql`${tickets.closedAt} <= ${filters.dateTo}::timestamp + interval '1 day'`);
+      }
+
       const [stats] = await db.select({
         totalCompleted: sql<number>`count(*)`,
         slaComplianceCount: sql<number>`count(case when ${performanceLogs.completedWithinSLA} = true then 1 end)`,
         avgResolutionMinutes: sql<number>`coalesce(avg(${performanceLogs.durationMinutes}), 0)`,
         totalOverdue: sql<number>`count(case when ${performanceLogs.completedWithinSLA} = false then 1 end)`,
-      }).from(performanceLogs).where(and(...techConditions));
-
-      const bonusConditions = [
-        eq(tickets.status, TicketStatus.CLOSED),
-        sql`${tickets.id} IN (SELECT ticket_id FROM ticket_assignments WHERE user_id = ${tech.id} AND active = true)`,
-      ];
-      if (filters.dateFrom) bonusConditions.push(sql`${tickets.closedAt} >= ${filters.dateFrom}::timestamp`);
-      if (filters.dateTo) bonusConditions.push(sql`${tickets.closedAt} <= ${filters.dateTo}::timestamp + interval '1 day'`);
-
-      const [bonusResult] = await db.select({
-        totalTicketFee: sql<number>`coalesce(sum(${tickets.ticketFee}::numeric), 0)`,
-        totalTransportFee: sql<number>`coalesce(sum(${tickets.transportFee}::numeric), 0)`,
-      }).from(tickets).where(and(...bonusConditions));
+        totalTicketFee: sql<number>`coalesce(sum(${performanceLogs.ticketFee}::numeric), 0)`,
+        totalTransportFee: sql<number>`coalesce(sum(${performanceLogs.transportFee}::numeric), 0)`,
+        totalBonus: sql<number>`coalesce(sum(${performanceLogs.bonus}::numeric), 0)`,
+      })
+        .from(performanceLogs)
+        .innerJoin(tickets, eq(tickets.id, performanceLogs.ticketId))
+        .where(and(...logConditions));
 
       const totalCompleted = Number(stats.totalCompleted) || 0;
       const slaComplianceCount = Number(stats.slaComplianceCount) || 0;
-      const totalTicketFee = Number(bonusResult.totalTicketFee) || 0;
-      const totalTransportFee = Number(bonusResult.totalTransportFee) || 0;
+      const totalTicketFee = Number(stats.totalTicketFee) || 0;
+      const totalTransportFee = Number(stats.totalTransportFee) || 0;
+      const totalBonus = Number(stats.totalBonus) || (totalTicketFee + totalTransportFee);
 
       result.push({
         technicianId: tech.id,
@@ -875,7 +876,7 @@ export class DatabaseStorage implements IStorage {
         slaComplianceRate: totalCompleted > 0 ? Math.round((slaComplianceCount / totalCompleted) * 100) : 100,
         avgResolutionMinutes: Math.round(Number(stats.avgResolutionMinutes) || 0),
         totalOverdue: Number(stats.totalOverdue) || 0,
-        totalBonus: totalTicketFee + totalTransportFee,
+        totalBonus,
         totalTicketFee,
         totalTransportFee,
       });
