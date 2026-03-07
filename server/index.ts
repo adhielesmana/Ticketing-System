@@ -189,7 +189,7 @@ app.use((req, res, next) => {
         const now = new Date();
         const nextMidnight = new Date(now);
         nextMidnight.setDate(now.getDate() + 1);
-        nextMidnight.setHours(0, 0, 0, 0, 0);
+        nextMidnight.setHours(0, 0, 0, 0);
         const delay = Math.max(0, nextMidnight.getTime() - now.getTime());
         const oneDayMs = 24 * 60 * 60 * 1000;
         setTimeout(() => {

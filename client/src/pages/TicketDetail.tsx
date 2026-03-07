@@ -424,17 +424,15 @@ function ReassignTicketDialog({
                 <SelectValue placeholder="Select lead technician..." />
               </SelectTrigger>
               <SelectContent>
-                {availableReassignTechnicians
-                  .filter(tech => !isHelpdesk || tech.isBackboneSpecialist || tech.isVendorSpecialist)
-                  .map((tech: any) => (
-                    <SelectItem
-                      key={tech.id}
-                      value={String(tech.id)}
-                      disabled={String(tech.id) === partnerTech || (isHelpdesk && String(tech.id) !== leadTech && !!leadTech)}
-                    >
-                      {renderTechOption(tech, toCapName)}
-                    </SelectItem>
-                  ))}
+                {availableReassignTechnicians.map((tech: any) => (
+                  <SelectItem
+                    key={tech.id}
+                    value={String(tech.id)}
+                    disabled={String(tech.id) === partnerTech || (isHelpdesk && String(tech.id) !== leadTech && !!leadTech)}
+                  >
+                    {renderTechOption(tech, toCapName)}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             {isHelpdesk && (
@@ -1141,13 +1139,13 @@ export default function TicketDetail() {
   const descImages: string[] = ticket.descriptionImages || [];
   const hasMapPreview = ticket.customerLocationUrl && extractCoordinates(ticket.customerLocationUrl);
   const isBackboneTicket = shouldRestrictDropdownToBackbone(ticket.type);
-  const availableTechniciansForAssignment = (technicians || []).filter((tech) =>
+  const availableTechniciansForAssignment = (technicians || []).filter((tech: any) =>
     !isBackboneTicket || isBackboneOrVendorTech(tech)
   );
   const existingAssigneeIds = ticket.assignees?.map((a: any) => a.id) || [];
   const availablePartnerTechnicians = (technicians || [])
-    .filter((tech) => !existingAssigneeIds.includes(tech.id))
-    .filter((tech) => !isBackboneTicket || isBackboneOrVendorTech(tech));
+    .filter((tech: any) => !existingAssigneeIds.includes(tech.id))
+    .filter((tech: any) => !isBackboneTicket || isBackboneOrVendorTech(tech));
 
   const handleManualAssignSelection = (value: string) => {
     const technicianId = Number(value);

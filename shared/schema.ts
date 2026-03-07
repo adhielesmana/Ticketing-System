@@ -201,6 +201,11 @@ export type InsertTechnicianFee = z.infer<typeof insertTechnicianFeeSchema>;
 export type Setting = typeof settings.$inferSelect;
 export type InsertSetting = z.infer<typeof insertSettingsSchema>;
 
+export type TicketStatusValue = (typeof TicketStatus)[keyof typeof TicketStatus];
+export type TicketPriorityValue = (typeof TicketPriority)[keyof typeof TicketPriority];
+export type TicketTypeValue = (typeof TicketType)[keyof typeof TicketType];
+export type UserRoleValue = (typeof UserRole)[keyof typeof UserRole];
+
 export const TicketStatusValues = Object.values(TicketStatus);
 export const TicketPriorityValues = Object.values(TicketPriority);
 export const TicketTypeValues = Object.values(TicketType);

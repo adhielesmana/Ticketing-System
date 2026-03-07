@@ -10,6 +10,8 @@ import {
   UserRole,
   TicketPriority,
   TicketType,
+  TicketStatusValue,
+  TicketTypeValue,
   tickets,
   ticketAssignments,
   performanceLogs,
@@ -106,7 +108,7 @@ async function reverseGeocodeArea(lat: number, lng: number): Promise<string | nu
   }
 }
 
-function clampCutoffDay(value?: string | number): number {
+function clampCutoffDay(value?: string | number | null): number {
   if (typeof value === "number") {
     return Math.max(1, Math.min(28, Math.floor(value)));
   }
@@ -135,7 +137,7 @@ function computePerformancePeriod(reference: Date, cutoffDay: number) {
 
 type AssigneeWithAssignment = User & {
   assignmentType: string | null;
-  assignedAt: Date | string | null;
+  assignedAt: Date;
 };
 
 async function attachAssignmentsToTicket(ticket: Ticket) {
@@ -146,7 +148,7 @@ async function attachAssignmentsToTicket(ticket: Ticket) {
     return {
       ...user,
       assignmentType: assignment.assignmentType || null,
-      assignedAt: assignment.assignedAt || null,
+      assignedAt: assignment.assignedAt,
     };
   }));
   const assigneesWithMeta = assignees.filter((a): a is AssigneeWithAssignment => Boolean(a));
@@ -292,7 +294,7 @@ async function prefetchMapTiles() {
   }
 }
 
-const HELP_DESK_MANUAL_ASSIGNMENT_RESTRICTED_TYPES = new Set([
+const HELP_DESK_MANUAL_ASSIGNMENT_RESTRICTED_TYPES = new Set<TicketTypeValue>([
   TicketType.HOME_MAINTENANCE,
   TicketType.INSTALLATION,
 ]);
@@ -592,7 +594,7 @@ export async function registerRoutes(
 
       const existingAssignees = await storage.getAssigneesForTicket(ticketId);
       const isHelpdesk = sessionUser?.role === UserRole.HELPDESK;
-      const isRestrictedType = HELP_DESK_MANUAL_ASSIGNMENT_RESTRICTED_TYPES.has(ticket.type as TicketType);
+      const isRestrictedType = HELP_DESK_MANUAL_ASSIGNMENT_RESTRICTED_TYPES.has(ticket.type as TicketTypeValue);
       const isInitialAssignment = existingAssignees.length === 0;
       if (isHelpdesk && isRestrictedType && isInitialAssignment && !isBackboneOrVendor(targetTech)) {
         return res.status(403).json({
@@ -642,6 +644,17 @@ export async function registerRoutes(
 
       const existingAssignees = await storage.getAssigneesForTicket(ticketId);
       const currentLeadId = existingAssignees[0]?.id;
+      const isBackboneTicketType = ticket.type === TicketType.BACKBONE_MAINTENANCE;
+
+      for (const techId of technicianIds) {
+        const tech = await storage.getUser(Number(techId));
+        if (!tech || tech.role !== UserRole.TECHNICIAN) {
+          return res.status(400).json({ message: "Invalid technician selection" });
+        }
+        if (isBackboneTicketType && !isBackboneOrVendor(tech)) {
+          return res.status(403).json({ message: "Backbone maintenance tickets must use backbone or vendor technicians." });
+        }
+      }
 
       if (user.role === UserRole.HELPDESK) {
         if (!currentLeadId) {
@@ -650,13 +663,6 @@ export async function registerRoutes(
 
         if (Number(technicianIds[0]) !== Number(currentLeadId)) {
           return res.status(403).json({ message: "Helpdesk can only change partner technician. Lead technician is locked." });
-        }
-
-        for (const techId of technicianIds.slice(1)) {
-          const tech = await storage.getUser(Number(techId));
-          if (tech && !tech.isBackboneSpecialist && !tech.isVendorSpecialist) {
-            return res.status(403).json({ message: "Helpdesk can only assign partner to backbone or vendor specialists." });
-          }
         }
       }
 

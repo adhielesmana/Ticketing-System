@@ -577,14 +577,37 @@ export function usePerformanceSummary(filters?: { dateFrom?: string; dateTo?: st
 }
 
 export function useTechnicianPeriodPerformance() {
-  return useQuery({
+  return useQuery<TechnicianPeriodReport>({
     queryKey: ["/api/reports/technician-period"],
     queryFn: async () => {
       const res = await fetch("/api/reports/technician-period", { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch technician period data");
-      return res.json();
+      const data = await res.json();
+      return data as TechnicianPeriodReport;
     },
   });
+}
+
+export interface TechnicianPeriodDay {
+  iso: string;
+  label: string;
+}
+
+export interface TechnicianPeriodRow {
+  technicianId: number;
+  technicianName: string;
+  dailyCounts: Record<string, number>;
+  total: number;
+  performancePercent: number;
+}
+
+export interface TechnicianPeriodReport {
+  start: string;
+  end: string;
+  days: TechnicianPeriodDay[];
+  dailyTarget: number;
+  monthlyTarget: number;
+  rows: TechnicianPeriodRow[];
 }
 
 export function useUploadImages() {

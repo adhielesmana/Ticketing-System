@@ -48,7 +48,7 @@ interface TicketPoint {
   ticketIdCustom?: string;
   ticketNumber?: string;
   title: string;
-  status: string;
+  status: TicketStatus;
   priority: string;
   type: string;
   customerName: string;
@@ -61,6 +61,13 @@ interface TicketPoint {
   assignees?: { id: number; name: string }[];
   createdAt?: string;
   assignedAt?: string;
+}
+
+interface CachedTileLayerOptions extends L.TileLayerOptions {
+  useCache?: boolean;
+  saveToCache?: boolean;
+  cacheMaxAge?: number;
+  userAgent?: string;
 }
 
 interface ActiveTicketMapProps {
@@ -82,7 +89,6 @@ const typeColorMap: Record<string, { fill: string; stroke: string }> = {
 };
 
 const ASSIGNED_STATUSES = new Set([TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS]);
-const INACTIVE_STATUSES = new Set([TicketStatus.CLOSED, TicketStatus.REJECTED]);
 const OVERDUE_COLOR = "#ef4444";
 const PENDING_COLOR = "#f97316";
 const LEGEND_PERSON_COLOR = "#3b82f6";
@@ -128,6 +134,7 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
       }
       if (lat === null || lng === null || isNaN(lat) || isNaN(lng)) return;
 
+      const isAssigned = ASSIGNED_STATUSES.has(t.status);
       const point: TicketPoint = {
         id: t.id,
         ticketIdCustom: t.ticketIdCustom,
@@ -141,7 +148,7 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
         lat,
         lng,
         slaDeadline: t.slaDeadline,
-        isActive: !INACTIVE_STATUSES.has(t.status),
+        isActive: isAssigned,
         performStatus: t.performStatus,
         assignees: t.assignees,
         createdAt: t.createdAt,
@@ -195,7 +202,7 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
       keyboard: !isSmallScreen,
     });
 
-    const cachedLayer = L.tileLayer("/api/map-tiles/{z}/{x}/{y}", {
+    const cachedLayerOptions: CachedTileLayerOptions = {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
       useCache: true,
@@ -203,7 +210,8 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
       cacheMaxAge: 604800000,
       crossOrigin: true,
       userAgent: "NetGuard-OpenMaps/1.0",
-    }).addTo(map);
+    };
+    const cachedLayer = L.tileLayer("/api/map-tiles/{z}/{x}/{y}", cachedLayerOptions as L.TileLayerOptions).addTo(map);
     tileLayerRef.current = cachedLayer;
 
     markerLayerRef.current = L.layerGroup().addTo(map);
@@ -230,7 +238,7 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
   }, [isLoading]);
 
   useEffect(() => {
-    if (!tileLayerRef.current || seededRef.current || allTicketPoints.length === 0) return;
+    if (!tileLayerRef.current || seededRef.current || activeTicketPoints.length === 0) return;
     const bounds = L.latLngBounds(activeTicketPoints.map((p) => [p.lat, p.lng]));
     const paddedBounds = bounds.pad(0.1);
     seededRef.current = true;
@@ -322,14 +330,20 @@ export function ActiveTicketMap({ tickets, isLoading }: ActiveTicketMapProps) {
       const icon = createPersonIcon(LEGEND_PERSON_COLOR, MARKER_BASE_SIZE - 12);
       const marker = L.marker([pt.lat, pt.lng], { icon }).addTo(technicianLayerRef.current!);
       const ticketLabel = escapeHtml(pt.ticketIdCustom || pt.ticketNumber || pt.id);
-      const title = escapeHtml(truncateText(pt.title, 20));
+      const teamNames = (pt.assignees || []).map((tech) => escapeHtml(tech.name)).join(", ") || "—";
       const customerName = escapeHtml(pt.customerName);
+      const ticketTitle = escapeHtml(pt.title);
+      const locationUrl = pt.customerLocationUrl ? escapeHtml(pt.customerLocationUrl) : "";
+      const locationLink = locationUrl
+        ? `<a href="${locationUrl}" target="_blank" rel="noreferrer" style="color:#3b82f6;word-break:break-all;">${locationUrl}</a>`
+        : `<span style="color:inherit;">—</span>`;
       marker.bindPopup(`
-        <div class="text-left text-sm">
-          <div style="font-weight:600;margin-bottom:4px">Technician</div>
-          <div style="font-size:12px;margin-bottom:2px">Ticket ID: ${ticketLabel}</div>
-          <div style="font-size:12px;margin-bottom:2px">Customer: ${customerName}</div>
-          <div style="font-size:12px;margin-bottom:2px">Title: ${title}</div>
+        <div class="text-left text-sm space-y-1">
+          <div style="font-weight:600; font-size:13px;">No: ${ticketLabel}</div>
+          <div style="font-size:12px;">Team: ${teamNames}</div>
+          <div style="font-size:12px;">Customer: ${customerName}</div>
+          <div style="font-size:12px;">Description: ${ticketTitle}</div>
+          <div style="font-size:12px;">Location: ${locationLink}</div>
         </div>
       `, { closeButton: false });
       marker.on("click", () => {

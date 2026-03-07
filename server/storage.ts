@@ -10,7 +10,9 @@ import {
   type TechnicianPerformance,
   TicketStatus,
   TicketStatusValues,
+  TicketStatusValue,
   TicketType,
+  TicketTypeValue,
   UserRole,
 } from "@shared/schema";
 import { eq, or, and, sql, desc, asc, notInArray, gte, lte } from "drizzle-orm";
@@ -180,8 +182,8 @@ export class DatabaseStorage implements IStorage {
       ? rawExcludeStatuses.split(",").map((value) => value.trim()).filter(Boolean)
       : [];
     const uniqueExcludeStatuses = Array.from(new Set(parsedExcludeStatuses));
-    const filteredExcludeStatuses = uniqueExcludeStatuses.filter((status): status is TicketStatus =>
-      TicketStatusValues.includes(status as TicketStatus),
+    const filteredExcludeStatuses = uniqueExcludeStatuses.filter((status): status is TicketStatusValue =>
+      TicketStatusValues.includes(status as TicketStatusValue),
     );
     if (filteredExcludeStatuses.length > 0) {
       conditions.push(notInArray(tickets.status, filteredExcludeStatuses));
@@ -674,11 +676,12 @@ export class DatabaseStorage implements IStorage {
 
   async getDatabaseTime(): Promise<{ now: string; timezone: string }> {
     const [row] = await db.select({
-      now: sql<string>`now()`,
+      now: sql<Date>`now()`,
       timezone: sql<string>`current_setting('TIMEZONE')`,
     }).from(sql`(SELECT 1) t`);
+    const nowValue = row?.now instanceof Date ? row.now.toISOString() : new Date().toISOString();
     return {
-      now: row?.now?.toISOString ? row.now.toISOString() : String(row?.now ?? new Date().toISOString()),
+      now: nowValue,
       timezone: row?.timezone || "UTC",
     };
   }
@@ -711,8 +714,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async bulkResetOvernightAssignments(): Promise<number> {
-    const targetStatuses = [TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS];
-    const targetTypes = [TicketType.HOME_MAINTENANCE, TicketType.INSTALLATION];
+    const targetStatuses: TicketStatusValue[] = [TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS];
+    const targetTypes: TicketTypeValue[] = [TicketType.HOME_MAINTENANCE, TicketType.INSTALLATION];
 
     const rows = await db.select({
       ticketId: ticketAssignments.ticketId,
@@ -740,7 +743,6 @@ export class DatabaseStorage implements IStorage {
     filters: { dateFrom?: string; dateTo?: string; type?: string; status?: string } = {},
     pagination: { skip?: number; take?: number } = {},
   ): Promise<{ tickets: any[]; total: number }> {
-    let baseQuery = db.select().from(tickets);
     const conditions = [];
 
     if (filters.type) conditions.push(eq(tickets.type, filters.type));
@@ -750,28 +752,28 @@ export class DatabaseStorage implements IStorage {
 
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-    let totalQuery = db.select({
-      total: sql<number>`count(*)`,
-    }).from(tickets);
-    if (whereClause) {
-      totalQuery = totalQuery.where(whereClause);
-    }
+    const totalQuery = whereClause
+      ? db.select({
+          total: sql<number>`count(*)`,
+        }).from(tickets).where(whereClause)
+      : db.select({
+          total: sql<number>`count(*)`,
+        }).from(tickets);
     const [totalResult] = await totalQuery;
     const total = totalResult?.total || 0;
 
-    if (whereClause) {
-      baseQuery = baseQuery.where(whereClause);
-    }
+    const dataQuery = whereClause
+      ? db.select().from(tickets).where(whereClause)
+      : db.select().from(tickets);
+    const orderedQuery = dataQuery.orderBy(desc(tickets.createdAt));
+    const offsetQuery = typeof pagination.skip === "number"
+      ? orderedQuery.offset(pagination.skip)
+      : orderedQuery;
+    const finalQuery = typeof pagination.take === "number"
+      ? offsetQuery.limit(pagination.take)
+      : offsetQuery;
 
-    baseQuery = baseQuery.orderBy(desc(tickets.createdAt));
-    if (typeof pagination.skip === "number") {
-      baseQuery = baseQuery.offset(pagination.skip);
-    }
-    if (typeof pagination.take === "number") {
-      baseQuery = baseQuery.limit(pagination.take);
-    }
-
-    const ticketRows = await baseQuery;
+    const ticketRows = await finalQuery;
     const result: any[] = [];
     for (const ticket of ticketRows) {
       const assignees = await this.getAssigneesForTicket(ticket.id);
