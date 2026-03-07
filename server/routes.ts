@@ -25,6 +25,7 @@ import path from "path";
 import fs from "fs";
 import { exec } from "child_process";
 import { promisify } from "util";
+import ntpClient from "ntp-client";
 
 function toTitleCase(str: string): string {
   return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.slice(1).toLowerCase());
@@ -1433,6 +1434,15 @@ export async function registerRoutes(
     res.json(setting);
   });
 
+  async function queryNtp(host: string, port = 123): Promise<Date> {
+    return new Promise((resolve, reject) => {
+      ntpClient.getNetworkTime(host, port, (err, date) => {
+        if (err) return reject(err);
+        resolve(date);
+      });
+    });
+  }
+
   app.get("/api/system/time", async (req, res) => {
     try {
       const userId = (req as any).session.userId;
@@ -1456,6 +1466,12 @@ export async function registerRoutes(
         // ignore
       }
 
+      const ntpServers = ["time.windows.com", "time.apple.com"];
+      const ntpResults = await Promise.allSettled(ntpServers.map((host) => queryNtp(host)));
+      const ntpTimes = ntpResults
+        .filter((result): result is PromiseFulfilledResult<Date> => result.status === "fulfilled")
+        .map((result) => result.value.toISOString());
+
       res.json({
         serverTime: serverTime.toISOString(),
         serverTimezone,
@@ -1463,6 +1479,7 @@ export async function registerRoutes(
         dockerTimeUtc,
         dbTime: dbTime.now,
         dbTimezone: dbTime.timezone,
+        ntpTimes,
       });
     } catch (err) {
       console.error("System time error:", err);

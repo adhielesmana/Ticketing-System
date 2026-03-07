@@ -5,6 +5,9 @@ import compression from "compression";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 
+const DEFAULT_TIMEZONE = process.env.TIMEZONE || "Asia/Jakarta";
+process.env.TZ = process.env.TZ || DEFAULT_TIMEZONE;
+
 const app = express();
 const httpServer = createServer(app);
 

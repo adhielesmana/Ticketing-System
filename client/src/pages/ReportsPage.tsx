@@ -34,7 +34,7 @@ import {
 import { format } from "date-fns";
 
 const TICKETS_PER_PAGE = 20;
-const TECH_SUMMARY_PAGE_SIZE = 6;
+const BONUS_PAGE_SIZE = 15;
 
 const ticketStatusPriority: Record<string, number> = {
   [TicketStatus.ASSIGNED]: 0,
@@ -111,7 +111,7 @@ export default function ReportsPage() {
     dateFrom: today,
     dateTo: today,
   });
-  const [summaryPage, setSummaryPage] = useState(1);
+  const [bonusPage, setBonusPage] = useState(1);
 
   useEffect(() => {
     const browserToday = getLocalDateString();
@@ -204,16 +204,16 @@ export default function ReportsPage() {
     })).sort((a, b) => a.name.localeCompare(b.name));
   }, [techBonusSummary]);
 
-  const summaryPageCount = Math.max(1, Math.ceil(techSummaryList.length / TECH_SUMMARY_PAGE_SIZE));
+  const bonusPageCount = Math.max(1, Math.ceil((bonusData?.length || 0) / BONUS_PAGE_SIZE));
   useEffect(() => {
-    if (summaryPage > summaryPageCount) {
-      setSummaryPage(summaryPageCount);
+    if (bonusPage > bonusPageCount) {
+      setBonusPage(bonusPageCount);
     }
-  }, [summaryPage, summaryPageCount]);
-  const pagedTechSummary = techSummaryList.slice(
-    (summaryPage - 1) * TECH_SUMMARY_PAGE_SIZE,
-    summaryPage * TECH_SUMMARY_PAGE_SIZE,
-  );
+  }, [bonusPage, bonusPageCount]);
+  const pagedBonusData = bonusData?.slice(
+    (bonusPage - 1) * BONUS_PAGE_SIZE,
+    bonusPage * BONUS_PAGE_SIZE,
+  ) ?? [];
 
   const handleTicketRowClick = (id: number) => {
     setLocation(`/tickets/${id}`);
@@ -532,7 +532,7 @@ export default function ReportsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {pagedTechSummary.map((tech) => (
+                  {techSummaryList.map((tech) => (
                         <tr key={tech.id} className="border-b border-border last:border-0" data-testid={`row-tech-summary-${tech.id}`}>
                           <td className="px-4 py-2.5">
                             <div className="flex items-center gap-2">
@@ -605,7 +605,7 @@ export default function ReportsPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {bonusData?.map((row: any, idx: number) => (
+                      {pagedBonusData.map((row: any, idx: number) => (
                         <tr
                           key={`${row.ticketId}-${row.technicianId}-${idx}`}
                           className="border-b border-border last:border-0 cursor-pointer hover:bg-muted/50 transition-colors"
@@ -646,7 +646,7 @@ export default function ReportsPage() {
                           </td>
                         </tr>
                       ))}
-                      {(!bonusData || bonusData.length === 0) && (
+                      {(pagedBonusData.length === 0) && (
                         <tr>
                           <td colSpan={8} className="px-4 py-8 text-center text-muted-foreground text-sm">
                             No closed tickets found
@@ -655,6 +655,31 @@ export default function ReportsPage() {
                       )}
                     </tbody>
                   </table>
+                </div>
+                <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-muted/30 text-xs text-muted-foreground">
+                  <span>
+                    Showing page {bonusPage} of {bonusPageCount}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="px-3"
+                      disabled={bonusPage <= 1}
+                      onClick={() => setBonusPage((prev) => Math.max(1, prev - 1))}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="px-3"
+                      disabled={bonusPage >= bonusPageCount}
+                      onClick={() => setBonusPage((prev) => Math.min(bonusPageCount, prev + 1))}
+                    >
+                      Next
+                    </Button>
+                  </div>
                 </div>
               </CardContent>
             </Card>

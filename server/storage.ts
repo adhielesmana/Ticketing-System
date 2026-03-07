@@ -688,14 +688,17 @@ export class DatabaseStorage implements IStorage {
 
   async bulkResetStaleAssignments(maxAgeHours: number = 24): Promise<number> {
     const cutoff = new Date(Date.now() - maxAgeHours * 60 * 60 * 1000);
+    const targetStatuses = [TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS];
+    const statusConditions = targetStatuses.map((status) => eq(tickets.status, status));
     const staleAssignments = await db.select({
       ticketId: ticketAssignments.ticketId,
     }).from(ticketAssignments)
       .innerJoin(tickets, eq(tickets.id, ticketAssignments.ticketId))
       .where(and(
         eq(ticketAssignments.active, true),
-        eq(tickets.status, TicketStatus.ASSIGNED),
-        sql`${ticketAssignments.assignedAt} < ${cutoff}`
+        or(...statusConditions),
+        sql`${ticketAssignments.assignedAt} < ${cutoff}`,
+        not(eq(tickets.type, TicketType.BACKBONE_MAINTENANCE)),
       ));
 
     const ticketIdSet = new Set(staleAssignments.map(a => a.ticketId));
@@ -716,6 +719,8 @@ export class DatabaseStorage implements IStorage {
   async bulkResetOvernightAssignments(): Promise<number> {
     const targetStatuses: TicketStatusValue[] = [TicketStatus.ASSIGNED, TicketStatus.IN_PROGRESS];
     const targetTypes: TicketTypeValue[] = [TicketType.HOME_MAINTENANCE, TicketType.INSTALLATION];
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
 
     const rows = await db.select({
       ticketId: ticketAssignments.ticketId,
@@ -725,6 +730,7 @@ export class DatabaseStorage implements IStorage {
         eq(ticketAssignments.active, true),
         or(...targetStatuses.map((status) => eq(tickets.status, status))),
         or(...targetTypes.map((type) => eq(tickets.type, type))),
+        sql`${ticketAssignments.assignedAt} < ${todayStart}`,
       ));
 
     const ticketIds = Array.from(new Set(rows.map((row) => row.ticketId)));
